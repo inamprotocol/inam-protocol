@@ -25,6 +25,23 @@ bash scripts/run-interop-demo.sh
 
 Registers a TypeScript-side "requester" and a Python-side "worker" (see `sdk-python/`) against the same live server, has the Python worker submit two signed Execution Receipt drafts, has the TypeScript requester countersign them, and prints the worker's resulting reputation. This is the real end-to-end proof that the protocol — not just one SDK — works: the server verifies Python-produced Ed25519 signatures, and both SDKs agree byte-for-byte on canonical JSON. See `sdk-python/tests/test_interop.py` for the same guarantee as a fast, no-server-required unit test.
 
+## Live deployment
+
+`worker/` is a second, independent implementation of the same API surface — Hono + Cloudflare D1 (SQL) + KV (idempotency cache), deployed to Cloudflare Workers — kept behaviorally identical to the Node reference server (same routes, same signature scheme, same reputation math; verified by running the demo and smoke-test scripts against both and diffing the output). It reuses `src/crypto/` and `src/core/receiptContent.ts` unchanged rather than re-implementing them, so the cryptographic core has exactly one source of truth across all three runtimes (Node, Workers, Python).
+
+Currently live at `https://inam-protocol.<account>.workers.dev` (see `worker/wrangler.jsonc`). Binding the `inamprotocol.com` custom domain requires the zone to be added to the Cloudflare account first (registrar nameserver change) — not yet done.
+
+```
+cd worker
+npm install
+npm run dev              # local dev server (D1 + KV emulated locally)
+npm run deploy            # deploy to Cloudflare
+npm run db:init:local     # apply schema.sql to the local D1 emulation
+npm run db:init:remote    # apply schema.sql to the real remote D1 database
+```
+
+`scripts/worker-smoke-test.ts` (run with `INAM_URL` pointed at either a local `wrangler dev` instance or the live deployment) specifically exercises the parts that are new in this deployment rather than shared with the Node server: routing, D1 queries, and KV-backed idempotency — duplicate registration, self-dealing, duplicate receipts, wrong-signer rejection, idempotent replay, and the dispute flow.
+
 ## What's here
 
 - `src/crypto/` — `did:key` (Ed25519) encode/decode, signing/verification, a JCS-subset canonical JSON serializer.
