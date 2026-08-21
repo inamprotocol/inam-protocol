@@ -1,0 +1,94 @@
+import { Hono } from "hono";
+import { requireSignedRequest } from "./signedRequest.js";
+import { requireIdempotencyKey } from "./idempotency.js";
+import { ApiError, badRequest } from "./errors.js";
+import * as agentService from "./agentService.js";
+import * as receiptService from "./receiptService.js";
+import { computeReputation } from "./reputationService.js";
+import type { AppEnv } from "./types.js";
+
+const app = new Hono<AppEnv>();
+
+app.onError((err, c) => {
+  if (err instanceof ApiError) {
+    return c.json({ error: { code: err.code, message: err.message } }, err.status as never);
+  }
+  console.error(err);
+  return c.json({ error: { code: "INTERNAL_ERROR", message: "Unexpected server error" } }, 500);
+});
+
+app.notFound((c) => c.json({ error: { code: "ROUTE_NOT_FOUND", message: `No route for ${c.req.method} ${c.req.path}` } }, 404));
+
+app.get("/v1/health", (c) => c.json({ status: "ok" }));
+
+// ---- Agents ----
+
+app.post("/v1/agents", requireSignedRequest, requireIdempotencyKey, async (c) => {
+  const body = c.get("parsedBody") as { capabilities?: unknown; metadata?: Record<string, unknown> } | undefined;
+  if (!body || !Array.isArray(body.capabilities) || body.capabilities.length === 0 || !body.capabilities.every((x) => typeof x === "string")) {
+    throw badRequest("VALIDATION_ERROR", "capabilities must be a non-empty array of strings");
+  }
+  const record = await agentService.registerAgent(c.env, c.get("agentDid")!, { capabilities: body.capabilities as string[], metadata: body.metadata });
+  return c.json(record, 201);
+});
+
+app.get("/v1/agents/search", async (c) => {
+  const capability = c.req.query("capability");
+  const supports = c.req.query("supports");
+  const minReputation = c.req.query("min_reputation") ? Number(c.req.query("min_reputation")) : undefined;
+
+  let results = await agentService.searchAgents(c.env, { capability, supports });
+  if (minReputation !== undefined) {
+    const withReputation = await Promise.all(results.map(async (a) => ({ a, score: (await computeReputation(c.env, a.id)).trustScore })));
+    results = withReputation.filter((x) => x.score >= minReputation).map((x) => x.a);
+  }
+  return c.json({ agents: results });
+});
+
+app.get("/v1/agents/:id", async (c) => c.json(await agentService.getAgent(c.env, c.req.param("id")!)));
+
+app.get("/v1/agents/:id/protocols", async (c) => {
+  const agent = await agentService.getAgent(c.env, c.req.param("id")!);
+  return c.json({ linked: agent.linked });
+});
+
+app.get("/v1/agents/:id/reputation", async (c) => c.json(await computeReputation(c.env, c.req.param("id")!)));
+
+app.get("/v1/agents/:id/receipts", async (c) => c.json({ receipts: await receiptService.listByAgent(c.env, c.req.param("id")!) }));
+
+app.post("/v1/agents/:id/link", requireSignedRequest, requireIdempotencyKey, async (c) => {
+  agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
+  const body = c.get("parsedBody") as { protocol?: string; value?: string } | undefined;
+  if (!body?.protocol || !body?.value) throw badRequest("VALIDATION_ERROR", "protocol and value are required");
+  const record = await agentService.linkIdentity(c.env, c.get("agentDid")!, body.protocol, body.value);
+  return c.json(record);
+});
+
+// ---- Receipts ----
+
+app.post("/v1/receipts", requireSignedRequest, requireIdempotencyKey, async (c) => {
+  const body = c.get("parsedBody") as (receiptService.CreateDraftInput & Record<string, unknown>) | undefined;
+  if (!body?.jobId || !body?.agentAId || !body?.task || !body?.result || !body?.verification || !body?.signature) {
+    throw badRequest("VALIDATION_ERROR", "jobId, agentAId, task, result, verification, and signature are required");
+  }
+  const receipt = await receiptService.createDraft(c.env, c.get("agentDid")!, body);
+  return c.json(receipt, 201);
+});
+
+app.get("/v1/receipts/:id", async (c) => c.json(await receiptService.getReceipt(c.env, c.req.param("id")!)));
+
+app.post("/v1/receipts/:id/countersign", requireSignedRequest, requireIdempotencyKey, async (c) => {
+  const body = c.get("parsedBody") as { signature?: string } | undefined;
+  if (!body?.signature) throw badRequest("VALIDATION_ERROR", "signature is required");
+  const receipt = await receiptService.countersign(c.env, c.req.param("id")!, c.get("agentDid")!, body.signature);
+  return c.json(receipt);
+});
+
+app.post("/v1/receipts/:id/dispute", requireSignedRequest, requireIdempotencyKey, async (c) => {
+  const body = c.get("parsedBody") as { reason?: string } | undefined;
+  if (!body?.reason) throw badRequest("VALIDATION_ERROR", "reason is required");
+  const receipt = await receiptService.openDispute(c.env, c.req.param("id")!, c.get("agentDid")!, body.reason);
+  return c.json(receipt);
+});
+
+export default app;

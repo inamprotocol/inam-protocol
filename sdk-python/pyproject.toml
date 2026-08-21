@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "inamprotocol"
+version = "0.1.0"
+description = "Reference Python SDK for the INAM Protocol (identity, execution receipts, reputation)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "Apache-2.0" }
+dependencies = [
+    "cryptography>=42.0.0",
+    "base58>=2.1.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["inamprotocol*"]

@@ -1,0 +1,14 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "inam-protocol",
+  "main": "src/index.ts",
+  "compatibility_date": "2025-01-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "d1_databases": [
+    { "binding": "DB", "database_name": "inam-protocol-db", "database_id": "475a0d9e-9212-4907-9223-08ac1ef04113" }
+  ],
+  "kv_namespaces": [
+    { "binding": "IDEMPOTENCY", "id": "8ebaa8f6a6644b888a762a6a2ee60436" }
+  ]
+}

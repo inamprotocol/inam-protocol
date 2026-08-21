@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/*.json
+!data/.gitkeep
+.interop-tmp/
+sdk-python/.venv/
+sdk-python/.pytest_cache/
+sdk-python/**/__pycache__/
+sdk-python/*.egg-info/
+worker/node_modules/
+worker/.wrangler/
+worker/.dev.vars
