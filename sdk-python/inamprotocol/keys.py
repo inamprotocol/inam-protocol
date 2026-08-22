@@ -65,6 +65,17 @@ def verify(signature: bytes, message: bytes, did: str) -> bool:
         return False
 
 
+def verify_raw_ed25519(signature: bytes, message: bytes, public_key: bytes) -> bool:
+    """Verifies against a raw Ed25519 public key rather than a did:key -- for
+    externally-issued identities (e.g. an AgentPass/AITP key) that aren't
+    necessarily encoded as an INAM did:key."""
+    try:
+        Ed25519PublicKey.from_public_bytes(public_key).verify(signature, message)
+        return True
+    except Exception:
+        return False
+
+
 def sha256_hex(data: Union[str, bytes]) -> str:
     if isinstance(data, str):
         data = data.encode("utf-8")
@@ -77,3 +88,11 @@ def to_base64(data: bytes) -> str:
 
 def from_base64(s: str) -> bytes:
     return base64.b64decode(s)
+
+
+def to_hex(data: bytes) -> str:
+    return data.hex()
+
+
+def from_hex(s: str) -> bytes:
+    return bytes.fromhex(s)

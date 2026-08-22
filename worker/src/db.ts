@@ -1,4 +1,4 @@
-import type { AgentRecord, Env, ExecutionReceipt, JobOffer, JobRecord } from "./types.js";
+import type { AgentRecord, Env, ExecutionReceipt, JobOffer, JobRecord, LinkChallengeRecord } from "./types.js";
 
 const UNIQUE_VIOLATION = "UNIQUE constraint failed";
 
@@ -235,6 +235,45 @@ export async function completeJobIfAccepted(env: Env, jobId: string, receiptId: 
   await env.DB.prepare(`UPDATE jobs SET status = 'completed', receipt_id = ? WHERE job_id = ? AND status = 'accepted'`)
     .bind(receiptId, jobId)
     .run();
+}
+
+// ---- Link challenges ----
+
+export async function insertLinkChallenge(env: Env, record: LinkChallengeRecord): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO link_challenges (challenge_id, agent_id, protocol, external_public_key, key_type, challenge, created_at, expires_at, used)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`,
+  )
+    .bind(record.challengeId, record.agentId, record.protocol, record.externalPublicKey, record.keyType, record.challenge, record.createdAt, record.expiresAt)
+    .run();
+}
+
+export async function getLinkChallenge(env: Env, challengeId: string): Promise<LinkChallengeRecord | null> {
+  const row = await env.DB.prepare("SELECT * FROM link_challenges WHERE challenge_id = ?").bind(challengeId).first();
+  return row ? rowToLinkChallenge(row) : null;
+}
+
+/** Compare-and-swap: only marks used if it's currently unused — the same
+ * discipline as finalizeReceiptIfDraft/acceptJobIfOpen above, so a replayed
+ * (challengeId, proof) pair can complete at most one link even under
+ * concurrent requests. */
+export async function consumeLinkChallengeIfUnused(env: Env, challengeId: string): Promise<boolean> {
+  const result = await env.DB.prepare(`UPDATE link_challenges SET used = 1 WHERE challenge_id = ? AND used = 0`).bind(challengeId).run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+function rowToLinkChallenge(row: Record<string, unknown>): LinkChallengeRecord {
+  return {
+    challengeId: row.challenge_id as string,
+    agentId: row.agent_id as string,
+    protocol: row.protocol as string,
+    externalPublicKey: row.external_public_key as string,
+    keyType: row.key_type as LinkChallengeRecord["keyType"],
+    challenge: row.challenge as string,
+    createdAt: row.created_at as string,
+    expiresAt: row.expires_at as string,
+    used: Boolean(row.used),
+  };
 }
 
 function rowToOffer(row: Record<string, unknown>): JobOffer {

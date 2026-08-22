@@ -3,6 +3,7 @@ import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test"
 import { beforeAll, describe, expect, it } from "vitest";
 import worker from "../src/index.js";
 import { generateKeypair, sha256Hex, sign, toBase64 } from "../../sdk-js/src/crypto/keys.js";
+import { generateP256Keypair, p256Sign } from "../../sdk-js/src/crypto/p256.js";
 import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
 
 // Inlined rather than read from ../schema.sql at runtime: this test file
@@ -20,6 +21,7 @@ const SCHEMA_STATEMENTS = [
   "CREATE INDEX IF NOT EXISTS idx_jobs_capability_status ON jobs(capability, status)",
   "CREATE INDEX IF NOT EXISTS idx_jobs_posted_by ON jobs(posted_by)",
   "CREATE TABLE IF NOT EXISTS job_offers (job_id TEXT NOT NULL REFERENCES jobs(job_id), agent_id TEXT NOT NULL, message TEXT, created_at TEXT NOT NULL, PRIMARY KEY (job_id, agent_id))",
+  "CREATE TABLE IF NOT EXISTS link_challenges (challenge_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id), protocol TEXT NOT NULL, external_public_key TEXT NOT NULL, key_type TEXT NOT NULL, challenge TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0)",
 ];
 
 beforeAll(async () => {
@@ -487,5 +489,116 @@ describe("job lifecycle", () => {
     ]);
     const statuses = [a.status, b.status].sort();
     expect(statuses).toEqual([200, 409]);
+  });
+});
+
+describe("external identity link challenges", () => {
+  it("links agentpass_id after a valid Ed25519 challenge signature", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["x"] } });
+    const external = generateKeypair();
+
+    const chRes = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+      keypair: agent,
+      idempotencyKey: `ch:${Date.now()}`,
+      body: { protocol: "agentpass_id", externalPublicKey: toBase64(external.publicKey), keyType: "ed25519" },
+    });
+    expect(chRes.status).toBe(201);
+    const { challengeId, challenge } = chRes.json as { challengeId: string; challenge: string };
+    expect(challenge).toMatch(/^[0-9a-f]{64}$/);
+
+    const proof = toBase64(sign(new Uint8Array(Buffer.from(challenge, "hex")), external.privateKey));
+    const linkRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link:${challengeId}`,
+      body: { protocol: "agentpass_id", value: "agentpass:worker-test", challengeId, proofSignature: proof },
+    });
+    expect(linkRes.status).toBe(200);
+    expect((linkRes.json as { linked: { agentpass_id?: string } }).linked.agentpass_id).toBe("agentpass:worker-test");
+  });
+
+  it("links passport_id after a valid P-256 challenge signature", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["x"] } });
+    const external = generateP256Keypair();
+
+    const chRes = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+      keypair: agent,
+      idempotencyKey: `ch:${Date.now()}`,
+      body: { protocol: "passport_id", externalPublicKey: toBase64(external.publicKey), keyType: "p256" },
+    });
+    const { challengeId, challenge } = chRes.json as { challengeId: string; challenge: string };
+    const proof = toBase64(p256Sign(new Uint8Array(Buffer.from(challenge, "hex")), external.privateKey));
+    const linkRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link:${challengeId}`,
+      body: { protocol: "passport_id", value: "passport:worker-test", challengeId, proofSignature: proof },
+    });
+    expect(linkRes.status).toBe(200);
+    expect((linkRes.json as { linked: { passport_id?: string } }).linked.passport_id).toBe("passport:worker-test");
+  });
+
+  it("rejects a signature from the wrong external key", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["x"] } });
+    const external = generateKeypair();
+    const impostor = generateKeypair();
+
+    const chRes = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+      keypair: agent,
+      idempotencyKey: `ch:${Date.now()}`,
+      body: { protocol: "aitp_id", externalPublicKey: toBase64(external.publicKey), keyType: "ed25519" },
+    });
+    const { challengeId, challenge } = chRes.json as { challengeId: string; challenge: string };
+    const badProof = toBase64(sign(new Uint8Array(Buffer.from(challenge, "hex")), impostor.privateKey));
+    const linkRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link:${challengeId}`,
+      body: { protocol: "aitp_id", value: "aitp:should-fail", challengeId, proofSignature: badProof },
+    });
+    expect(linkRes.status).toBe(400);
+    expect((linkRes.json as { error: { code: string } }).error.code).toBe("PROOF_INVALID");
+  });
+
+  it("only lets one of two concurrent completions of the same challenge succeed (race-condition regression test)", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["x"] } });
+    const external = generateKeypair();
+
+    const chRes = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+      keypair: agent,
+      idempotencyKey: `ch:${Date.now()}`,
+      body: { protocol: "agentpass_id", externalPublicKey: toBase64(external.publicKey), keyType: "ed25519" },
+    });
+    const { challengeId, challenge } = chRes.json as { challengeId: string; challenge: string };
+    const proof = toBase64(sign(new Uint8Array(Buffer.from(challenge, "hex")), external.privateKey));
+
+    const [a, b] = await Promise.all([
+      call("POST", `/v1/agents/${agent.did}/link`, { keypair: agent, idempotencyKey: `link-a:${Date.now()}`, body: { protocol: "agentpass_id", value: "agentpass:race-a", challengeId, proofSignature: proof } }),
+      call("POST", `/v1/agents/${agent.did}/link`, { keypair: agent, idempotencyKey: `link-b:${Date.now()}`, body: { protocol: "agentpass_id", value: "agentpass:race-b", challengeId, proofSignature: proof } }),
+    ]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([200, 409]);
+  });
+
+  it("a2a_endpoint still links without a challenge; key-derived protocols reject the shortcut", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["x"] } });
+
+    const a2aRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link-a2a:${Date.now()}`,
+      body: { protocol: "a2a_endpoint", value: "https://agent.example/a2a" },
+    });
+    expect(a2aRes.status).toBe(200);
+    expect((a2aRes.json as { linked: { a2a_endpoint?: string } }).linked.a2a_endpoint).toBe("https://agent.example/a2a");
+
+    const shortcutRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link-shortcut:${Date.now()}`,
+      body: { protocol: "agentpass_id", value: "agentpass:shortcut" },
+    });
+    expect(shortcutRes.status).toBe(400);
+    expect((shortcutRes.json as { error: { code: string } }).error.code).toBe("CHALLENGE_REQUIRED");
   });
 });

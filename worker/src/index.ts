@@ -83,11 +83,27 @@ app.get("/v1/agents/:id/reputation", rateLimitReadByIp, async (c) => c.json(awai
 
 app.get("/v1/agents/:id/receipts", async (c) => c.json({ receipts: await receiptService.listByAgent(c.env, c.req.param("id")!) }));
 
+app.post("/v1/agents/:id/link/challenge", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
+  const body = c.get("parsedBody") as { protocol?: string; externalPublicKey?: string; keyType?: string } | undefined;
+  if (!body?.protocol || !body?.externalPublicKey || !body?.keyType) {
+    throw badRequest("VALIDATION_ERROR", "protocol, externalPublicKey, and keyType are required");
+  }
+  const challenge = await agentService.requestLinkChallenge(c.env, c.get("agentDid")!, body.protocol, body.externalPublicKey, body.keyType);
+  return c.json(challenge, 201);
+});
+
 app.post("/v1/agents/:id/link", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
-  const body = c.get("parsedBody") as { protocol?: string; value?: string } | undefined;
+  const body = c.get("parsedBody") as { protocol?: string; value?: string; challengeId?: string; proofSignature?: string } | undefined;
   if (!body?.protocol || !body?.value) throw badRequest("VALIDATION_ERROR", "protocol and value are required");
-  const record = await agentService.linkIdentity(c.env, c.get("agentDid")!, body.protocol, body.value);
+  if (body.protocol === "a2a_endpoint") {
+    return c.json(await agentService.linkEndpoint(c.env, c.get("agentDid")!, body.protocol, body.value));
+  }
+  if (!body.challengeId || !body.proofSignature) {
+    throw badRequest("CHALLENGE_REQUIRED", "challengeId and proofSignature are required for key-derived identities — call POST /agents/:id/link/challenge first");
+  }
+  const record = await agentService.completeLink(c.env, c.get("agentDid")!, body.protocol, body.value, body.challengeId, body.proofSignature);
   return c.json(record);
 });
 
