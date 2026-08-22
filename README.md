@@ -29,7 +29,7 @@ Registers a TypeScript-side "requester" and a Python-side "worker" (see `sdk-pyt
 
 `worker/` is a second, independent implementation of the same API surface — Hono + Cloudflare D1 (SQL) + KV (idempotency cache), deployed to Cloudflare Workers — kept behaviorally identical to the Node reference server (same routes, same signature scheme, same reputation math; verified by running the demo and smoke-test scripts against both and diffing the output). It reuses `src/crypto/` and `src/core/receiptContent.ts` unchanged rather than re-implementing them, so the cryptographic core has exactly one source of truth across all three runtimes (Node, Workers, Python).
 
-Currently live at `https://inam-protocol.<account>.workers.dev` (see `worker/wrangler.jsonc`). Binding the `inamprotocol.com` custom domain requires the zone to be added to the Cloudflare account first (registrar nameserver change) — not yet done.
+Currently live at `https://api.inamprotocol.org` (custom domain, bound via `worker/wrangler.jsonc`; the `*.workers.dev` URL still works too as a fallback).
 
 ```
 cd worker

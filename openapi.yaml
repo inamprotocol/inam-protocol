@@ -11,7 +11,7 @@ info:
     name: Apache-2.0
     url: https://www.apache.org/licenses/LICENSE-2.0
 servers:
-  - url: https://inam-protocol.hacieskihoran.workers.dev/v1
+  - url: https://api.inamprotocol.org/v1
     description: Live Cloudflare Workers deployment (reference instance)
   - url: http://localhost:4021/v1
     description: Local Node reference server (npm run dev)

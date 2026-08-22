@@ -22,7 +22,7 @@ Current automated coverage: 14 Node vitest tests + 12 Python pytest tests + 11 W
 
 - **SPEC.md** — v0.1 protocol specification. Not yet updated to mention the Worker deployment or Phase 1 hardening details — worth a pass before Phase 2's "SPEC cleanup" step.
 - **Python SDK** (`sdk-python/`) — full parity with the TS `InamClient`, cross-language correctness proven both by fixed test vectors and a live two-language demo.
-- **Cloudflare Workers deployment** — live at `https://inam-protocol.hacieskihoran.workers.dev`.
+- **Cloudflare Workers deployment** — live at `https://api.inamprotocol.org` (custom domain, bound 2026-08-22; the workers.dev URL still works too as a fallback but is no longer the documented one).
 - **Local git repo** at `C:\Users\User\Desktop\inam-protocol` (moved here from `C:\Users\User\inam-protocol` on 2026-08-22). **Still not pushed anywhere** — no GitHub remote configured. This commit (Phase 1 hardening) has not yet been made at the time of writing this file; see git log for the actual current commit count.
 
 ## Remaining known gaps (deliberately not Phase 1's job)
