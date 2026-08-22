@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
+import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
 import { badRequest } from "../middleware/errors.js";
 import * as agentService from "../services/agentService.js";
 import { computeReputation } from "../services/reputationService.js";
@@ -14,14 +15,14 @@ const registerSchema = z.object({
   metadata: z.record(z.unknown()).optional(),
 });
 
-agentsRouter.post("/", requireSignedRequest, requireIdempotencyKey, (req, res) => {
+agentsRouter.post("/", rateLimitRegistrationByIp, requireSignedRequest, requireIdempotencyKey, (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const record = agentService.registerAgent(req.agentDid!, parsed.data);
   res.status(201).json(record);
 });
 
-agentsRouter.get("/search", (req, res) => {
+agentsRouter.get("/search", rateLimitReadByIp, (req, res) => {
   const capability = typeof req.query.capability === "string" ? req.query.capability : undefined;
   const supports = typeof req.query.supports === "string" ? req.query.supports : undefined;
   const minReputation = req.query.min_reputation ? Number(req.query.min_reputation) : undefined;
@@ -42,7 +43,7 @@ agentsRouter.get("/:id/protocols", (req, res) => {
   res.json({ linked: agent.linked });
 });
 
-agentsRouter.get("/:id/reputation", (req, res) => {
+agentsRouter.get("/:id/reputation", rateLimitReadByIp, (req, res) => {
   res.json(computeReputation(req.params.id));
 });
 
@@ -51,7 +52,7 @@ const linkSchema = z.object({
   value: z.string().min(1),
 });
 
-agentsRouter.post("/:id/link", requireSignedRequest, requireIdempotencyKey, (req, res) => {
+agentsRouter.post("/:id/link", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   agentService.requireSelf(req.agentDid, req.params.id);
   const parsed = linkSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);

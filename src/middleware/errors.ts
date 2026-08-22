@@ -30,6 +30,10 @@ export function conflict(code: string, message: string): ApiError {
   return new ApiError(409, code, message);
 }
 
+export function tooManyRequests(code: string, message: string): ApiError {
+  return new ApiError(429, code, message);
+}
+
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof ApiError) {

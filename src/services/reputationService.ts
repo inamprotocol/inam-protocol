@@ -55,6 +55,19 @@ export function computeReputation(agentId: string): ReputationResult {
   let weightSum = 0;
   let volumeUsd = 0;
 
+  // Memoize per counterparty within this one computation — a busy agent can
+  // have many receipts against a small set of repeat counterparties, and
+  // there's no reason to recompute the same counterparty's baseTrust for
+  // every one of them.
+  const trustCache = new Map<string, number>();
+  function cachedBaseTrust(counterparty: string): number {
+    const cached = trustCache.get(counterparty);
+    if (cached !== undefined) return cached;
+    const trust = baseTrust(counterparty);
+    trustCache.set(counterparty, trust);
+    return trust;
+  }
+
   for (const r of finalized) {
     const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
     const pairCount = pairCounts.get(counterparty) ?? 1;
@@ -63,7 +76,7 @@ export function computeReputation(agentId: string): ReputationResult {
     // receipts between the same two agents saturate instead of compounding.
     const pairWeight = Math.log(1 + pairCount) / pairCount;
 
-    const counterpartyTrust = baseTrust(counterparty);
+    const counterpartyTrust = cachedBaseTrust(counterparty);
     const ageDays = (Date.now() - new Date(r.result.completedAt).getTime()) / 86_400_000;
     const decay = Math.pow(2, -ageDays / config.decayHalfLifeDays);
     const outcomeScore = r.verification.outcome === "success" ? 1 : r.verification.outcome === "partial" ? 0.5 : 0;

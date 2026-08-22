@@ -21,11 +21,6 @@ export async function createDraft(env: Env, callerDid: string, input: CreateDraf
   if (callerDid === input.agentAId) throw badRequest("SELF_DEALING", "agent_a and agent_b must be different agents");
 
   const content = buildSignableContent(input.agentAId, callerDid, input);
-  const receiptId = content.receiptId;
-
-  if (await db.getReceipt(env, receiptId)) {
-    throw conflict("DUPLICATE_RECEIPT", "A receipt with identical content already exists");
-  }
 
   const signingBytes = new TextEncoder().encode(canonicalize({ ...content, dispute: undefined }));
   if (!verify(Buffer.from(input.signature, "base64"), signingBytes, callerDid)) {
@@ -38,7 +33,14 @@ export async function createDraft(env: Env, callerDid: string, input: CreateDraf
     signatures: { agentB: input.signature },
     status: "draft",
   };
-  await db.putReceipt(env, receipt);
+  try {
+    await db.insertDraftReceipt(env, receipt);
+  } catch (err) {
+    if (err instanceof db.DuplicateReceiptError) {
+      throw conflict("DUPLICATE_RECEIPT", "A receipt with identical content already exists");
+    }
+    throw err;
+  }
   return receipt;
 }
 
@@ -66,7 +68,10 @@ export async function countersign(env: Env, receiptId: string, callerDid: string
     dispute: { status: "none", windowClosesAt },
     status: "finalized",
   };
-  await db.putReceipt(env, finalized);
+  const applied = await db.finalizeReceiptIfDraft(env, receiptId, finalized);
+  if (!applied) {
+    throw conflict("NOT_DRAFT", "Receipt was concurrently modified and is no longer in draft state");
+  }
   return finalized;
 }
 
@@ -88,6 +93,9 @@ export async function openDispute(env: Env, receiptId: string, callerDid: string
     status: "disputed",
     dispute: { ...receipt.dispute, status: "open", reason },
   };
-  await db.putReceipt(env, disputed);
+  const applied = await db.disputeReceiptIfFinalized(env, receiptId, disputed);
+  if (!applied) {
+    throw conflict("NOT_FINALIZED", "Receipt was concurrently modified and is no longer finalized");
+  }
   return disputed;
 }

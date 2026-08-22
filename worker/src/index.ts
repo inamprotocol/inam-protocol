@@ -1,6 +1,8 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { requireSignedRequest } from "./signedRequest.js";
 import { requireIdempotencyKey } from "./idempotency.js";
+import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "./rateLimit.js";
 import { ApiError, badRequest } from "./errors.js";
 import * as agentService from "./agentService.js";
 import * as receiptService from "./receiptService.js";
@@ -8,6 +10,25 @@ import { computeReputation } from "./reputationService.js";
 import type { AppEnv } from "./types.js";
 
 const app = new Hono<AppEnv>();
+
+// Public reads are meant to be queryable from anywhere, browsers included —
+// that's the point of "reputation is public, no account needed" (SPEC.md §5).
+// Mutating (signed) endpoints get no CORS headers at all: they're
+// server-to-server/agent-to-agent by design, and since auth here is a
+// per-request Ed25519 signature (not an ambient browser credential like a
+// cookie), CORS wouldn't add real security anyway — a malicious page still
+// can't forge a signature it doesn't hold the private key for. Restricting it
+// just keeps the surface intentionally narrow until real frontend origins exist.
+const PUBLIC_READ_PATHS = [
+  "/v1/health",
+  "/v1/agents/search",
+  "/v1/agents/:id",
+  "/v1/agents/:id/protocols",
+  "/v1/agents/:id/reputation",
+  "/v1/agents/:id/receipts",
+  "/v1/receipts/:id",
+];
+for (const path of PUBLIC_READ_PATHS) app.use(path, cors({ origin: "*" }));
 
 app.onError((err, c) => {
   if (err instanceof ApiError) {
@@ -23,7 +44,7 @@ app.get("/v1/health", (c) => c.json({ status: "ok" }));
 
 // ---- Agents ----
 
-app.post("/v1/agents", requireSignedRequest, requireIdempotencyKey, async (c) => {
+app.post("/v1/agents", rateLimitRegistrationByIp, requireSignedRequest, requireIdempotencyKey, async (c) => {
   const body = c.get("parsedBody") as { capabilities?: unknown; metadata?: Record<string, unknown> } | undefined;
   if (!body || !Array.isArray(body.capabilities) || body.capabilities.length === 0 || !body.capabilities.every((x) => typeof x === "string")) {
     throw badRequest("VALIDATION_ERROR", "capabilities must be a non-empty array of strings");
@@ -32,7 +53,7 @@ app.post("/v1/agents", requireSignedRequest, requireIdempotencyKey, async (c) =>
   return c.json(record, 201);
 });
 
-app.get("/v1/agents/search", async (c) => {
+app.get("/v1/agents/search", rateLimitReadByIp, async (c) => {
   const capability = c.req.query("capability");
   const supports = c.req.query("supports");
   const minReputation = c.req.query("min_reputation") ? Number(c.req.query("min_reputation")) : undefined;
@@ -52,11 +73,11 @@ app.get("/v1/agents/:id/protocols", async (c) => {
   return c.json({ linked: agent.linked });
 });
 
-app.get("/v1/agents/:id/reputation", async (c) => c.json(await computeReputation(c.env, c.req.param("id")!)));
+app.get("/v1/agents/:id/reputation", rateLimitReadByIp, async (c) => c.json(await computeReputation(c.env, c.req.param("id")!)));
 
 app.get("/v1/agents/:id/receipts", async (c) => c.json({ receipts: await receiptService.listByAgent(c.env, c.req.param("id")!) }));
 
-app.post("/v1/agents/:id/link", requireSignedRequest, requireIdempotencyKey, async (c) => {
+app.post("/v1/agents/:id/link", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
   const body = c.get("parsedBody") as { protocol?: string; value?: string } | undefined;
   if (!body?.protocol || !body?.value) throw badRequest("VALIDATION_ERROR", "protocol and value are required");
@@ -66,7 +87,7 @@ app.post("/v1/agents/:id/link", requireSignedRequest, requireIdempotencyKey, asy
 
 // ---- Receipts ----
 
-app.post("/v1/receipts", requireSignedRequest, requireIdempotencyKey, async (c) => {
+app.post("/v1/receipts", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   const body = c.get("parsedBody") as (receiptService.CreateDraftInput & Record<string, unknown>) | undefined;
   if (!body?.jobId || !body?.agentAId || !body?.task || !body?.result || !body?.verification || !body?.signature) {
     throw badRequest("VALIDATION_ERROR", "jobId, agentAId, task, result, verification, and signature are required");
@@ -77,14 +98,14 @@ app.post("/v1/receipts", requireSignedRequest, requireIdempotencyKey, async (c) 
 
 app.get("/v1/receipts/:id", async (c) => c.json(await receiptService.getReceipt(c.env, c.req.param("id")!)));
 
-app.post("/v1/receipts/:id/countersign", requireSignedRequest, requireIdempotencyKey, async (c) => {
+app.post("/v1/receipts/:id/countersign", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   const body = c.get("parsedBody") as { signature?: string } | undefined;
   if (!body?.signature) throw badRequest("VALIDATION_ERROR", "signature is required");
   const receipt = await receiptService.countersign(c.env, c.req.param("id")!, c.get("agentDid")!, body.signature);
   return c.json(receipt);
 });
 
-app.post("/v1/receipts/:id/dispute", requireSignedRequest, requireIdempotencyKey, async (c) => {
+app.post("/v1/receipts/:id/dispute", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   const body = c.get("parsedBody") as { reason?: string } | undefined;
   if (!body?.reason) throw badRequest("VALIDATION_ERROR", "reason is required");
   const receipt = await receiptService.openDispute(c.env, c.req.param("id")!, c.get("agentDid")!, body.reason);

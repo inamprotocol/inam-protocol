@@ -7,8 +7,6 @@ export async function registerAgent(
   callerDid: string,
   input: { capabilities: string[]; metadata?: Record<string, unknown> },
 ): Promise<AgentRecord> {
-  const existing = await db.getAgent(env, callerDid);
-  if (existing) throw conflict("AGENT_ALREADY_REGISTERED", `Agent ${callerDid} is already registered`);
   const record: AgentRecord = {
     id: callerDid,
     capabilities: input.capabilities,
@@ -17,7 +15,14 @@ export async function registerAgent(
     stakeUsd: 0,
     createdAt: new Date().toISOString(),
   };
-  await db.putAgent(env, record);
+  try {
+    await db.insertAgent(env, record);
+  } catch (err) {
+    if (err instanceof db.AgentAlreadyExistsError) {
+      throw conflict("AGENT_ALREADY_REGISTERED", `Agent ${callerDid} is already registered`);
+    }
+    throw err;
+  }
   return record;
 }
 
@@ -36,9 +41,8 @@ export async function linkIdentity(env: Env, callerDid: string, protocol: string
   }
   const record = await getAgent(env, callerDid);
   const linked: LinkedIdentities = { ...record.linked, [protocol]: value };
-  const updated: AgentRecord = { ...record, linked };
-  await db.putAgent(env, updated);
-  return updated;
+  await db.updateAgentLinked(env, callerDid, linked);
+  return { ...record, linked };
 }
 
 export function requireSelf(callerDid: string | undefined, subjectId: string) {
