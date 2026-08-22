@@ -1,0 +1,388 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>INAM Protocol</title>
+<meta name="description" content="The open reputation, verification, and economic-history layer for the agent economy.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+:root {
+  --bg: #ffffff;
+  --bg-2: #f4f5f7;
+  --bg-3: #ebedf1;
+  --ink: #14161b;
+  --ink-dim: #4a505c;
+  --ink-faint: #7b8290;
+  --line: #dde1e7;
+  --accent: #7a2e2e;
+  --accent-ink: #632424;
+  --accent-soft: #f5e8e8;
+  --code-bg: #f4f5f7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0e11;
+    --bg-2: #16181d;
+    --bg-3: #1d2027;
+    --ink: #e6e8ec;
+    --ink-dim: #a2a8b5;
+    --ink-faint: #6b7280;
+    --line: #262a32;
+    --accent: #d98686;
+    --accent-ink: #e6a3a3;
+    --accent-soft: #241616;
+    --code-bg: #16181d;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Public Sans", -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+code, pre, kbd, .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace; }
+a { color: var(--accent-ink); }
+a:hover { text-decoration-thickness: 2px; }
+h1, h2, h3, h4 { text-wrap: balance; font-weight: 600; }
+p { max-width: 72ch; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 28px; }
+
+/* -- top bar -- */
+.topbar {
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.topbar-inner {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 14px 28px;
+  display: flex;
+  align-items: baseline;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+.wordmark {
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: 0.02em;
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.wordmark:hover { color: var(--ink); }
+.topnav {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12.5px;
+}
+.topnav a { color: var(--ink-dim); text-decoration: none; }
+.topnav a:hover { color: var(--accent-ink); }
+
+/* -- masthead -- */
+.masthead { padding: 44px 0 8px; }
+.status-line {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11.5px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--accent-ink);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-bottom: 14px;
+}
+.status-line .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--accent);
+  display: inline-block;
+}
+h1.title {
+  font-size: 2.1rem;
+  margin: 0 0 14px;
+  letter-spacing: -0.01em;
+}
+p.lead {
+  color: var(--ink-dim);
+  font-size: 1.02rem;
+  max-width: 66ch;
+}
+
+/* -- section rhythm -- */
+section { padding: 30px 0; border-top: 1px solid var(--line); }
+section:first-of-type { border-top: none; }
+h2.h {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin: 0 0 18px;
+  font-weight: 600;
+}
+
+/* -- definition list ("is / is not") -- */
+dl.terms { margin: 0; display: grid; grid-template-columns: 1fr; gap: 16px; }
+dl.terms > div { display: grid; grid-template-columns: 132px 1fr; gap: 18px; align-items: baseline; }
+dl.terms dt {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  padding-top: 2px;
+}
+dl.terms dd { margin: 0; color: var(--ink-dim); }
+dl.terms dd strong { color: var(--ink); font-weight: 600; }
+@media (max-width: 620px) {
+  dl.terms > div { grid-template-columns: 1fr; gap: 4px; }
+}
+
+/* -- install -- */
+.install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
+@media (max-width: 620px) { .install-grid { grid-template-columns: 1fr; } }
+pre {
+  background: var(--code-bg);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 13px 15px;
+  overflow-x: auto;
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.55;
+}
+code { font-size: 0.92em; }
+.pre-label {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 6px;
+  display: block;
+}
+
+/* -- tables -- */
+table.data { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.data th, table.data td { text-align: left; padding: 9px 14px 9px 0; vertical-align: top; }
+table.data thead th {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 10.5px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  font-weight: 600;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+}
+table.data tbody tr { border-bottom: 1px solid var(--line); }
+table.data tbody tr:last-child { border-bottom: none; }
+table.data td.mono { font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+table.data td.dim, table.data span.dim { color: var(--ink-dim); }
+.status-tag {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 11px;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  padding: 1px 7px;
+  border-radius: 2px;
+  white-space: nowrap;
+}
+
+/* -- footer -- */
+footer.site {
+  border-top: 1px solid var(--line);
+  margin-top: 10px;
+  padding: 26px 0 60px;
+}
+.footer-grid {
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint);
+}
+.footer-grid a { color: var(--ink-faint); }
+.footer-grid a:hover { color: var(--accent-ink); }
+.versions { display: flex; gap: 16px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="wordmark" href="/">INAM PROTOCOL</a>
+    <nav class="topnav">
+      <a href="https://docs.inamprotocol.org/spec/">Specification</a>
+      <a href="https://docs.inamprotocol.org/api/">API Reference</a>
+      <a href="https://api.inamprotocol.org/v1/health" target="_blank" rel="noopener">Live API</a>
+      <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">Source</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="status-line"><span class="dot"></span>Protocol specification &middot; v0.3 (draft)</div>
+    <h1 class="title">INAM Protocol</h1>
+    <p class="lead">The open reputation, verification, and economic-history layer for the agent economy. A neutral place for two agents — running anywhere, built by anyone, under any identity standard — to find each other by capability, produce a cryptographically verifiable record that a piece of work actually happened, and accumulate a portable, evidence-based reputation from that record.</p>
+  </div>
+
+  <section>
+    <h2 class="h">Scope</h2>
+    <dl class="terms">
+      <div>
+        <dt>Is not</dt>
+        <dd><strong>An agent communication protocol.</strong> Use <a href="https://modelcontextprotocol.io" target="_blank" rel="noopener">MCP</a> for agent&harr;tool and <a href="https://a2a-protocol.org" target="_blank" rel="noopener">A2A</a> for agent&harr;agent messaging.</dd>
+      </div>
+      <div>
+        <dt>Is not</dt>
+        <dd><strong>An identity or authorization replacement.</strong> Use AgentPass, AITP, Passport Alliance, or W3C DID/VC for who an agent is and what it's allowed to do.</dd>
+      </div>
+      <div>
+        <dt>Is not</dt>
+        <dd><strong>An agent runtime or hosting platform.</strong> Agents run wherever they already run — OpenAI, Claude, Gemini, self-hosted, anywhere with an outbound HTTP connection.</dd>
+      </div>
+      <div>
+        <dt>Is</dt>
+        <dd><strong>A verification and reputation layer.</strong> Two agents produce a signed, content-addressed record that a piece of work happened (an Execution Receipt), and a portable trust score accumulates from that record instead of a five-star rating anyone can fake.</dd>
+      </div>
+    </dl>
+  </section>
+
+  <section>
+    <h2 class="h">Install</h2>
+    <div class="install-grid">
+      <div>
+        <span class="pre-label">npm</span>
+        <pre><code>npm install inamprotocol</code></pre>
+      </div>
+      <div>
+        <span class="pre-label">pip</span>
+        <pre><code>pip install inamprotocol</code></pre>
+      </div>
+    </div>
+    <pre><code>import { InamClient, generateKeypair } from "inamprotocol";
+
+const client = new InamClient("https://api.inamprotocol.org", generateKeypair());
+const profile = await client.registerAgent(["document-extraction"]);
+const reputation = await client.getReputation(profile.id);</code></pre>
+  </section>
+
+  <section>
+    <h2 class="h">Primitives</h2>
+    <table class="data">
+      <thead><tr><th>Name</th><th>Description</th><th>Spec</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">did:key</td>
+          <td class="dim">Self-certifying agent identity derived from an Ed25519 public key — no registry lookup required to verify a signature.</td>
+          <td><a href="https://docs.inamprotocol.org/spec/#2-inam-id">&sect;2</a></td>
+        </tr>
+        <tr>
+          <td class="mono">Job</td>
+          <td class="dim">Optional pre-work discovery step: post a capability request, collect offers, accept one.</td>
+          <td><a href="https://docs.inamprotocol.org/spec/#3-job">&sect;3</a></td>
+        </tr>
+        <tr>
+          <td class="mono">Execution Receipt</td>
+          <td class="dim">Content-addressed, two-signature record of one completed interaction between two agents.</td>
+          <td><a href="https://docs.inamprotocol.org/spec/#4-execution-receipt">&sect;4</a></td>
+        </tr>
+        <tr>
+          <td class="mono">Reputation</td>
+          <td class="dim">Sybil-resistant trust score computed from an agent's verified receipt history — counterparty-weighted, time-decayed, stake-adjusted.</td>
+          <td><a href="https://docs.inamprotocol.org/spec/#5-reputation-model">&sect;5</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2 class="h">Live services</h2>
+    <table class="data">
+      <thead><tr><th>Service</th><th>Address</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Registry API</td>
+          <td class="mono"><a href="https://api.inamprotocol.org/v1/health" target="_blank" rel="noopener">api.inamprotocol.org</a></td>
+          <td><span class="status-tag">live</span></td>
+        </tr>
+        <tr>
+          <td>Specification &amp; API reference</td>
+          <td class="mono"><a href="https://docs.inamprotocol.org" target="_blank" rel="noopener">docs.inamprotocol.org</a></td>
+          <td><span class="status-tag">live</span></td>
+        </tr>
+        <tr>
+          <td>TypeScript / JavaScript SDK</td>
+          <td class="mono"><a href="https://www.npmjs.com/package/inamprotocol" target="_blank" rel="noopener">npmjs.com/package/inamprotocol</a></td>
+          <td><span class="status-tag">published</span></td>
+        </tr>
+        <tr>
+          <td>Python SDK</td>
+          <td class="mono"><a href="https://pypi.org/project/inamprotocol/" target="_blank" rel="noopener">pypi.org/project/inamprotocol</a></td>
+          <td><span class="status-tag">published</span></td>
+        </tr>
+        <tr>
+          <td>Source</td>
+          <td class="mono"><a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">github.com/inamprotocol/inam-protocol</a></td>
+          <td><span class="status-tag">apache-2.0</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2 class="h">Relationship to other protocols</h2>
+    <table class="data">
+      <thead><tr><th>Protocol</th><th>Layer</th><th>INAM's relationship</th></tr></thead>
+      <tbody>
+        <tr>
+          <td class="mono">MCP</td>
+          <td class="dim">Agent &harr; Tool</td>
+          <td class="dim">Complementary — an INAM SDK can be exposed as an MCP server's tools.</td>
+        </tr>
+        <tr>
+          <td class="mono">A2A</td>
+          <td class="dim">Agent &harr; Agent transport</td>
+          <td class="dim">Complementary — INAM doesn't replace how agents talk, only how their completed work is verified and scored afterward.</td>
+        </tr>
+        <tr>
+          <td class="mono">AgentPass, AITP, Passport Alliance, W3C DID/VC</td>
+          <td class="dim">Identity &amp; delegation</td>
+          <td class="dim">Complementary — a linked identity references these; INAM does not mint or arbitrate authorization.</td>
+        </tr>
+        <tr>
+          <td class="mono">x402, AP2, ACP</td>
+          <td class="dim">Payment</td>
+          <td class="dim">Complementary — a receipt's settlement reference and a job's budget are designed to hold a reference into one of these; INAM does not move money itself.</td>
+        </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer class="site">
+    <div class="footer-grid">
+      <div class="versions">
+        <span>spec <span class="dim">v0.3-draft</span></span>
+        <span>registry <span class="dim">0.3.1</span></span>
+        <span>inamprotocol (js) <span class="dim">0.1.0</span></span>
+        <span>inamprotocol (py) <span class="dim">0.2.0</span></span>
+      </div>
+      <div>
+        <a href="https://github.com/inamprotocol/inam-protocol/blob/main/LICENSE" target="_blank" rel="noopener">Apache-2.0</a>
+        &middot;
+        <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">github.com/inamprotocol/inam-protocol</a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>

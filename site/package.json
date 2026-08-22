@@ -1,0 +1,14 @@
+{
+  "name": "inam-protocol-site",
+  "version": "0.1.0",
+  "private": true,
+  "description": "inamprotocol.org — the protocol's front door: positioning, install instructions, and links out to the spec, API reference, and SDKs",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}
