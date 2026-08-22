@@ -12,4 +12,7 @@ export const config = {
   // of an agent's finalized receipts, flag it for review instead of silently
   // trusting the volume. Seed of the fuller clustering-based detection.
   concentratedCounterpartyThreshold: 0.6,
+  // External-identity link challenges (ATTP §4: "expiration window not
+  // exceeding 60 seconds").
+  linkChallengeTtlMs: 60 * 1000,
 };

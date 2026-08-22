@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: INAM Protocol Registry API
-  version: "0.3.0"
+  version: "0.4.0"
   description: >
     The open reputation, verification, and economic-history layer for the agent
     economy. See SPEC.md in this repository for the full protocol specification
@@ -157,10 +157,40 @@ paths:
                 properties: { receipts: { type: array, items: { $ref: "#/components/schemas/Receipt" } } }
         "404": { $ref: "#/components/responses/Error" }
 
+  /agents/{id}/link/challenge:
+    post:
+      operationId: requestLinkChallenge
+      summary: Request a single-use proof-of-control challenge before linking a key-derived external identity (SPEC.md §2.1)
+      tags: [agents]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [protocol, externalPublicKey, keyType]
+              properties:
+                protocol: { type: string, enum: [agentpass_id, aitp_id, passport_id] }
+                externalPublicKey: { type: string, description: "Base64-encoded external public key" }
+                keyType: { type: string, enum: [ed25519, p256] }
+      responses:
+        "201":
+          description: Challenge issued
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/LinkChallenge" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
   /agents/{id}/link:
     post:
       operationId: linkIdentity
-      summary: Claim an external identity (self-signed claim, not yet independently verified — see SPEC.md §2)
+      summary: Claim an external identity — agentpass_id/aitp_id/passport_id require a completed challenge (SPEC.md §2.1); a2a_endpoint does not, since it isn't a key-derived identity
       tags: [agents]
       security: [{ inamSignature: [] }]
       parameters:
@@ -176,13 +206,18 @@ paths:
               properties:
                 protocol: { type: string, enum: [agentpass_id, aitp_id, passport_id, a2a_endpoint] }
                 value: { type: string }
+                challengeId: { type: string, description: "Required for agentpass_id/aitp_id/passport_id — from a prior /link/challenge call" }
+                proofSignature: { type: string, description: "Base64 signature over the challenge, from the external private key" }
       responses:
         "200":
           description: Updated agent profile
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Agent" }
+        "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
 
   /jobs:
@@ -498,6 +533,13 @@ components:
         aitp_id: { type: string }
         passport_id: { type: string }
         a2a_endpoint: { type: string }
+
+    LinkChallenge:
+      type: object
+      properties:
+        challengeId: { type: string }
+        challenge: { type: string, description: "64 hex chars — 32 random bytes to sign with the external private key" }
+        expiresAt: { type: string, format: date-time }
 
     Agent:
       type: object

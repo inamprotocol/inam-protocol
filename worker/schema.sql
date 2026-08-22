@@ -55,3 +55,21 @@ CREATE TABLE IF NOT EXISTS job_offers (
   created_at TEXT NOT NULL,
   PRIMARY KEY (job_id, agent_id)
 );
+
+-- External-identity link challenges (proof-of-possession before linking
+-- agentpass_id / aitp_id / passport_id — SPEC.md's external-identity linking
+-- section). Single-use: consuming one is `UPDATE ... WHERE used = 0` + a
+-- meta.changes check, the same compare-and-swap discipline used for receipt
+-- countersign/dispute and job accept/cancel above, rather than a
+-- read-then-write that a concurrent replay could race.
+CREATE TABLE IF NOT EXISTS link_challenges (
+  challenge_id TEXT PRIMARY KEY,
+  agent_id TEXT NOT NULL REFERENCES agents(id),
+  protocol TEXT NOT NULL,
+  external_public_key TEXT NOT NULL,  -- base64
+  key_type TEXT NOT NULL,             -- ed25519 | p256
+  challenge TEXT NOT NULL,            -- hex-encoded random bytes
+  created_at TEXT NOT NULL,
+  expires_at TEXT NOT NULL,
+  used INTEGER NOT NULL DEFAULT 0
+);

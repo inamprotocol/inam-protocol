@@ -1,8 +1,8 @@
-# INAM Protocol — Specification v0.3 (Draft)
+# INAM Protocol — Specification v0.4 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, file-backed storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
 
-**Changes from v0.2:** adds the **Job** resource (§3) — capability discovery, offers, and acceptance as a distinct, optional pre-work step ahead of an Execution Receipt. This was explicitly out of scope in v0.1/v0.2 as premature; it's additive and backward compatible — `jobId` on a receipt was always a plain string, and remains valid with no backing Job resource at all. Implemented in all three runtimes (Node, Cloudflare Workers, both SDKs) and verified end to end, including against the live deployment.
+**Changes from v0.3:** adds external-identity **link challenges** (§2.1) — `agentpass_id`/`aitp_id`/`passport_id` now require cryptographic proof of control of the claimed external key (Ed25519 or P-256, wire format aligned with ATTP/`draft-sharif-attp-00`) before a registry stores the link, closing the "self-signed unchecked claim" gap called out in v0.1–v0.3. `a2a_endpoint` is unaffected (it was never a key-derived identity). Additive and backward compatible at the wire level for every other endpoint. Implemented in all three runtimes (Node, Cloudflare Workers, both SDKs) and verified end to end, including a real Ed25519 + P-256 cross-language interop check between the TypeScript and Python SDKs.
 
 **Changes from v0.1 (carried forward in v0.2):** normative (MUST/SHOULD/MAY) language throughout, replacing descriptive prose where conformance actually matters; documented the rate limiting and CORS policies added during the v0.1→v0.2 hardening pass, including the `RATE_LIMITED` error code; documented the second live deployment (Cloudflare Workers) and its custom domain. No wire-format break in either bump — `receiptVersion` stays `"1.0"`.
 
@@ -58,7 +58,29 @@ An agent's registry profile also carries a `linked` map to identities issued by 
 }
 ```
 
-A registry **MUST** verify that a `POST /agents/:id/link` request is signed by the same INAM ID it targets (§7) before storing a `linked` entry — this proves control of the *INAM* ID, not control of the external identity being claimed. **Not yet enforced:** a registry does not currently perform a challenge-response round trip against AgentPass/AITP/Passport Alliance to confirm the caller actually controls that external identity too. Until that ships, a consuming client **MUST NOT** treat `linked` as verified — it **SHOULD** be surfaced as "claimed," not "proven."
+A registry **MUST** verify that a `POST /agents/:id/link` request is signed by the same INAM ID it targets (§7) before storing a `linked` entry — this proves control of the *INAM* ID, not, by itself, control of the external identity being claimed. `a2a_endpoint` is a plain service URL rather than a key-derived identity, so INAM signature control is the only proof that applies to it. For `agentpass_id` / `aitp_id` / `passport_id`, §2.1 below adds cryptographic proof of control of the external key.
+
+### 2.1 External identity linking (challenge-response)
+
+Before a registry stores an `agentpass_id` / `aitp_id` / `passport_id` claim, the caller **MUST** prove control of the external public key via a single-use signed challenge — a two-step exchange:
+
+**Step 1 — `POST /agents/:id/link/challenge`** *(signed by the INAM ID, self only)*: request body `{ protocol, externalPublicKey, keyType }`, where `externalPublicKey` is the claimed external key, base64-encoded, and `keyType` is `"ed25519"` or `"p256"`. The registry generates and stores a single-use challenge and responds `201` with:
+
+```json
+{ "challengeId": "...", "challenge": "<64 hex chars>", "expiresAt": "2026-08-22T13:41:34Z" }
+```
+
+`challenge` **MUST** be 32 cryptographically random bytes, hex-encoded. A registry **MUST** reject completing a challenge after its `expiresAt` (**SHOULD** be ≤60 seconds from issuance) and **MUST** reject reusing an already-consumed `challengeId` — both **MUST** be enforced as an atomic compare-and-swap on first use, not a read-then-write (see `worker/src/db.ts`'s `consumeLinkChallengeIfUnused` for the reference CAS pattern; a naive check-then-mark-used has the same race class this codebase has already fixed twice for receipts and jobs).
+
+**Step 2 — `POST /agents/:id/link`** *(signed by the INAM ID, self only)*: for `agentpass_id`/`aitp_id`/`passport_id`, the request body **MUST** include `challengeId` and `proofSignature` alongside `protocol`/`value`. `proofSignature` is a signature over the raw bytes of the hex-decoded `challenge` (not the hex string), produced by the *external* private key — base64-encoded. The registry verifies `proofSignature` against the `externalPublicKey` submitted in step 1 using the matching scheme, and only writes `linked[protocol] = value` if it verifies. `a2a_endpoint` skips this whole exchange — it's linked directly with just `{ protocol, value }`, as before.
+
+**Wire format.** For `keyType: "p256"`: ECDSA over the P-256 curve, standard SHA-256 digest (i.e. plain `ECDSA-Sign(SHA-256(challenge), key)`, not a pre-hashed digest signed raw), signature as 64-byte compact `r‖s` (32-byte big-endian `r` followed by 32-byte big-endian `s`) — **not** DER. A registry **MUST** reject a non-canonical ("high-S") signature, i.e. **MUST** require `s ≤ n/2` where `n` is the P-256 group order; a signer **MUST** produce the low-S representative (this codebase's reference Python signer initially didn't, and produced a signature the reference TypeScript verifier rejected about half the time — see `sdk-python/inamprotocol/p256.py`'s doc comment). For `keyType: "ed25519"`: standard RFC 8032 Ed25519 over the raw challenge bytes, verified against the raw external public key directly (**not** wrapped in a `did:key`) — an externally-issued key doesn't need to be INAM-encoded to be linked.
+
+This wire format is chosen to align with [ATTP](https://datatracker.ietf.org/doc/draft-sharif-attp/) (`draft-sharif-attp-00`, the trust-transport protocol AgentPass is built on), which mandates P-256 as its primary curve and specifies this exact challenge/signature shape. That alignment is **best-effort, not a conformance claim** — this reference implementation has not been certified against a live ATTP verifier, and other protocols (AITP, Passport Alliance) may use different signature conventions for their own native verification paths.
+
+**What this does and does not prove.** A successful challenge response proves the caller currently holds the private key for the `externalPublicKey` they submitted. It does **not** call out to AgentPass/AITP/Passport Alliance's own registry to confirm that key is the one each system currently recognizes as authoritative for the claimed identity (e.g. it doesn't catch a key that was valid but has since been rotated or revoked on the external side) — that live cross-registry resolution is explicitly **out of scope** for this reference implementation (§10) and is the next real increment beyond proof-of-possession. A consuming client **SHOULD** treat a challenge-verified `linked` entry as "proven control of this key at link time," not as an ongoing guarantee that the external registry still agrees.
+
+New error codes: `UNSUPPORTED_KEY_TYPE`, `CHALLENGE_NOT_FOUND`, `CHALLENGE_EXPIRED`, `CHALLENGE_ALREADY_USED`, `CHALLENGE_MISMATCH` (challenge was issued for a different agent/protocol pair), `CHALLENGE_REQUIRED` (a key-derived protocol was submitted to `POST /agents/:id/link` without a prior challenge), `PROOF_INVALID`.
 
 ## 3. Job
 
@@ -201,7 +223,8 @@ Base path `/v1`. A `(signed)` endpoint **MUST** reject a request missing a valid
 | `GET /agents/:id/reputation` | Compute and return the reputation result (§5.3). No auth required — reputation is public by design. |
 | `GET /agents/:id/receipts` | List an agent's receipts (draft, finalized, and disputed). |
 | `GET /agents/search?capability=&min_reputation=&supports=` | Discover agents by capability, minimum trust score, and/or which external protocol they support. |
-| `POST /agents/:id/link` *(signed, self only)* | Claim an external identity (§2). |
+| `POST /agents/:id/link/challenge` *(signed, self only)* | Request a single-use proof-of-control challenge before linking a key-derived external identity (§2.1). |
+| `POST /agents/:id/link` *(signed, self only)* | Claim an external identity (§2); `agentpass_id`/`aitp_id`/`passport_id` require a completed challenge (§2.1), `a2a_endpoint` does not. |
 | `POST /jobs` *(signed)* | Post an open job (§3). |
 | `GET /jobs/:id` | Fetch a single job. |
 | `GET /jobs/search?capability=&status=` | Discover jobs, typically filtered to `status=open`. |
@@ -254,11 +277,12 @@ An INAM SDK, in any language, **MUST** provide:
 2. **Canonical JSON serialization** (§4.2) matching `sdk-js/src/crypto/canonical.ts` **byte-for-byte** — this is the one piece of logic that **MUST** be identical across every language implementation; two SDKs disagreeing here sign/verify different bytes for what looks like the same receipt, and neither will notice until a cross-SDK countersign fails.
 3. **Request signing** per §7.
 4. **Receipt content + ID construction** per §4.2 (see `sdk-js/src/core/receiptContent.ts` for the reference logic).
-5. A thin client wrapping the REST calls in §6: `registerAgent`, `getAgent`, `linkIdentity`, `searchAgents`, `getReputation`, `listReceipts`, `submitWork` (draft), `acceptWork` (countersign), `disputeReceipt`.
+5. A thin client wrapping the REST calls in §6: `registerAgent`, `getAgent`, `linkIdentity`, `requestLinkChallenge`, `completeLink`, `searchAgents`, `getReputation`, `listReceipts`, `submitWork` (draft), `acceptWork` (countersign), `disputeReceipt`.
+6. **P-256 sign/verify** (§2.1) alongside Ed25519, for external-identity challenge proofs — the low-S canonicalization requirement in §2.1 applies to the SDK's signer, not just the registry's verifier.
 
 An SDK **SHOULD** ship a fixed-vector interop test — sign/canonicalize a known payload with a known test key and compare byte-for-byte against a value generated by another language's SDK — rather than relying on end-to-end demos alone to catch a canonicalization drift. `sdk-python/tests/test_interop.py` and `scripts/interop-vectors.ts` are the reference pattern.
 
-Reference implementations: `inamprotocol` on npm (TypeScript, `InamClient`; source `sdk-js/src/client.ts`) and `inamprotocol` on PyPI (Python, `InamClient`; source `sdk-python/inamprotocol/client.py`). Cross-language interop is a first-class correctness requirement — a receipt drafted by the Python SDK must countersign correctly against a TypeScript client and vice versa, because both compute the identical canonical bytes. Both SDKs also provide Job methods (`postJob`/`post_job`, `searchJobs`/`search_jobs`, `submitOffer`/`submit_offer`, `acceptOffer`/`accept_offer`, `cancelJob`/`cancel_job`) — see `sdk-python/examples/job_demo.py` for the full flow.
+Reference implementations: `inamprotocol` on npm (TypeScript, `InamClient`; source `sdk-js/src/client.ts`) and `inamprotocol` on PyPI (Python, `InamClient`; source `sdk-python/inamprotocol/client.py`). Cross-language interop is a first-class correctness requirement — a receipt drafted by the Python SDK must countersign correctly against a TypeScript client and vice versa, because both compute the identical canonical bytes. Both SDKs also provide Job methods (`postJob`/`post_job`, `searchJobs`/`search_jobs`, `submitOffer`/`submit_offer`, `acceptOffer`/`accept_offer`, `cancelJob`/`cancel_job`) — see `sdk-python/examples/job_demo.py` for the full flow — and external-identity link-challenge methods (`requestLinkChallenge`/`request_link_challenge`, `completeLink`/`complete_link`) — see `sdk-python/examples/link_challenge_demo.py`. The P-256 canonicalization requirement in §2.1 is a real cross-language interop hazard, not a hypothetical one: this reference implementation's own Python signer initially produced non-canonical signatures the TypeScript verifier rejected about half the time, caught by running the demo repeatedly rather than by a single passing run.
 
 ## 9. Versioning
 
@@ -272,7 +296,9 @@ Not deferred by accident — deferred because building them before the primitive
 - Payments/settlement enforcement (`settlement` and a job's `budget` are recorded but never verified against x402/AP2/on-chain state).
 - Stake posting/slashing endpoints.
 - TEE remote attestation for `verification.method: independent_validator`.
-- External identity challenge-response verification for `POST /agents/:id/link`.
+- Live cross-registry resolution for linked external identities: §2.1's challenge proves the caller holds the claimed external key *today*, but a registry does not call out to AgentPass/AITP/Passport Alliance's own APIs to confirm that key is still the one each system currently recognizes as authoritative (e.g. it wouldn't catch a rotated or revoked external key).
+- ATTP conformance certification — §2.1's wire format aligns with `draft-sharif-attp-00` by design, but this has not been tested against a live ATTP verifier.
+- Trust-score penalties for repeated failed challenge attempts (ATTP §4 recommends this; this reference implementation just lets the challenge expire normally after a failed attempt).
 - Full iterative EigenTrust solve and real graph-clustering-based collusion detection.
 - Ranking/matching logic for job offers beyond a flat list (e.g. sorting offers by the offering agent's reputation) — a registry **MAY** add this as a read-side convenience without a spec change, since it doesn't affect wire format or conformance.
 - Any UI, marketplace, or payment product surface.
@@ -283,5 +309,5 @@ Not deferred by accident — deferred because building them before the primitive
 |---|---|---|
 | MCP | Agent ↔ Tool | Complementary — an INAM SDK can be exposed as an MCP server's tools. |
 | A2A | Agent ↔ Agent transport | Complementary — INAM doesn't replace how agents talk, only how their completed work is verified and scored afterward. |
-| AgentPass, AITP, Passport Alliance, W3C DID/VC | Identity & delegation | Complementary — `linked` (§2) references these; INAM does not mint or arbitrate authorization. |
+| AgentPass, AITP, Passport Alliance, W3C DID/VC | Identity & delegation | Complementary — `linked` (§2) references these; INAM does not mint or arbitrate authorization. §2.1's link-challenge wire format follows ATTP (the trust-transport protocol AgentPass is built on) so proof-of-control interops with that ecosystem's own key material, but INAM still doesn't call out to their registries as the authority on delegation/mandate scope — that stays theirs. |
 | x402, AP2, ACP | Payment | Complementary — `settlement.paymentRef` (§4.1) and a job's `budget` (§3.1) are designed to hold a reference into one of these; INAM does not move money itself. |

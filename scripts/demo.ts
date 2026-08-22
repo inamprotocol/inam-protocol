@@ -1,4 +1,4 @@
-import { generateKeypair } from "../sdk-js/src/crypto/keys.js";
+import { generateKeypair, sign, toBase64, fromHex } from "../sdk-js/src/crypto/keys.js";
 import { InamClient } from "../sdk-js/src/client.js";
 
 const BASE_URL = process.env.INAM_URL ?? "http://localhost:4021";
@@ -21,7 +21,13 @@ async function main() {
     await worker.registerAgent(["translation.tr-en"], { name: "Demo Translator" }),
   );
 
-  log("Worker links an external AgentPass identity", await worker.linkIdentity("agentpass_id", "ap_x91k_demo"));
+  // agentpass_id is a key-derived identity (SPEC.md §2.1) as of protocol
+  // v0.4 — linking it requires proving control of the external key via a
+  // signed challenge, not just an unchecked claim.
+  const externalAgentPassKey = generateKeypair();
+  const linkChallenge = await worker.requestLinkChallenge("agentpass_id", toBase64(externalAgentPassKey.publicKey), "ed25519");
+  const linkProof = toBase64(sign(fromHex(linkChallenge.challenge), externalAgentPassKey.privateKey));
+  log("Worker links an external AgentPass identity", await worker.completeLink("agentpass_id", "ap_x91k_demo", linkChallenge.challengeId, linkProof));
 
   log(
     "Requester searches for a translator",

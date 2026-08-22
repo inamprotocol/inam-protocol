@@ -5,6 +5,30 @@ export interface LinkedIdentities {
   a2a_endpoint?: string;
 }
 
+export type ExternalKeyType = "ed25519" | "p256";
+
+/** Response shape from POST /agents/:id/link/challenge. */
+export interface LinkChallenge {
+  challengeId: string;
+  challenge: string;
+  expiresAt: string;
+}
+
+/** Server-side record, stored in the IDEMPOTENCY KV namespace under
+ * `link-challenge:<id>` with a matching TTL — never returned to clients
+ * wholesale. */
+export interface LinkChallengeRecord {
+  challengeId: string;
+  agentId: string;
+  protocol: string;
+  externalPublicKey: string;
+  keyType: ExternalKeyType;
+  challenge: string;
+  createdAt: string;
+  expiresAt: string;
+  used: boolean;
+}
+
 export interface AgentRecord {
   id: string;
   capabilities: string[];

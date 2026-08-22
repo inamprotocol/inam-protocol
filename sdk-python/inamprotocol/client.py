@@ -87,11 +87,40 @@ class InamClient:
         return self._request("GET", f"/v1/agents/{urllib.parse.quote(agent_id, safe='')}")
 
     def link_identity(self, protocol: str, value: str) -> Dict[str, Any]:
+        """Links `a2a_endpoint` -- the one protocol that isn't a key-derived
+        identity, so there's nothing to prove control of beyond this
+        request's own INAM signature. For `agentpass_id` / `aitp_id` /
+        `passport_id`, use `request_link_challenge` + `complete_link` instead.
+        """
         return self._request(
             "POST",
             f"/v1/agents/{urllib.parse.quote(self.did, safe='')}/link",
             {"protocol": protocol, "value": value},
             idempotency_key=f"link:{protocol}:{value}",
+        )
+
+    def request_link_challenge(self, protocol: str, external_public_key: str, key_type: str) -> Dict[str, Any]:
+        """Step 1 of linking a key-derived external identity: request a
+        single-use, ~60s challenge that must be signed with the *external*
+        private key corresponding to `external_public_key` (base64), not this
+        INAM keypair."""
+        return self._request(
+            "POST",
+            f"/v1/agents/{urllib.parse.quote(self.did, safe='')}/link/challenge",
+            {"protocol": protocol, "externalPublicKey": external_public_key, "keyType": key_type},
+            idempotency_key=f"link-challenge:{protocol}:{external_public_key}:{time.time()}",
+        )
+
+    def complete_link(self, protocol: str, value: str, challenge_id: str, proof_signature: str) -> Dict[str, Any]:
+        """Step 2: submit the signed challenge to complete the link.
+        `proof_signature` must be a signature over the raw bytes of the
+        challenge (hex-decoded) produced by the external private key,
+        base64-encoded."""
+        return self._request(
+            "POST",
+            f"/v1/agents/{urllib.parse.quote(self.did, safe='')}/link",
+            {"protocol": protocol, "value": value, "challengeId": challenge_id, "proofSignature": proof_signature},
+            idempotency_key=f"link:{protocol}:{challenge_id}",
         )
 
     def search_agents(

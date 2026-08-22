@@ -84,7 +84,8 @@ GET  /agents/:id/protocols
 GET  /agents/:id/reputation
 GET  /agents/:id/receipts
 GET  /agents/search?capability=&min_reputation=&supports=
-POST /agents/:id/link            (signed)
+POST /agents/:id/link/challenge   request a proof-of-control challenge (signed)
+POST /agents/:id/link            (signed; agentpass_id/aitp_id/passport_id require a completed challenge)
 
 POST /jobs                        post an open job (signed)
 GET  /jobs/:id
@@ -108,7 +109,7 @@ This is a reference implementation, not a production deployment. Every simplific
 
 - **Storage**: a JSON file behind an in-memory `Map` (`src/storage/jsonStore.ts`), single-process only. Swap point: implement the same `get/set/all` interface against Postgres/SQLite; nothing above that layer changes.
 - **Request signing**: a simplified scheme inspired by RFC 9421 / Web Bot Auth, not the full structured-field spec. Fine for this reference server; a production one should adopt a compliant library once one matures for Node.
-- **External identity linking** (`POST /agents/:id/link`): accepts a self-signed claim that the caller controls the given AgentPass/AITP/Passport Alliance identity. It does **not** yet call out to those systems for a challenge-response proof of control — that's the next real increment before `link` can be trusted for anything high-stakes.
+- **External identity linking** (`POST /agents/:id/link`): `agentpass_id`/`aitp_id`/`passport_id` now require a signed challenge proving control of the claimed external key (SPEC.md §2.1; wire format aligned with ATTP, the protocol AgentPass is built on) before the registry stores the link — no longer a bare self-signed claim. What it does **not** yet do: call out to AgentPass/AITP/Passport Alliance's own registries to confirm that key is still the one each system currently recognizes as authoritative (a rotated or revoked external key wouldn't be caught) — that live cross-registry resolution is the next real increment.
 - **Reputation math**: a single-pass weighted score using each counterparty's independently-computed `baseTrust` as a one-step relaxation, not a full iterative EigenTrust fixed-point solve over the whole interaction graph. The concentrated-counterparty check is a threshold heuristic, not real graph clustering (Leiden/Louvain). Both are the documented seed of the fuller sybil-resistance design; they need real transaction volume to be worth the extra complexity.
 - **Verification method**: `payer_confirmation` is the only one actually meaningful today — `independent_validator` and `test_suite_pass` are accepted values with no enforcement behind them yet.
 - **Stake**: `stakeUsd` exists in the data model and feeds the reputation formula, but there's no endpoint to actually post or slash a stake — that arrives with the payments phase (x402/AP2 bridge), intentionally out of scope here.

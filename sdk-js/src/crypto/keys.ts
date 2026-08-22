@@ -56,6 +56,17 @@ export function verify(signature: Uint8Array, message: Uint8Array, did: string):
   }
 }
 
+/** Verifies against a raw Ed25519 public key rather than a did:key — for
+ * externally-issued identities (e.g. an AgentPass/AITP key) that aren't
+ * necessarily encoded as an INAM did:key. */
+export function verifyRawEd25519(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): boolean {
+  try {
+    return ed25519.verify(signature, message, publicKey);
+  } catch {
+    return false;
+  }
+}
+
 export function sha256Hex(data: Uint8Array | string): string {
   const bytes = typeof data === "string" ? new TextEncoder().encode(data) : data;
   return Buffer.from(sha256(bytes)).toString("hex");
@@ -67,4 +78,12 @@ export function toBase64(bytes: Uint8Array): string {
 
 export function fromBase64(b64: string): Uint8Array {
   return new Uint8Array(Buffer.from(b64, "base64"));
+}
+
+export function toHex(bytes: Uint8Array): string {
+  return Buffer.from(bytes).toString("hex");
+}
+
+export function fromHex(hex: string): Uint8Array {
+  return new Uint8Array(Buffer.from(hex, "hex"));
 }

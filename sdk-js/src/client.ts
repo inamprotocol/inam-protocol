@@ -1,7 +1,7 @@
 import { canonicalize } from "./crypto/canonical.js";
 import { sha256Hex, sign, toBase64, type Keypair } from "./crypto/keys.js";
 import { buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";
-import type { AgentRecord, ExecutionReceipt, JobOffer, JobRecord, ReputationResult } from "./types.js";
+import type { AgentRecord, ExecutionReceipt, ExternalKeyType, JobOffer, JobRecord, LinkChallenge, ReputationResult } from "./types.js";
 
 /**
  * Minimal reference client — the seed of the future `@inamprotocol/agent-sdk`
@@ -55,9 +55,31 @@ export class InamClient {
     return this.request("GET", `/v1/agents/${encodeURIComponent(id)}`);
   }
 
+  /** Links `a2a_endpoint` — the one protocol that isn't a key-derived
+   * identity, so there's nothing to prove control of beyond this request's
+   * own INAM signature. For `agentpass_id` / `aitp_id` / `passport_id`, use
+   * `requestLinkChallenge` + `completeLink` instead. */
   linkIdentity(protocol: string, value: string): Promise<AgentRecord> {
     return this.request("POST", `/v1/agents/${encodeURIComponent(this.did)}/link`, { protocol, value }, {
       idempotencyKey: `link:${protocol}:${value}`,
+    });
+  }
+
+  /** Step 1 of linking a key-derived external identity: request a single-use,
+   * ~60s challenge that must be signed with the *external* private key
+   * corresponding to `externalPublicKey` (not this INAM keypair). */
+  requestLinkChallenge(protocol: string, externalPublicKey: string, keyType: ExternalKeyType): Promise<LinkChallenge> {
+    return this.request("POST", `/v1/agents/${encodeURIComponent(this.did)}/link/challenge`, { protocol, externalPublicKey, keyType }, {
+      idempotencyKey: `link-challenge:${protocol}:${externalPublicKey}:${Date.now()}`,
+    });
+  }
+
+  /** Step 2: submit the signed challenge to complete the link. `proofSignature`
+   * must be a signature over the raw bytes of `challenge.challenge` (hex-decoded)
+   * produced by the external private key, base64-encoded. */
+  completeLink(protocol: string, value: string, challengeId: string, proofSignature: string): Promise<AgentRecord> {
+    return this.request("POST", `/v1/agents/${encodeURIComponent(this.did)}/link`, { protocol, value, challengeId, proofSignature }, {
+      idempotencyKey: `link:${protocol}:${challengeId}`,
     });
   }
 

@@ -12,6 +12,19 @@ export interface LinkedIdentities {
   a2a_endpoint?: string;
 }
 
+/** Key type used to prove control of an external identity's public key
+ * before linking it (SPEC.md's external-identity linking section). P-256
+ * matches ATTP (the protocol AgentPass is built on); Ed25519 is offered as
+ * the same primitive INAM's own did:key already uses. */
+export type ExternalKeyType = "ed25519" | "p256";
+
+/** Response shape from POST /agents/:id/link/challenge. */
+export interface LinkChallenge {
+  challengeId: string;
+  challenge: string; // hex-encoded random bytes, single-use, short-lived
+  expiresAt: string;
+}
+
 export interface AgentRecord {
   id: string; // did:key:...
   capabilities: string[];

@@ -47,17 +47,40 @@ agentsRouter.get("/:id/reputation", rateLimitReadByIp, (req, res) => {
   res.json(computeReputation(req.params.id));
 });
 
+const linkChallengeSchema = z.object({
+  protocol: z.enum(["agentpass_id", "aitp_id", "passport_id"]),
+  externalPublicKey: z.string().min(1),
+  keyType: z.enum(["ed25519", "p256"]),
+});
+
+agentsRouter.post("/:id/link/challenge", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
+  agentService.requireSelf(req.agentDid, req.params.id);
+  const parsed = linkChallengeSchema.safeParse(req.body);
+  if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
+  const challenge = agentService.requestLinkChallenge(req.agentDid!, parsed.data.protocol, parsed.data.externalPublicKey, parsed.data.keyType);
+  res.status(201).json(challenge);
+});
+
 const linkSchema = z.object({
   protocol: z.enum(["agentpass_id", "aitp_id", "passport_id", "a2a_endpoint"]),
   value: z.string().min(1),
+  challengeId: z.string().min(1).optional(),
+  proofSignature: z.string().min(1).optional(),
 });
 
 agentsRouter.post("/:id/link", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   agentService.requireSelf(req.agentDid, req.params.id);
   const parsed = linkSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
-  const record = agentService.linkIdentity(req.agentDid!, parsed.data.protocol, parsed.data.value);
-  res.json(record);
+  const { protocol, value, challengeId, proofSignature } = parsed.data;
+  if (protocol === "a2a_endpoint") {
+    res.json(agentService.linkEndpoint(req.agentDid!, protocol, value));
+    return;
+  }
+  if (!challengeId || !proofSignature) {
+    throw badRequest("CHALLENGE_REQUIRED", "challengeId and proofSignature are required for key-derived identities — call POST /agents/:id/link/challenge first");
+  }
+  res.json(agentService.completeLink(req.agentDid!, protocol, value, challengeId, proofSignature));
 });
 
 agentsRouter.get("/:id/receipts", (req, res) => {

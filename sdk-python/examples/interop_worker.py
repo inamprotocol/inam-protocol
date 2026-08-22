@@ -16,7 +16,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from inamprotocol import InamClient, generate_keypair  # noqa: E402
+from inamprotocol import InamClient, generate_keypair, sign, to_base64, from_hex  # noqa: E402
 
 BASE_URL = os.environ.get("INAM_URL", "http://localhost:4021")
 HANDOFF_PATH = Path(os.environ.get("INAM_HANDOFF", "../.interop-tmp/requester-identity.json"))
@@ -36,7 +36,13 @@ def main():
     profile = client.register_agent(["document-extraction"], {"name": "Python Worker (interop demo)"})
     print(f"[phase B / Python] Registered worker {profile['id']}")
 
-    client.link_identity("agentpass_id", "ap_python_interop_demo")
+    # agentpass_id is a key-derived identity (SPEC.md section 2.1) as of
+    # protocol v0.4 -- linking it now requires proving control of the
+    # external key via a signed challenge, not just an unchecked claim.
+    external_key = generate_keypair()
+    challenge = client.request_link_challenge("agentpass_id", to_base64(external_key.public_key), "ed25519")
+    proof = to_base64(sign(from_hex(challenge["challenge"]), external_key.private_key))
+    client.complete_link("agentpass_id", "ap_python_interop_demo", challenge["challengeId"], proof)
 
     for i in (1, 2):
         now = datetime.now(timezone.utc).isoformat()
