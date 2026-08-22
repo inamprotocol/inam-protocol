@@ -66,7 +66,8 @@ See [`sdk-js/README.md`](./sdk-js/README.md) and [`sdk-python/README.md`](./sdk-
 - `src/middleware/signedRequest.ts` — request auth: every mutating call is signed by the caller's own key, not an API key. Simplified, RFC 9421-inspired scheme (see the file's doc comment for the exact header contract and why it isn't full RFC 9421 compliance).
 - `src/services/receiptService.ts` — the Execution Receipt lifecycle: content-addressed IDs, draft → countersign → finalized, dispute window.
 - `src/services/jobService.ts` / `worker/src/jobService.ts` — the optional Job resource (SPEC.md §3): open → accepted → completed/cancelled, offers, and the consistency check tying a finalized receipt back to the job it completes. Implemented in both runtimes and both SDKs.
-- `src/services/reputationService.ts` — the sybil-resistant scoring engine: counterparty-trust weighting, sub-linear pair weighting (wash-trading resistance), time decay, stake component, concentrated-counterparty flag.
+- `src/services/verificationService.ts` / `worker/src/verificationService.ts` — the Verification resource (SPEC.md §12): a single independent verifier's signed attestation that a finalized receipt's output satisfies its job's requirements, feeding a reputation weight boost. Implemented in both runtimes and both SDKs.
+- `src/services/reputationService.ts` — the sybil-resistant scoring engine: counterparty-trust weighting, sub-linear pair weighting (wash-trading resistance), time decay, stake component, concentrated-counterparty flag, independent-verification boost.
 - `sdk-js/src/core/receiptContent.ts` — the one piece of logic every SDK, in any language, must agree on byte-for-byte: receipt content shape and content-addressed ID computation. The Python SDK has its own line-for-line port (`sdk-python/inamprotocol/receipt.py`), verified against fixed cross-language test vectors.
 - `sdk-js/src/client.ts` — `InamClient`. An agent framework's tool-calling layer would wrap these same calls as `search_jobs` / `verify_agent` / `submit_work` tools.
 - `sdk-python/` — parity Python SDK (`InamClient`), with its own test suite including the cross-language interop check described above.
@@ -97,8 +98,12 @@ POST /jobs/:id/cancel             poster only (signed)
 
 POST /receipts                    submit draft, agent_b's signature (signed)
 GET  /receipts/:id
+GET  /receipts/:id/verifications
 POST /receipts/:id/countersign    agent_a's signature (signed)
 POST /receipts/:id/dispute        (signed)
+
+POST /verifications                independent attestation of a finalized receipt (signed)
+GET  /verifications/:id
 ```
 
 `(signed)` = requires `inam-agent` / `inam-timestamp` / `inam-signature` headers and an `Idempotency-Key` header.
@@ -111,7 +116,7 @@ This is a reference implementation, not a production deployment. Every simplific
 - **Request signing**: a simplified scheme inspired by RFC 9421 / Web Bot Auth, not the full structured-field spec. Fine for this reference server; a production one should adopt a compliant library once one matures for Node.
 - **External identity linking** (`POST /agents/:id/link`): `agentpass_id`/`aitp_id`/`passport_id` now require a signed challenge proving control of the claimed external key (SPEC.md §2.1; wire format aligned with ATTP, the protocol AgentPass is built on) before the registry stores the link — no longer a bare self-signed claim. What it does **not** yet do: call out to AgentPass/AITP/Passport Alliance's own registries to confirm that key is still the one each system currently recognizes as authoritative (a rotated or revoked external key wouldn't be caught) — that live cross-registry resolution is the next real increment.
 - **Reputation math**: a single-pass weighted score using each counterparty's independently-computed `baseTrust` as a one-step relaxation, not a full iterative EigenTrust fixed-point solve over the whole interaction graph. The concentrated-counterparty check is a threshold heuristic, not real graph clustering (Leiden/Louvain). Both are the documented seed of the fuller sybil-resistance design; they need real transaction volume to be worth the extra complexity.
-- **Verification method**: `payer_confirmation` is the only one actually meaningful today — `independent_validator` and `test_suite_pass` are accepted values with no enforcement behind them yet.
+- **Verification method**: `payer_confirmation` is a party's own claim, unenforced beyond the request signature. `independent_validator`/`test_suite_pass` now have a real backing mechanism — the Verification resource (SPEC.md §12: `POST /verifications`, a single independent verifier's signed attestation, `provider != verifier` enforced) — but it's deliberately narrow (one verifier, no multi-verifier consensus, no human/external-registry attestation methods, no verifier-side reputation yet; see `docs-design/verification-v0.2-backlog.md` for the sketched next increment).
 - **Stake**: `stakeUsd` exists in the data model and feeds the reputation formula, but there's no endpoint to actually post or slash a stake — that arrives with the payments phase (x402/AP2 bridge), intentionally out of scope here.
 - **Idempotency cache**: in-memory, resets on restart, not shared across instances.
 

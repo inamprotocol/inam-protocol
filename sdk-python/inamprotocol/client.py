@@ -16,6 +16,7 @@ from typing import Any, Dict, List, Optional
 from .canonical import canonicalize
 from .keys import Keypair, sha256_hex, sign, to_base64
 from .receipt import build_signable_content
+from .verification import build_signable_verification_content
 
 
 class InamApiError(Exception):
@@ -141,6 +142,9 @@ class InamClient:
     def get_reputation(self, agent_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/v1/agents/{urllib.parse.quote(agent_id, safe='')}/reputation")
 
+    def get_receipt(self, receipt_id: str) -> Dict[str, Any]:
+        return self._request("GET", f"/v1/receipts/{urllib.parse.quote(receipt_id, safe='')}")
+
     def list_receipts(self, agent_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/v1/agents/{urllib.parse.quote(agent_id, safe='')}/receipts")
 
@@ -230,3 +234,59 @@ class InamClient:
         """Called by the job's poster to cancel a not-yet-completed job."""
         encoded = urllib.parse.quote(job_id, safe="")
         return self._request("POST", f"/v1/jobs/{encoded}/cancel", None, idempotency_key=f"cancel:{job_id}")
+
+    # ---- Verification (SPEC.md section 12) -- independent attestation of a finalized receipt ----
+
+    def submit_verification(
+        self,
+        receipt_id: str,
+        method: str,
+        output_hash: str,
+        result: str,
+        score: Optional[float] = None,
+        evidence_uri: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Called by the verifier (who must not be the receipt's own provider/agentB).
+        `jobId`/`provider` are derived from the referenced receipt (fetched here)
+        rather than taken as caller input -- the server independently derives
+        the same values and would reject a signature built over the wrong
+        ones, so there's no correct way for a caller to supply them manually.
+        """
+        receipt = self.get_receipt(receipt_id)
+        content_input: Dict[str, Any] = {
+            "receiptId": receipt_id,
+            "jobId": receipt["jobId"],
+            "provider": receipt["agentB"]["id"],
+            "verifier": self.did,
+            "method": method,
+            "outputHash": output_hash,
+            "result": result,
+        }
+        if score is not None:
+            content_input["score"] = score
+        if evidence_uri is not None:
+            content_input["evidenceUri"] = evidence_uri
+
+        content = build_signable_verification_content(content_input)
+        signing_bytes = canonicalize(content).encode("utf-8")
+        signature = to_base64(sign(signing_bytes, self.keypair.private_key))
+
+        body: Dict[str, Any] = {
+            "receiptId": receipt_id,
+            "verifier": self.did,
+            "method": method,
+            "outputHash": output_hash,
+            "result": result,
+            "signature": signature,
+        }
+        if score is not None:
+            body["score"] = score
+        if evidence_uri is not None:
+            body["evidenceUri"] = evidence_uri
+        return self._request("POST", "/v1/verifications", body, idempotency_key=f"verification:{content['verificationId']}")
+
+    def get_verification(self, verification_id: str) -> Dict[str, Any]:
+        return self._request("GET", f"/v1/verifications/{urllib.parse.quote(verification_id, safe='')}")
+
+    def list_receipt_verifications(self, receipt_id: str) -> Dict[str, Any]:
+        return self._request("GET", f"/v1/receipts/{urllib.parse.quote(receipt_id, safe='')}/verifications")

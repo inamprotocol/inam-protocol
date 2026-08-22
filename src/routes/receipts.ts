@@ -5,6 +5,7 @@ import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitWriteByAgent } from "../middleware/rateLimit.js";
 import { badRequest } from "../middleware/errors.js";
 import * as receiptService from "../services/receiptService.js";
+import * as verificationService from "../services/verificationService.js";
 
 export const receiptsRouter = Router();
 
@@ -45,6 +46,10 @@ receiptsRouter.post("/", requireSignedRequest, rateLimitWriteByAgent, requireIde
 
 receiptsRouter.get("/:id", (req, res) => {
   res.json(receiptService.getReceipt(req.params.id));
+});
+
+receiptsRouter.get("/:id/verifications", (req, res) => {
+  res.json({ verifications: verificationService.listByReceipt(req.params.id) });
 });
 
 const countersignSchema = z.object({ signature: z.string().min(1) });

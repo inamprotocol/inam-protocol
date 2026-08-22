@@ -22,6 +22,8 @@ export { canonicalize } from "./crypto/canonical.js";
 
 export { computeReceiptId, buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";
 
+export { computeVerificationId, buildSignableVerificationContent, type VerificationContentInput } from "./core/verificationContent.js";
+
 export type {
   LinkedIdentities,
   ExternalKeyType,
@@ -38,4 +40,7 @@ export type {
   JobStatus,
   JobOffer,
   JobRecord,
+  IndependentVerificationMethod,
+  VerificationResult,
+  VerificationRecord,
 } from "./types.js";

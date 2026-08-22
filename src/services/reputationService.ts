@@ -1,10 +1,16 @@
 import { config } from "../config.js";
 import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
+import { hasVerifiedAttestation } from "./verificationService.js";
 import type { ReputationResult } from "../types.js";
 
 const CONFIDENCE_SATURATION = 5; // weight units at which confidence ~= 0.5
 const STAKE_NORMALIZATION_USD = 10_000; // stake at which the stake component saturates to 1.0
+// SPEC.md §12.5: a finalized, non-disputed receipt backed by at least one
+// `verified` Verification counts for more. Fixed multiplier, not tunable per
+// registry in the reference implementation — a registry MAY choose its own
+// as long as independently-verified work counts for more, never less.
+const ATTESTATION_BOOST = 1.5;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -68,6 +74,7 @@ export function computeReputation(agentId: string): ReputationResult {
     return trust;
   }
 
+  let attestedCount = 0;
   for (const r of finalized) {
     const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
     const pairCount = pairCounts.get(counterparty) ?? 1;
@@ -81,7 +88,15 @@ export function computeReputation(agentId: string): ReputationResult {
     const decay = Math.pow(2, -ageDays / config.decayHalfLifeDays);
     const outcomeScore = r.verification.outcome === "success" ? 1 : r.verification.outcome === "partial" ? 0.5 : 0;
 
-    const weight = pairWeight * counterpartyTrust * decay;
+    // SPEC.md §12.5: independently-verified work counts for more. This loop
+    // only ever sees `finalized` receipts (disputed ones already excluded by
+    // the filter above), so a verified attestation on a since-disputed
+    // receipt never reaches here — no separate dispute check needed.
+    const isAttested = hasVerifiedAttestation(r.receiptId);
+    if (isAttested) attestedCount++;
+    const attestationBoost = isAttested ? ATTESTATION_BOOST : 1;
+
+    const weight = pairWeight * counterpartyTrust * decay * attestationBoost;
     weightedSuccessSum += weight * outcomeScore;
     weightSum += weight;
     volumeUsd += Number(r.settlement?.amount ?? 0);
@@ -114,6 +129,7 @@ export function computeReputation(agentId: string): ReputationResult {
       volumeUsd,
       stakeUsd: record.stakeUsd,
       decayHalfLifeDays: config.decayHalfLifeDays,
+      attestedReceipts: attestedCount,
     },
     flags,
   };

@@ -1,4 +1,4 @@
-import type { AgentRecord, Env, ExecutionReceipt, JobOffer, JobRecord, LinkChallengeRecord } from "./types.js";
+import type { AgentRecord, Env, ExecutionReceipt, JobOffer, JobRecord, LinkChallengeRecord, VerificationRecord } from "./types.js";
 
 const UNIQUE_VIOLATION = "UNIQUE constraint failed";
 
@@ -274,6 +274,43 @@ function rowToLinkChallenge(row: Record<string, unknown>): LinkChallengeRecord {
     expiresAt: row.expires_at as string,
     used: Boolean(row.used),
   };
+}
+
+// ---- Verifications ----
+
+export class DuplicateVerificationError extends Error {
+  constructor(public readonly verificationId: string) {
+    super(`Verification ${verificationId} already exists`);
+  }
+}
+
+/** Plain INSERT — a verification is created once and never transitions
+ * state (unlike receipts/jobs), so a UNIQUE-violation catch on the
+ * content-addressed verification_id is sufficient for DUPLICATE_VERIFICATION,
+ * no compare-and-swap needed. */
+export async function insertVerification(env: Env, record: VerificationRecord): Promise<void> {
+  try {
+    await env.DB.prepare(
+      `INSERT INTO verifications (verification_id, receipt_id, provider, verifier, result, data) VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(record.verificationId, record.receiptId, record.provider, record.verifier, record.result, JSON.stringify(record))
+      .run();
+  } catch (err) {
+    if (err instanceof Error && err.message.includes(UNIQUE_VIOLATION)) {
+      throw new DuplicateVerificationError(record.verificationId);
+    }
+    throw err;
+  }
+}
+
+export async function getVerification(env: Env, id: string): Promise<VerificationRecord | null> {
+  const row = await env.DB.prepare("SELECT data FROM verifications WHERE verification_id = ?").bind(id).first<{ data: string }>();
+  return row ? JSON.parse(row.data) : null;
+}
+
+export async function verificationsByReceipt(env: Env, receiptId: string): Promise<VerificationRecord[]> {
+  const { results } = await env.DB.prepare("SELECT data FROM verifications WHERE receipt_id = ?").bind(receiptId).all<{ data: string }>();
+  return results.map((r) => JSON.parse(r.data));
 }
 
 function rowToOffer(row: Record<string, unknown>): JobOffer {

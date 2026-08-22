@@ -2,6 +2,7 @@ import express from "express";
 import { agentsRouter } from "./routes/agents.js";
 import { receiptsRouter } from "./routes/receipts.js";
 import { jobsRouter } from "./routes/jobs.js";
+import { verificationsRouter } from "./routes/verifications.js";
 import { errorHandler } from "./middleware/errors.js";
 
 export function createServer() {
@@ -33,6 +34,7 @@ export function createServer() {
   app.use("/v1/agents", agentsRouter);
   app.use("/v1/receipts", receiptsRouter);
   app.use("/v1/jobs", jobsRouter);
+  app.use("/v1/verifications", verificationsRouter);
 
   app.use((req, res) => {
     res.status(404).json({ error: { code: "ROUTE_NOT_FOUND", message: `No route for ${req.method} ${req.path}` } });

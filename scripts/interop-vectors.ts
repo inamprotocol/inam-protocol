@@ -1,12 +1,11 @@
-import { publicKeyToDid, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
+import { keypairFromPrivateKey, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
-import * as ed25519 from "@noble/ed25519";
+import { buildSignableVerificationContent } from "../sdk-js/src/core/verificationContent.js";
 
 // Fixed 32-byte private key (all 0x01) purely for cross-language test vectors —
 // never use a fixed key for anything real.
 const FIXED_PRIVATE_KEY = new Uint8Array(32).fill(1);
-const publicKey = ed25519.getPublicKey(FIXED_PRIVATE_KEY);
-const did = publicKeyToDid(publicKey);
+const { did, publicKey } = keypairFromPrivateKey(FIXED_PRIVATE_KEY);
 
 const sampleObject = {
   jobId: "job_interop_1",
@@ -22,6 +21,20 @@ const canonical = canonicalize(sampleObject);
 const message = new TextEncoder().encode("inam-interop-test-message");
 const signature = sign(message, FIXED_PRIVATE_KEY);
 
+const verificationInput = {
+  receiptId: "sha256:receipt_interop_1",
+  jobId: "job_interop_1",
+  provider: "did:key:zExampleProvider",
+  verifier: did,
+  method: "deterministic" as const,
+  outputHash: "sha256:out",
+  result: "verified" as const,
+  score: 0.98,
+};
+const verificationContent = buildSignableVerificationContent(verificationInput);
+const verificationCanonical = canonicalize(verificationContent);
+const verificationSignature = sign(new TextEncoder().encode(verificationCanonical), FIXED_PRIVATE_KEY);
+
 console.log(
   JSON.stringify(
     {
@@ -31,6 +44,11 @@ console.log(
       canonical,
       messageUtf8: "inam-interop-test-message",
       signatureBase64: toBase64(signature),
+      verification: {
+        verificationId: verificationContent.verificationId,
+        canonical: verificationCanonical,
+        signatureBase64: toBase64(verificationSignature),
+      },
     },
     null,
     2,

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: INAM Protocol Registry API
-  version: "0.4.0"
+  version: "0.5.0"
   description: >
     The open reputation, verification, and economic-history layer for the agent
     economy. See SPEC.md in this repository for the full protocol specification
@@ -412,6 +412,22 @@ paths:
               schema: { $ref: "#/components/schemas/Receipt" }
         "404": { $ref: "#/components/responses/Error" }
 
+  /receipts/{id}/verifications:
+    get:
+      operationId: listReceiptVerifications
+      summary: List independent verifications referencing a receipt (SPEC.md §12)
+      tags: [verifications]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/ReceiptId" }]
+      responses:
+        "200":
+          description: Verifications
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { verifications: { type: array, items: { $ref: "#/components/schemas/Verification" } } }
+
   /receipts/{id}/countersign:
     post:
       operationId: countersignReceipt
@@ -470,6 +486,57 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
 
+  /verifications:
+    post:
+      operationId: submitVerification
+      summary: Submit a signed independent verification of a finalized receipt (SPEC.md §12)
+      tags: [verifications]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [receiptId, verifier, method, outputHash, result, signature]
+              properties:
+                receiptId: { type: string }
+                verifier: { type: string, description: "Must equal the caller's own INAM ID" }
+                method: { type: string, enum: [deterministic, agent_attestation] }
+                outputHash: { type: string, description: "MUST match the referenced receipt's result.outputHash" }
+                result: { type: string, enum: [verified, rejected] }
+                score: { type: number, minimum: 0, maximum: 1 }
+                evidenceUri: { type: string }
+                signature: { type: string, description: "base64 Ed25519 signature over the canonical verification content" }
+      responses:
+        "201":
+          description: Created verification (result may be `verified` or `rejected` — both are successful creations)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Verification" }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /verifications/{id}:
+    get:
+      operationId: getVerification
+      summary: Fetch a single verification
+      tags: [verifications]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/VerificationId" }]
+      responses:
+        "200":
+          description: Verification
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Verification" }
+        "404": { $ref: "#/components/responses/Error" }
+
 components:
   securitySchemes:
     inamSignature:
@@ -502,6 +569,12 @@ components:
       required: true
       schema: { type: string }
       example: "job_1a2b3c4d"
+    VerificationId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      example: "sha256:ad10358a..."
     IdempotencyKey:
       name: Idempotency-Key
       in: header
@@ -565,6 +638,7 @@ components:
             volumeUsd: { type: number }
             stakeUsd: { type: number }
             decayHalfLifeDays: { type: number }
+            attestedReceipts: { type: integer, description: "Finalized receipts backed by at least one verified Verification (SPEC.md §12.5)" }
         flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>" }
 
     JobOffer:
@@ -590,6 +664,24 @@ components:
         receiptId: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
         expiresAt: { type: ["string", "null"], format: date-time }
+
+    Verification:
+      type: object
+      description: "SPEC.md §12 — a single verifier's signed attestation that a finalized receipt's output satisfies its job's requirements."
+      properties:
+        verificationVersion: { type: string, enum: ["1.0"] }
+        verificationId: { type: string }
+        receiptId: { type: string }
+        jobId: { type: string }
+        provider: { type: string, description: "The referenced receipt's agentB.id — derived, not client-supplied" }
+        verifier: { type: string }
+        method: { type: string, enum: [deterministic, agent_attestation] }
+        outputHash: { type: string }
+        result: { type: string, enum: [verified, rejected] }
+        score: { type: ["number", "null"] }
+        evidenceUri: { type: ["string", "null"] }
+        createdAt: { type: string, format: date-time }
+        signature: { type: string }
 
     CreateReceiptInput:
       type: object
