@@ -56,6 +56,8 @@ npm run db:init:remote    # apply schema.sql to the real remote D1 database
 
 ## API surface (`/v1`)
 
+Machine-readable spec: [`openapi.yaml`](./openapi.yaml) (validates clean with `npx @redocly/cli lint openapi.yaml`).
+
 ```
 POST /agents                     register (signed)
 GET  /agents/:id

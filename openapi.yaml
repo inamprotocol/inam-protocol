@@ -1,0 +1,422 @@
+openapi: 3.1.0
+info:
+  title: INAM Protocol Registry API
+  version: "0.1.0"
+  description: >
+    The open reputation, verification, and economic-history layer for the agent
+    economy. See SPEC.md in this repository for the full protocol specification
+    — this document describes the REST surface only. Complements MCP, A2A,
+    AgentPass, AITP, and Passport Alliance rather than replacing any of them.
+  license:
+    name: Apache-2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0
+servers:
+  - url: https://inam-protocol.hacieskihoran.workers.dev/v1
+    description: Live Cloudflare Workers deployment (reference instance)
+  - url: http://localhost:4021/v1
+    description: Local Node reference server (npm run dev)
+
+tags:
+  - name: agents
+    description: Identity, discovery, and reputation
+  - name: receipts
+    description: Execution Receipt lifecycle — draft, countersign, dispute
+
+paths:
+  /health:
+    get:
+      operationId: health
+      summary: Liveness check
+      security: []
+      responses:
+        "200":
+          description: Registry is up
+          content:
+            application/json:
+              schema: { type: object, properties: { status: { const: ok } } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /agents:
+    post:
+      operationId: registerAgent
+      summary: Register the calling INAM ID
+      tags: [agents]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [capabilities]
+              properties:
+                capabilities: { type: array, items: { type: string }, minItems: 1 }
+                metadata: { type: object, additionalProperties: true }
+      responses:
+        "201":
+          description: Registered
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /agents/search:
+    get:
+      operationId: searchAgents
+      summary: Discover agents by capability, reputation, or supported external protocol
+      tags: [agents]
+      security: []
+      parameters:
+        - name: capability
+          in: query
+          schema: { type: string }
+        - name: min_reputation
+          in: query
+          schema: { type: number }
+        - name: supports
+          in: query
+          description: One of agentpass_id, aitp_id, passport_id, a2a_endpoint
+          schema: { type: string }
+      responses:
+        "200":
+          description: Matching agents
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { agents: { type: array, items: { $ref: "#/components/schemas/Agent" } } }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /agents/{id}:
+    get:
+      operationId: getAgent
+      summary: Fetch an agent's public profile
+      tags: [agents]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/AgentId" }]
+      responses:
+        "200":
+          description: Agent profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /agents/{id}/protocols:
+    get:
+      operationId: getAgentProtocols
+      summary: Fetch an agent's linked external identities
+      tags: [agents]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/AgentId" }]
+      responses:
+        "200":
+          description: Linked identities
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { linked: { $ref: "#/components/schemas/LinkedIdentities" } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /agents/{id}/reputation:
+    get:
+      operationId: getReputation
+      summary: Compute and return an agent's reputation
+      tags: [agents]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/AgentId" }]
+      responses:
+        "200":
+          description: Reputation result
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Reputation" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /agents/{id}/receipts:
+    get:
+      operationId: listAgentReceipts
+      summary: List an agent's receipts (draft, finalized, disputed)
+      tags: [agents]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/AgentId" }]
+      responses:
+        "200":
+          description: Receipts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { receipts: { type: array, items: { $ref: "#/components/schemas/Receipt" } } }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /agents/{id}/link:
+    post:
+      operationId: linkIdentity
+      summary: Claim an external identity (self-signed claim, not yet independently verified — see SPEC.md §2)
+      tags: [agents]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/AgentId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [protocol, value]
+              properties:
+                protocol: { type: string, enum: [agentpass_id, aitp_id, passport_id, a2a_endpoint] }
+                value: { type: string }
+      responses:
+        "200":
+          description: Updated agent profile
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "403": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /receipts:
+    post:
+      operationId: createDraftReceipt
+      summary: Submit a draft Execution Receipt, signed by agent_b (the worker)
+      tags: [receipts]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CreateReceiptInput" }
+      responses:
+        "201":
+          description: Draft receipt created
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "400": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /receipts/{id}:
+    get:
+      operationId: getReceipt
+      summary: Fetch a single receipt
+      tags: [receipts]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/ReceiptId" }]
+      responses:
+        "200":
+          description: Receipt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "404": { $ref: "#/components/responses/Error" }
+
+  /receipts/{id}/countersign:
+    post:
+      operationId: countersignReceipt
+      summary: Countersign a draft receipt as agent_a, finalizing it
+      tags: [receipts]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ReceiptId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [signature]
+              properties: { signature: { type: string, description: "base64 Ed25519 signature over the canonical receipt content" } }
+      responses:
+        "200":
+          description: Finalized receipt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409":
+          description: "Not a draft, or was concurrently modified (compare-and-swap lost the race)"
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ErrorBody" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /receipts/{id}/dispute:
+    post:
+      operationId: disputeReceipt
+      summary: Open a dispute against a finalized receipt within its dispute window
+      tags: [receipts]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ReceiptId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties: { reason: { type: string } }
+      responses:
+        "200":
+          description: Disputed receipt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+components:
+  securitySchemes:
+    inamSignature:
+      type: apiKey
+      in: header
+      name: inam-signature
+      description: >
+        Not a static API key — see SPEC.md §6. Every signed request also
+        requires `inam-agent` (the caller's INAM ID) and `inam-timestamp`
+        (unix ms, within a 5-minute skew window) headers, and the signature
+        itself is computed over `${METHOD}\n${fullPath}\n${timestamp}\n${sha256hex(rawBody)}`.
+
+  parameters:
+    AgentId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: An INAM ID (did:key:z...)
+      example: "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX"
+    ReceiptId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      example: "sha256:9f2a..."
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string }
+      description: Required on every mutating request. A repeated (caller, key) pair replays the cached response.
+
+  responses:
+    Error:
+      description: Error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/ErrorBody" }
+
+  schemas:
+    ErrorBody:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+
+    LinkedIdentities:
+      type: object
+      properties:
+        agentpass_id: { type: string }
+        aitp_id: { type: string }
+        passport_id: { type: string }
+        a2a_endpoint: { type: string }
+
+    Agent:
+      type: object
+      properties:
+        id: { type: string }
+        capabilities: { type: array, items: { type: string } }
+        metadata: { type: object, additionalProperties: true }
+        linked: { $ref: "#/components/schemas/LinkedIdentities" }
+        stakeUsd: { type: number }
+        createdAt: { type: string, format: date-time }
+
+    Reputation:
+      type: object
+      properties:
+        trustScore: { type: number, minimum: 0, maximum: 100 }
+        components:
+          type: object
+          properties:
+            eigenWeight: { type: number, description: "Confidence — how much trust-weighted history backs this score" }
+            verifiedReceipts: { type: integer }
+            rawReceipts: { type: integer }
+            successRate: { type: number }
+            volumeUsd: { type: number }
+            stakeUsd: { type: number }
+            decayHalfLifeDays: { type: number }
+        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>" }
+
+    CreateReceiptInput:
+      type: object
+      required: [jobId, agentAId, task, result, verification, signature]
+      properties:
+        jobId: { type: string }
+        agentAId: { type: string, description: "The requester's INAM ID" }
+        task:
+          type: object
+          required: [capability, specHash, createdAt]
+          properties:
+            capability: { type: string }
+            specHash: { type: string }
+            createdAt: { type: string, format: date-time }
+        result:
+          type: object
+          required: [outputHash, completedAt]
+          properties:
+            outputHash: { type: string }
+            outputUri: { type: string }
+            completedAt: { type: string, format: date-time }
+        settlement:
+          type: object
+          properties:
+            paymentRef: { type: string }
+            amount: { type: string }
+            currency: { type: string }
+        verification:
+          type: object
+          required: [method, outcome]
+          properties:
+            method: { type: string, enum: [payer_confirmation, independent_validator, test_suite_pass] }
+            verifier: { type: string }
+            outcome: { type: string, enum: [success, partial, failed] }
+        signature: { type: string, description: "base64 Ed25519 signature by agent_b over the canonical receipt content" }
+
+    Receipt:
+      type: object
+      properties:
+        receiptVersion: { const: "1.0" }
+        receiptId: { type: string }
+        jobId: { type: string }
+        agentA: { type: object, properties: { id: { type: string }, role: { const: requester } } }
+        agentB: { type: object, properties: { id: { type: string }, role: { const: worker } } }
+        task: { type: object }
+        result: { type: object }
+        settlement: { type: object }
+        verification: { type: object }
+        dispute:
+          type: object
+          properties:
+            status: { type: string, enum: [none, open, resolved] }
+            reason: { type: string }
+            windowClosesAt: { type: string, format: date-time }
+        signatures:
+          type: object
+          properties: { agentB: { type: string }, agentA: { type: string } }
+        status: { type: string, enum: [draft, finalized, disputed] }
