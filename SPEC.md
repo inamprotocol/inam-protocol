@@ -1,6 +1,6 @@
 # INAM Protocol — Specification v0.1 (Draft)
 
-Status: **Draft**. This describes the reference implementation at `/src` in this repository. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, file-backed storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://inam-protocol.hacieskihoran.workers.dev`). Both share the same crypto core (`src/crypto/`, `src/core/receiptContent.ts`) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
 
 ## 0. Positioning
 
@@ -160,7 +160,15 @@ Base path `/v1`. `(signed)` endpoints require the headers in §6 and an `Idempot
 { "error": { "code": "AGENT_NOT_FOUND", "message": "..." } }
 ```
 
-Codes in the current implementation: `MISSING_SIGNATURE`, `STALE_SIGNATURE`, `INVALID_SIGNATURE`, `MISSING_IDEMPOTENCY_KEY`, `VALIDATION_ERROR`, `AGENT_NOT_FOUND`, `AGENT_ALREADY_REGISTERED`, `NOT_SUBJECT_AGENT`, `UNSUPPORTED_PROTOCOL`, `RECEIPT_NOT_FOUND`, `SELF_DEALING`, `DUPLICATE_RECEIPT`, `INVALID_RECEIPT_SIGNATURE`, `NOT_DRAFT`, `NOT_REQUESTER`, `NOT_FINALIZED`, `DISPUTE_WINDOW_CLOSED`, `NOT_PARTICIPANT`, `ROUTE_NOT_FOUND`.
+Codes in the current implementation: `MISSING_SIGNATURE`, `STALE_SIGNATURE`, `INVALID_SIGNATURE`, `MISSING_IDEMPOTENCY_KEY`, `VALIDATION_ERROR`, `AGENT_NOT_FOUND`, `AGENT_ALREADY_REGISTERED`, `NOT_SUBJECT_AGENT`, `UNSUPPORTED_PROTOCOL`, `RECEIPT_NOT_FOUND`, `SELF_DEALING`, `DUPLICATE_RECEIPT`, `INVALID_RECEIPT_SIGNATURE`, `NOT_DRAFT`, `NOT_REQUESTER`, `NOT_FINALIZED`, `DISPUTE_WINDOW_CLOSED`, `NOT_PARTICIPANT`, `ROUTE_NOT_FOUND`, `RATE_LIMITED`.
+
+### Rate limiting
+
+`POST /agents` is limited per source IP (a DID costs nothing to mint, so limiting by identity would do nothing against a spammer generating fresh keypairs). Every other `(signed)` write is limited per calling INAM ID. `GET /agents/search` and `GET /agents/:id/reputation` — the two reads expensive enough to walk an agent's full receipt history — are limited per source IP even though they require no signature, since they're otherwise a free way to trigger repeated O(receipts) backend reads. A `429` with code `RATE_LIMITED` means back off and retry later; specific limits are a deployment policy, not a protocol guarantee, and may differ between registries.
+
+### CORS
+
+Public GET reads respond with `Access-Control-Allow-Origin: *` — they're meant to be queryable from a browser with no account, matching §5's "reputation is public" design. Signed mutating routes send no CORS headers at all: they're server-to-server/agent-to-agent by design, and since auth is a per-request Ed25519 signature rather than an ambient browser credential (a cookie, say), CORS restriction there is a scope-narrowing choice, not a security boundary — a malicious web page still can't forge a signature it doesn't hold the private key for.
 
 ## 6. Request signing
 
