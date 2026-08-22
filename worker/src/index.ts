@@ -6,6 +6,7 @@ import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } f
 import { ApiError, badRequest } from "./errors.js";
 import * as agentService from "./agentService.js";
 import * as receiptService from "./receiptService.js";
+import * as jobService from "./jobService.js";
 import { computeReputation } from "./reputationService.js";
 import type { AppEnv } from "./types.js";
 
@@ -26,8 +27,13 @@ const PUBLIC_READ_PATHS = [
   "/v1/agents/:id/protocols",
   "/v1/agents/:id/reputation",
   "/v1/agents/:id/receipts",
+  "/v1/jobs/search",
+  "/v1/jobs/:id",
   "/v1/receipts/:id",
 ];
+// /v1/jobs/:id/offers is GET *and* POST at the same path — a blanket .use()
+// would wrongly hand CORS headers to the signed POST too, so it's applied
+// inline to just the GET handler below instead.
 for (const path of PUBLIC_READ_PATHS) app.use(path, cors({ origin: "*" }));
 
 app.onError((err, c) => {
@@ -83,6 +89,48 @@ app.post("/v1/agents/:id/link", requireSignedRequest, rateLimitWriteByAgent, req
   if (!body?.protocol || !body?.value) throw badRequest("VALIDATION_ERROR", "protocol and value are required");
   const record = await agentService.linkIdentity(c.env, c.get("agentDid")!, body.protocol, body.value);
   return c.json(record);
+});
+
+// ---- Jobs ----
+
+app.post("/v1/jobs", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  const body = c.get("parsedBody") as { capability?: string; specHash?: string; budget?: { amount?: string; currency?: string }; expiresAt?: string } | undefined;
+  if (!body?.capability || !body?.specHash) throw badRequest("VALIDATION_ERROR", "capability and specHash are required");
+  const job = await jobService.postJob(c.env, c.get("agentDid")!, {
+    capability: body.capability,
+    specHash: body.specHash,
+    budget: body.budget,
+    expiresAt: body.expiresAt,
+  });
+  return c.json(job, 201);
+});
+
+app.get("/v1/jobs/search", rateLimitReadByIp, async (c) => {
+  const capability = c.req.query("capability");
+  const status = c.req.query("status");
+  return c.json({ jobs: await jobService.searchJobs(c.env, { capability, status }) });
+});
+
+app.get("/v1/jobs/:id", async (c) => c.json(await jobService.getJob(c.env, c.req.param("id")!)));
+
+app.post("/v1/jobs/:id/offers", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  const body = c.get("parsedBody") as { message?: string } | undefined;
+  const job = await jobService.submitOffer(c.env, c.req.param("id")!, c.get("agentDid")!, body?.message);
+  return c.json(job, 201);
+});
+
+app.get("/v1/jobs/:id/offers", cors({ origin: "*" }), async (c) => c.json({ offers: await jobService.listOffers(c.env, c.req.param("id")!) }));
+
+app.post("/v1/jobs/:id/accept", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  const body = c.get("parsedBody") as { agentId?: string } | undefined;
+  if (!body?.agentId) throw badRequest("VALIDATION_ERROR", "agentId is required");
+  const job = await jobService.acceptOffer(c.env, c.req.param("id")!, c.get("agentDid")!, body.agentId);
+  return c.json(job);
+});
+
+app.post("/v1/jobs/:id/cancel", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  const job = await jobService.cancelJob(c.env, c.req.param("id")!, c.get("agentDid")!);
+  return c.json(job);
 });
 
 // ---- Receipts ----

@@ -50,6 +50,28 @@ export interface ReputationResult {
   flags: string[];
 }
 
+export type JobStatus = "open" | "accepted" | "completed" | "cancelled";
+
+export interface JobOffer {
+  agentId: string;
+  message?: string;
+  createdAt: string;
+}
+
+export interface JobRecord {
+  jobId: string;
+  postedBy: string;
+  capability: string;
+  specHash: string;
+  budget?: { amount?: string; currency?: string };
+  status: JobStatus;
+  offers: JobOffer[];
+  acceptedAgentId?: string;
+  receiptId?: string;
+  createdAt: string;
+  expiresAt?: string;
+}
+
 export interface Env {
   DB: D1Database;
   IDEMPOTENCY: KVNamespace;

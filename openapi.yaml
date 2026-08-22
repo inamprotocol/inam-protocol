@@ -20,7 +20,7 @@ tags:
   - name: agents
     description: Identity, discovery, and reputation
   - name: jobs
-    description: Optional pre-work resource — capability discovery, offers, acceptance (Node reference server only, see SPEC.md §10)
+    description: Optional pre-work resource — capability discovery, offers, acceptance
   - name: receipts
     description: Execution Receipt lifecycle — draft, countersign, dispute
 
