@@ -53,6 +53,9 @@ export interface ReputationResult {
 export interface Env {
   DB: D1Database;
   IDEMPOTENCY: KVNamespace;
+  RATE_LIMIT_REGISTER: RateLimit;
+  RATE_LIMIT_WRITE: RateLimit;
+  RATE_LIMIT_READ: RateLimit;
 }
 
 export type AppEnv = {

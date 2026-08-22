@@ -2,6 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
+import { rateLimitWriteByAgent } from "../middleware/rateLimit.js";
 import { badRequest } from "../middleware/errors.js";
 import * as receiptService from "../services/receiptService.js";
 
@@ -35,7 +36,7 @@ const draftSchema = z.object({
   signature: z.string().min(1),
 });
 
-receiptsRouter.post("/", requireSignedRequest, requireIdempotencyKey, (req, res) => {
+receiptsRouter.post("/", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = draftSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const receipt = receiptService.createDraft(req.agentDid!, parsed.data);
@@ -48,7 +49,7 @@ receiptsRouter.get("/:id", (req, res) => {
 
 const countersignSchema = z.object({ signature: z.string().min(1) });
 
-receiptsRouter.post("/:id/countersign", requireSignedRequest, requireIdempotencyKey, (req, res) => {
+receiptsRouter.post("/:id/countersign", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = countersignSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const receipt = receiptService.countersign(req.params.id, req.agentDid!, parsed.data.signature);
@@ -57,7 +58,7 @@ receiptsRouter.post("/:id/countersign", requireSignedRequest, requireIdempotency
 
 const disputeSchema = z.object({ reason: z.string().min(1) });
 
-receiptsRouter.post("/:id/dispute", requireSignedRequest, requireIdempotencyKey, (req, res) => {
+receiptsRouter.post("/:id/dispute", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = disputeSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const receipt = receiptService.openDispute(req.params.id, req.agentDid!, parsed.data.reason);

@@ -6,6 +6,17 @@ import { errorHandler } from "./middleware/errors.js";
 export function createServer() {
   const app = express();
 
+  // Every GET route in this API is a public read endpoint (SPEC.md §5 —
+  // reputation, profiles, search, receipts) meant to be queryable from a
+  // browser with no account needed, so it's safe to allow any origin. POST
+  // routes get no CORS headers: they're server-to-server/agent-to-agent by
+  // design, and auth there is a per-request signature, not an ambient
+  // browser credential, so CORS wouldn't add real security anyway.
+  app.use((req, res, next) => {
+    if (req.method === "GET") res.header("Access-Control-Allow-Origin", "*");
+    next();
+  });
+
   app.use(
     express.json({
       // Capture the exact raw bytes so request-signature verification hashes

@@ -42,12 +42,26 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   let weightSum = 0;
   let volumeUsd = 0;
 
+  // A busy agent can have many receipts against a small set of repeat
+  // counterparties — memoize baseTrust per counterparty within this one
+  // computation instead of re-querying D1 once per receipt. Without this, a
+  // public, unauthenticated GET /agents/:id/reputation call is a cheap way to
+  // trigger O(receipts) database reads, not O(unique counterparties).
+  const trustCache = new Map<string, number>();
+  async function cachedBaseTrust(counterparty: string): Promise<number> {
+    const cached = trustCache.get(counterparty);
+    if (cached !== undefined) return cached;
+    const trust = await baseTrust(env, counterparty);
+    trustCache.set(counterparty, trust);
+    return trust;
+  }
+
   for (const r of finalized) {
     const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
     const pairCount = pairCounts.get(counterparty) ?? 1;
     const pairWeight = Math.log(1 + pairCount) / pairCount;
 
-    const counterpartyTrust = await baseTrust(env, counterparty);
+    const counterpartyTrust = await cachedBaseTrust(counterparty);
     const ageDays = (Date.now() - new Date(r.result.completedAt).getTime()) / 86_400_000;
     const decay = Math.pow(2, -ageDays / DECAY_HALF_LIFE_DAYS);
     const outcomeScore = r.verification.outcome === "success" ? 1 : r.verification.outcome === "partial" ? 0.5 : 0;
