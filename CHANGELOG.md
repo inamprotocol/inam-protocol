@@ -19,7 +19,16 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ### v0.1 (Draft) — 2026-08-21
 - Initial specification: positioning, INAM ID (`did:key`), Execution Receipt schema/lifecycle, reputation model, REST API, request signing, SDK architecture requirements, explicit non-goals, relationship to other protocols.
 
+## TypeScript/JavaScript SDK (`sdk-js`)
+
+### 0.1.0 — 2026-08-22
+- Extracted the crypto/canonicalization/receipt-content/`InamClient` code (previously `src/crypto/`, `src/core/`, `src/sdk/client.ts`) into a standalone, independently versioned package published as `inamprotocol` on npm. The Node reference server and Cloudflare Worker now import this code from `sdk-js/` by relative path instead of a local `src/` subfolder — no behavior change, same single source of truth across all three TypeScript runtimes, just made publishable.
+- Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
+
 ## Node reference server & Cloudflare Worker
+
+### 0.3.1 — 2026-08-22
+- No functional change: repointed internal imports (`src/services/receiptService.ts`, `src/middleware/signedRequest.ts`, `worker/src/receiptService.ts`, `worker/src/signedRequest.ts`, plus scripts/tests) from `src/crypto/` + `src/core/` to the new `sdk-js/src/` package created in this release. Full Node (20) + Worker (16) test suites and the live cross-language interop demo re-verified green after the move.
 
 ### 0.3.0 — 2026-08-22
 - Added the Job resource end-to-end in both runtimes: `src/services/jobService.ts` (Node) and `worker/src/jobService.ts` (Worker, D1-backed — offers live in their own `job_offers` table specifically to avoid a read-modify-write race on a shared JSON blob when two agents offer concurrently), wired into the receipt lifecycle (job auto-completes on receipt finalize; parties validated against the job when one is referenced).

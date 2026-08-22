@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
 import { config } from "../config.js";
-import { sha256Hex, verify, fromBase64 } from "../crypto/keys.js";
+import { sha256Hex, verify, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
 import { unauthorized } from "./errors.js";
 
 declare global {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { canonicalize } from "../src/crypto/canonical.js";
+import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 
 describe("canonicalize", () => {
   it("produces the same output regardless of key insertion order", () => {

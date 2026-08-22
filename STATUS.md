@@ -2,38 +2,27 @@
 
 Last updated: 2026-08-22. This file exists so a new session (human or Claude) can pick up exactly where the last one stopped, without re-deriving it from chat history.
 
-Phase structure adopted (per user + external ChatGPT review of this codebase): **Phase 1 — Hardening** (done, this update) → **Phase 2 — Public protocol** (GitHub, docs, SDK polish, versioning, examples) → Phase 3 — real cross-agent job workflow → Phase 4 — verified external identity → Phase 5 — economic layer (payments/stake) → Phase 6 — network/marketplace.
+Phase structure adopted (per user + external ChatGPT review of this codebase): **Phase 1 — Hardening** (done) → **Phase 2 — Public protocol** (GitHub, docs, SDK publishing, versioning — done) → **Phase 3 — real cross-agent job workflow** (done) → Phase 4 — verified external identity → Phase 5 — economic layer (payments/stake) → Phase 6 — network/marketplace.
 
-## Phase 1 — Hardening: done
+## Done and verified
 
-All seven items from the 2026-08-22 audit are fixed and verified (local `wrangler dev`, local vitest suite, and the live Cloudflare deployment):
+- **GitHub**: public org `inamprotocol`, public repo `inamprotocol/inam-protocol`, pushed and current.
+- **Domain**: `inamprotocol.org` — mail (MX/DKIM/SPF) works; `api.inamprotocol.org` and `docs.inamprotocol.org` are live Cloudflare Workers custom domains. **The bare root domain has no A/AAAA/CNAME record and nothing deployed at it** — deliberately deferred (see "Open threads" below).
+- **docs.inamprotocol.org** — rendered SPEC.md + Redoc API reference from `openapi.yaml`, built by a background agent, verified live.
+- **Job resource (SPEC.md §3)** — post → offer → accept → complete/cancel, additive and backward-compatible. Implemented and tested in all three runtimes: Node (`src/services/jobService.ts`), Worker/D1 (`worker/src/jobService.ts`, offers in their own `job_offers` table to avoid a concurrent-offer race), and both SDKs.
+- **`sdk-js/`** (new 2026-08-22) — the crypto/canonicalization/receipt-content/`InamClient` code, previously living inside `src/`, extracted into its own standalone package and published to npm as `inamprotocol`. The Node server and Worker still import this exact code by relative path (no behavior change, one source of truth preserved) — see `CHANGELOG.md`'s "TypeScript/JavaScript SDK" section for the extraction details and the clean-install verification that was run.
+- **`sdk-python/`** — parity Python SDK. Built, `twine check`-validated, and verified via a clean-venv install. **Not yet actually published to PyPI** — that step requires the user's own PyPI API token (credential-entry boundary); the user has registered a PyPI account but has not run `twine upload` yet.
+- **npm publish for `sdk-js`**: prepared and clean-install-verified (see CHANGELOG) but **not yet actually published to npm** — same credential boundary; needs the user's own npm account/token.
+- Test coverage: 20 Node vitest + 16 Worker vitest (incl. concurrent-accept/countersign race regression tests) + 12 Python pytest = 48 automated tests, all green as of this update. Plus the live cross-language interop demo (`scripts/run-interop-demo.sh`) and both smoke-test scripts, re-run and passing after the `sdk-js` extraction.
 
-1. **D1 race condition (countersign)** — fixed via compare-and-swap: `worker/src/db.ts`'s `finalizeReceiptIfDraft()` does `UPDATE ... WHERE status='draft'` and checks `meta.changes`, replacing the old read-then-write. Same pattern applied to `disputeReceiptIfFinalized()`.
-2. **Agent registration race** — fixed via plain `INSERT` (no `ON CONFLICT`) in `insertAgent()`; a racing duplicate now hits SQLite's UNIQUE constraint and is caught as `AGENT_ALREADY_REGISTERED`, instead of silently upserting.
-3. **Rate limiting** — added to both runtimes with the same policy: registration limited by IP (a DID is free to mint, so DID-scoping would do nothing against spam), signed writes limited by DID, and the two expensive public reads (`search`, `reputation`) limited by IP. Worker uses Cloudflare's native `RateLimit` binding (`worker/src/rateLimit.ts`); Node uses an in-memory fixed-window limiter (`src/middleware/rateLimit.ts`) — fine for a single-process reference server.
-4. **CORS decision made and implemented** — public GET reads get `Access-Control-Allow-Origin: *` (matches "reputation is public, no account needed"); signed POST/mutating routes get no CORS headers at all (they're server-to-server by design, and since auth is a per-request Ed25519 signature rather than an ambient browser credential, CORS doesn't add real security there anyway — documented in both `worker/src/index.ts` and `src/server.ts`).
-5. **D1 foreign key enforcement** — `PRAGMA foreign_keys = ON` now runs batched with every receipt insert (`insertDraftReceipt`), since D1 doesn't guarantee the pragma persists across whatever session backs a given `env.DB` call.
-6. **Security review conducted** — found and fixed a real issue beyond the original four: `computeReputation` was recomputing `baseTrust` per *receipt* instead of per *unique counterparty*, meaning the public, unauthenticated `GET /agents/:id/reputation` endpoint was an O(receipts) D1-read-amplification vector free to trigger. Fixed with a memoization cache in both `worker/src/reputationService.ts` and `src/services/reputationService.ts`. Also confirmed: `npm audit --omit=dev` is clean in both projects (the earlier vitest/esbuild advisories are dev-only, not shipped).
-7. **Worker tests wired into a real suite** — `worker/tests/api.test.ts`, using Cloudflare's official `@cloudflare/vitest-plugin` (runs actual Worker code against simulated D1/KV/RateLimit bindings, no live server needed). 11 assertion-based tests, including a dedicated regression test for the race-condition fix (two concurrent countersign attempts on the same draft — asserts exactly one succeeds). `worker-smoke-test.ts` still exists separately and is still useful — it's a manual post-deploy sanity check against a *live* URL (local or production), which the vitest suite (Miniflare-only) can't be.
+## Open threads
 
-Current automated coverage: 14 Node vitest tests + 12 Python pytest tests + 11 Worker vitest tests = 37 automated tests, plus the manual smoke-test script and the cross-language demo script for live-deployment checks.
-
-## What's actually done and verified (carried over)
-
-- **SPEC.md** — v0.1 protocol specification. Not yet updated to mention the Worker deployment or Phase 1 hardening details — worth a pass before Phase 2's "SPEC cleanup" step.
-- **Python SDK** (`sdk-python/`) — full parity with the TS `InamClient`, cross-language correctness proven both by fixed test vectors and a live two-language demo.
-- **Cloudflare Workers deployment** — live at `https://api.inamprotocol.org` (custom domain, bound 2026-08-22; the workers.dev URL still works too as a fallback but is no longer the documented one).
-- **Local git repo** at `C:\Users\User\Desktop\inam-protocol` (moved here from `C:\Users\User\inam-protocol` on 2026-08-22). **Still not pushed anywhere** — no GitHub remote configured. This commit (Phase 1 hardening) has not yet been made at the time of writing this file; see git log for the actual current commit count.
-
-## Remaining known gaps (deliberately not Phase 1's job)
-
-- No CI (GitHub Actions) — moot until pushed.
-- Python SDK not published to PyPI.
-- `inamprotocol.com` custom domain: zone not yet added to the Cloudflare account (needs the user to do a registrar nameserver change; the wrangler token here is zone:read only anyway, can't create the zone itself).
-- GitHub repo not created/pushed — **user has not yet confirmed public vs. private visibility for it; ask before creating/pushing.**
-- **Biggest strategic gap, not a coding task:** the "independent of big players" thesis has no institutional/governance reality yet — the whole system runs in one person's Cloudflare account. Real fix needs a strategy conversation (multi-region deploy, data export/backup story, eventual foundation/governance model), not code.
-- Everything Phase 2+ per the phase list at the top of this file (Job API, verified external identity, payments/stake, marketplace) — deliberately deferred, not gaps.
+- **Root domain landing page** (`inamprotocol.org` bare domain): explicitly deferred by the user. A first design draft (university/open-source-library aesthetic, content-over-form) was rejected — "renklendirmeler üzerinde çalışmalısın özellikle" (work on the coloring specifically) — a redo focused on color is expected later, but protocol/engineering work takes priority until the user asks for it again.
+- **Publish `sdk-python` to PyPI**: user needs to create a PyPI API token and run `cd sdk-python && python -m twine upload dist/*` themselves.
+- **Publish `sdk-js` to npm**: user needs to run `cd sdk-js && npm publish` themselves (requires being logged into npm as the account that should own the `inamprotocol` package — unscoped name, confirmed available).
+- **Phase 4+ (verified external identity, payments/stake, marketplace)**: not started. `POST /agents/:id/link` still only accepts a self-signed claim, no real challenge-response against AgentPass/AITP/Passport Alliance yet.
+- **OpenWork.network**: identified as the closest thing to a real competitor (task/agent network with its own credentials, reputation, and reward economy). Current positioning response: don't compete on marketplace/economy — position INAM as the neutral trust/verification/reputation layer that systems like OpenWork (or A2A/MCP/Claude/OpenAI ecosystems) could each plug into via the SDK. Worth eventually writing this into README's "relationship to other protocols" section once the positioning is settled.
 
 ## Next action
 
-Moving into **Phase 2 — Public protocol**: SPEC.md cleanup/update, API docs, SDK polish/examples, versioning discipline. GitHub creation/push is part of Phase 2 per the agreed phase list, but blocked on the user answering public-vs-private.
+Whichever the user picks next: PyPI/npm publish (needs their own credentials — I can't do it), Phase 4 (verified identity), or the root-domain design redo. No default assumed — ask or take the most recently requested thread.

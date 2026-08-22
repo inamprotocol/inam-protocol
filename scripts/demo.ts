@@ -1,5 +1,5 @@
-import { generateKeypair } from "../src/crypto/keys.js";
-import { InamClient } from "../src/sdk/client.js";
+import { generateKeypair } from "../sdk-js/src/crypto/keys.js";
+import { InamClient } from "../sdk-js/src/client.js";
 
 const BASE_URL = process.env.INAM_URL ?? "http://localhost:4021";
 

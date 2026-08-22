@@ -1,7 +1,7 @@
-import { canonicalize } from "../crypto/canonical.js";
-import { sha256Hex, sign, toBase64, type Keypair } from "../crypto/keys.js";
-import { buildSignableContent, type ReceiptContentInput } from "../core/receiptContent.js";
-import type { AgentRecord, ExecutionReceipt, JobOffer, JobRecord, ReputationResult } from "../types.js";
+import { canonicalize } from "./crypto/canonical.js";
+import { sha256Hex, sign, toBase64, type Keypair } from "./crypto/keys.js";
+import { buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";
+import type { AgentRecord, ExecutionReceipt, JobOffer, JobRecord, ReputationResult } from "./types.js";
 
 /**
  * Minimal reference client — the seed of the future `@inamprotocol/agent-sdk`

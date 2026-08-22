@@ -1,14 +1,14 @@
 import { receipts, agents } from "../storage/db.js";
-import { canonicalize } from "../crypto/canonical.js";
-import { verify } from "../crypto/keys.js";
+import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
+import { verify } from "../../sdk-js/src/crypto/keys.js";
 import { config } from "../config.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
-import { buildSignableContent, type ReceiptContentInput } from "../core/receiptContent.js";
+import { buildSignableContent, type ReceiptContentInput } from "../../sdk-js/src/core/receiptContent.js";
 import * as jobService from "./jobService.js";
 import type { ExecutionReceipt } from "../types.js";
 
-export type { ReceiptContentInput } from "../core/receiptContent.js";
-export { computeReceiptId, buildSignableContent } from "../core/receiptContent.js";
+export type { ReceiptContentInput } from "../../sdk-js/src/core/receiptContent.js";
+export { computeReceiptId, buildSignableContent } from "../../sdk-js/src/core/receiptContent.js";
 
 export interface CreateDraftInput extends ReceiptContentInput {
   agentAId: string;

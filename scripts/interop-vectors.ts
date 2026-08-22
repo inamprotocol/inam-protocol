@@ -1,5 +1,5 @@
-import { publicKeyToDid, sign, toBase64 } from "../src/crypto/keys.js";
-import { canonicalize } from "../src/crypto/canonical.js";
+import { publicKeyToDid, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
+import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 import * as ed25519 from "@noble/ed25519";
 
 // Fixed 32-byte private key (all 0x01) purely for cross-language test vectors —

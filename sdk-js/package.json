@@ -1,0 +1,50 @@
+{
+  "name": "inamprotocol",
+  "version": "0.1.0",
+  "description": "Reference TypeScript/JavaScript SDK for the INAM Protocol — agent identity, execution receipts, jobs, and reputation",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "Apache-2.0",
+  "keywords": [
+    "inam",
+    "agent",
+    "ai-agent",
+    "identity",
+    "reputation",
+    "did",
+    "protocol",
+    "execution-receipt"
+  ],
+  "homepage": "https://inamprotocol.org",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inamprotocol/inam-protocol.git",
+    "directory": "sdk-js"
+  },
+  "bugs": "https://github.com/inamprotocol/inam-protocol/issues",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "prepublishOnly": "npm run build"
+  },
+  "dependencies": {
+    "@noble/ed25519": "^2.1.0",
+    "@noble/hashes": "^1.5.0",
+    "bs58": "^6.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.4"
+  }
+}

@@ -1,6 +1,6 @@
-import { generateKeypair, sha256Hex, sign, toBase64 } from "../src/crypto/keys.js";
-import { InamClient } from "../src/sdk/client.js";
-import type { Keypair } from "../src/crypto/keys.js";
+import { generateKeypair, sha256Hex, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
+import { InamClient } from "../sdk-js/src/client.js";
+import type { Keypair } from "../sdk-js/src/crypto/keys.js";
 
 /** Exercises the Cloudflare Workers deployment's error paths and idempotency —
  * the parts of the stack that are genuinely new (routing, D1, KV) rather than
@@ -94,8 +94,8 @@ async function main() {
   // Wrong agent tries to countersign.
   const contentForWrongSigner = { ...draft, signatures: undefined, status: undefined, dispute: undefined };
   const wrongSig = await (async () => {
-    const { canonicalize } = await import("../src/crypto/canonical.js");
-    const { sign, toBase64 } = await import("../src/crypto/keys.js");
+    const { canonicalize } = await import("../sdk-js/src/crypto/canonical.js");
+    const { sign, toBase64 } = await import("../sdk-js/src/crypto/keys.js");
     const bytes = new TextEncoder().encode(canonicalize(contentForWrongSigner));
     return toBase64(sign(bytes, (stranger as unknown as { keypair: { privateKey: Uint8Array } })["keypair"].privateKey));
   })();

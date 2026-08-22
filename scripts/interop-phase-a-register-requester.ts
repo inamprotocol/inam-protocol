@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
-import { generateKeypair, toBase64 } from "../src/crypto/keys.js";
-import { InamClient } from "../src/sdk/client.js";
+import { generateKeypair, toBase64 } from "../sdk-js/src/crypto/keys.js";
+import { InamClient } from "../sdk-js/src/client.js";
 
 /**
  * Phase A of the TS↔Python cross-language demo: a TypeScript-side "requester"

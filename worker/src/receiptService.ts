@@ -1,7 +1,7 @@
 import * as db from "./db.js";
-import { canonicalize } from "../../src/crypto/canonical.js";
-import { verify } from "../../src/crypto/keys.js";
-import { buildSignableContent, type ReceiptContentInput } from "../../src/core/receiptContent.js";
+import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
+import { verify } from "../../sdk-js/src/crypto/keys.js";
+import { buildSignableContent, type ReceiptContentInput } from "../../sdk-js/src/core/receiptContent.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import * as jobService from "./jobService.js";
 import type { Env, ExecutionReceipt } from "./types.js";

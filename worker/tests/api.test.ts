@@ -2,8 +2,8 @@ import { env } from "cloudflare:workers";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import worker from "../src/index.js";
-import { generateKeypair, sha256Hex, sign, toBase64 } from "../../src/crypto/keys.js";
-import type { Keypair } from "../../src/crypto/keys.js";
+import { generateKeypair, sha256Hex, sign, toBase64 } from "../../sdk-js/src/crypto/keys.js";
+import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
 
 // Inlined rather than read from ../schema.sql at runtime: this test file
 // executes inside the Workers-simulated environment (via @cloudflare/vitest-plugin),
@@ -129,8 +129,8 @@ describe("execution receipt lifecycle", () => {
     await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
     await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
 
-    const { canonicalize } = await import("../../src/crypto/canonical.js");
-    const { buildSignableContent } = await import("../../src/core/receiptContent.js");
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
 
     const input = job();
     const content = buildSignableContent(requester.did, worker_.did, input);
@@ -179,8 +179,8 @@ describe("execution receipt lifecycle", () => {
     await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
     await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
 
-    const { canonicalize } = await import("../../src/crypto/canonical.js");
-    const { buildSignableContent } = await import("../../src/core/receiptContent.js");
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
 
     const input = job();
     const content = buildSignableContent(requester.did, worker_.did, input);
@@ -222,8 +222,8 @@ describe("execution receipt lifecycle", () => {
     await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
     await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
 
-    const { canonicalize } = await import("../../src/crypto/canonical.js");
-    const { buildSignableContent } = await import("../../src/core/receiptContent.js");
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
     const input = job();
     const content = buildSignableContent(requester.did, worker_.did, input);
     const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
@@ -356,8 +356,8 @@ describe("job lifecycle", () => {
     expect(acceptRes.status).toBe(200);
     expect((acceptRes.json as { status: string }).status).toBe("accepted");
 
-    const { canonicalize } = await import("../../src/crypto/canonical.js");
-    const { buildSignableContent } = await import("../../src/core/receiptContent.js");
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
     const now = new Date().toISOString();
     const receiptInput = {
       jobId,
@@ -403,8 +403,8 @@ describe("job lifecycle", () => {
     });
     const jobId = (postRes.json as { jobId: string }).jobId;
 
-    const { canonicalize } = await import("../../src/crypto/canonical.js");
-    const { buildSignableContent } = await import("../../src/core/receiptContent.js");
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
     const now = new Date().toISOString();
     const receiptInput = {
       jobId,
