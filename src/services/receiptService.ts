@@ -4,6 +4,7 @@ import { verify } from "../crypto/keys.js";
 import { config } from "../config.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
 import { buildSignableContent, type ReceiptContentInput } from "../core/receiptContent.js";
+import * as jobService from "./jobService.js";
 import type { ExecutionReceipt } from "../types.js";
 
 export type { ReceiptContentInput } from "../core/receiptContent.js";
@@ -25,6 +26,7 @@ export function createDraft(callerDid: string, input: CreateDraftInput): Executi
   if (!agents.has(callerDid)) throw notFound("AGENT_NOT_FOUND", "Worker agent must be registered before submitting receipts");
   if (!agents.has(input.agentAId)) throw notFound("AGENT_NOT_FOUND", "Requester agent must be registered");
   if (callerDid === input.agentAId) throw badRequest("SELF_DEALING", "agent_a and agent_b must be different agents");
+  jobService.assertReceiptMatchesJob(input.jobId, input.agentAId, callerDid);
 
   const content = buildSignableContent(input.agentAId, callerDid, input);
   const receiptId = content.receiptId;
@@ -79,6 +81,7 @@ export function countersign(receiptId: string, callerDid: string, signature: str
     status: "finalized",
   };
   receipts.set(receiptId, finalized);
+  jobService.markCompletedByReceipt(finalized.jobId, receiptId);
   return finalized;
 }
 

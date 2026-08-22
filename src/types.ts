@@ -54,3 +54,25 @@ export interface ReputationResult {
   components: ReputationComponents;
   flags: string[];
 }
+
+export type JobStatus = "open" | "accepted" | "completed" | "cancelled";
+
+export interface JobOffer {
+  agentId: string;
+  message?: string;
+  createdAt: string;
+}
+
+export interface JobRecord {
+  jobId: string;
+  postedBy: string; // agent_a's INAM ID
+  capability: string;
+  specHash: string;
+  budget?: { amount?: string; currency?: string };
+  status: JobStatus;
+  offers: JobOffer[];
+  acceptedAgentId?: string;
+  receiptId?: string;
+  createdAt: string;
+  expiresAt?: string;
+}
