@@ -11,5 +11,5 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "../src/crypto/**/*.ts", "../src/core/**/*.ts"]
+  "include": ["src/**/*.ts", "../sdk-js/src/crypto/**/*.ts", "../sdk-js/src/core/**/*.ts"]
 }

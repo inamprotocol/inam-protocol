@@ -1,5 +1,5 @@
 import type { Context, Next } from "hono";
-import { sha256Hex, verify, fromBase64 } from "../../src/crypto/keys.js";
+import { sha256Hex, verify, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
 import { unauthorized } from "./errors.js";
 import type { AppEnv } from "./types.js";
 

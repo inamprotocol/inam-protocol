@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { generateKeypair, sign, toBase64 } from "../src/crypto/keys.js";
-import { canonicalize } from "../src/crypto/canonical.js";
+import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
+import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 import { registerAgent } from "../src/services/agentService.js";
 import { buildSignableContent, createDraft, countersign } from "../src/services/receiptService.js";
 import * as jobService from "../src/services/jobService.js";

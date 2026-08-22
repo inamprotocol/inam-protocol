@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { generateKeypair, didToPublicKey, sign, verify } from "../src/crypto/keys.js";
+import { generateKeypair, didToPublicKey, sign, verify } from "../sdk-js/src/crypto/keys.js";
 
 describe("did:key round-trip and signing", () => {
   it("encodes a generated keypair as a did:key:z... that decodes back to the same public key", () => {

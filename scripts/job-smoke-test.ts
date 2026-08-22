@@ -1,7 +1,7 @@
-import { generateKeypair, sha256Hex, sign, toBase64 } from "../src/crypto/keys.js";
-import { canonicalize } from "../src/crypto/canonical.js";
-import { buildSignableContent } from "../src/core/receiptContent.js";
-import type { Keypair } from "../src/crypto/keys.js";
+import { generateKeypair, sha256Hex, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
+import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
+import { buildSignableContent } from "../sdk-js/src/core/receiptContent.js";
+import type { Keypair } from "../sdk-js/src/crypto/keys.js";
 
 /** Exercises the new /v1/jobs endpoints over real HTTP — routing, zod
  * validation, signed-request middleware, and idempotency for a resource

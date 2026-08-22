@@ -1,6 +1,6 @@
 {
   "name": "inam-protocol-worker",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "INAM Protocol Registry — Cloudflare Workers deployment (D1-backed)",
   "type": "module",
