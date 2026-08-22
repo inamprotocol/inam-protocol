@@ -73,3 +73,19 @@ CREATE TABLE IF NOT EXISTS link_challenges (
   expires_at TEXT NOT NULL,
   used INTEGER NOT NULL DEFAULT 0
 );
+
+-- Independent verification (SPEC.md §12): a single verifier's signed
+-- attestation that a finalized receipt's output satisfies its job's
+-- requirements. Created once, never transitions state, so a plain INSERT
+-- (UNIQUE violation -> DUPLICATE_VERIFICATION) is sufficient here, unlike
+-- receipts/jobs which need compare-and-swap UPDATEs.
+CREATE TABLE IF NOT EXISTS verifications (
+  verification_id TEXT PRIMARY KEY,
+  receipt_id TEXT NOT NULL REFERENCES receipts(receipt_id),
+  provider TEXT NOT NULL,
+  verifier TEXT NOT NULL,
+  result TEXT NOT NULL,   -- verified | rejected
+  data TEXT NOT NULL      -- full VerificationRecord JSON
+);
+
+CREATE INDEX IF NOT EXISTS idx_verifications_receipt ON verifications(receipt_id);

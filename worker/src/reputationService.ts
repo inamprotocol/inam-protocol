@@ -1,12 +1,16 @@
 import * as db from "./db.js";
 import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
+import { hasVerifiedAttestation } from "./verificationService.js";
 import type { Env, ReputationResult } from "./types.js";
 
 const CONFIDENCE_SATURATION = 5;
 const STAKE_NORMALIZATION_USD = 10_000;
 const DECAY_HALF_LIFE_DAYS = 90;
 const CONCENTRATED_COUNTERPARTY_THRESHOLD = 0.6;
+// SPEC.md §12.5: a finalized, non-disputed receipt backed by at least one
+// `verified` Verification counts for more.
+const ATTESTATION_BOOST = 1.5;
 
 function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
@@ -56,6 +60,7 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     return trust;
   }
 
+  let attestedCount = 0;
   for (const r of finalized) {
     const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
     const pairCount = pairCounts.get(counterparty) ?? 1;
@@ -66,7 +71,15 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     const decay = Math.pow(2, -ageDays / DECAY_HALF_LIFE_DAYS);
     const outcomeScore = r.verification.outcome === "success" ? 1 : r.verification.outcome === "partial" ? 0.5 : 0;
 
-    const weight = pairWeight * counterpartyTrust * decay;
+    // SPEC.md §12.5: independently-verified work counts for more. This loop
+    // only ever sees `finalized` receipts (disputed ones already excluded by
+    // the filter above), so a verified attestation on a since-disputed
+    // receipt never reaches here — no separate dispute check needed.
+    const isAttested = await hasVerifiedAttestation(env, r.receiptId);
+    if (isAttested) attestedCount++;
+    const attestationBoost = isAttested ? ATTESTATION_BOOST : 1;
+
+    const weight = pairWeight * counterpartyTrust * decay * attestationBoost;
     weightedSuccessSum += weight * outcomeScore;
     weightSum += weight;
     volumeUsd += Number(r.settlement?.amount ?? 0);
@@ -96,6 +109,7 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
       volumeUsd,
       stakeUsd: record.stakeUsd,
       decayHalfLifeDays: DECAY_HALF_LIFE_DAYS,
+      attestedReceipts: attestedCount,
     },
     flags,
   };

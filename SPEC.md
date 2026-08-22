@@ -1,8 +1,8 @@
-# INAM Protocol — Specification v0.4 (Draft)
+# INAM Protocol — Specification v0.5 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, file-backed storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
 
-**Changes from v0.3:** adds external-identity **link challenges** (§2.1) — `agentpass_id`/`aitp_id`/`passport_id` now require cryptographic proof of control of the claimed external key (Ed25519 or P-256, wire format aligned with ATTP/`draft-sharif-attp-00`) before a registry stores the link, closing the "self-signed unchecked claim" gap called out in v0.1–v0.3. `a2a_endpoint` is unaffected (it was never a key-derived identity). Additive and backward compatible at the wire level for every other endpoint. Implemented in all three runtimes (Node, Cloudflare Workers, both SDKs) and verified end to end, including a real Ed25519 + P-256 cross-language interop check between the TypeScript and Python SDKs.
+**Changes from v0.4:** adds the **Verification** resource (§12) — a single independent verifier's signed attestation that a finalized receipt's output satisfies its job's requirements, closing the "no enforcement behind `independent_validator`/`test_suite_pass`" gap called out since v0.1. Deliberately narrow: one verifier per verification, `provider != verifier` strictly enforced, only `deterministic`/`agent_attestation` methods, no new dispute mechanism (reuses the existing receipt dispute state — a disputed receipt's exclusion from reputation isn't overridden by any Verification referencing it), no verifier-side reputation yet. Additive and backward compatible — every existing endpoint and wire shape is unchanged. Implemented in all three runtimes (Node, Cloudflare Workers, both SDKs) and verified end to end, including a real cross-language proof: a receipt drafted in Python, finalized in TypeScript, then independently verified by a third TypeScript identity, correctly boosting the Python-side provider's reputation.
 
 **Changes from v0.1 (carried forward in v0.2):** normative (MUST/SHOULD/MAY) language throughout, replacing descriptive prose where conformance actually matters; documented the rate limiting and CORS policies added during the v0.1→v0.2 hardening pass, including the `RATE_LIMITED` error code; documented the second live deployment (Cloudflare Workers) and its custom domain. No wire-format break in either bump — `receiptVersion` stays `"1.0"`.
 
@@ -236,6 +236,9 @@ Base path `/v1`. A `(signed)` endpoint **MUST** reject a request missing a valid
 | `GET /receipts/:id` | Fetch a single receipt. |
 | `POST /receipts/:id/countersign` *(signed, agent_a only)* | Countersign a draft receipt, finalizing it. |
 | `POST /receipts/:id/dispute` *(signed, participant only)* | Open a dispute within the window. |
+| `POST /verifications` *(signed, caller = verifier)* | Submit a signed independent verification of a finalized receipt (§12). |
+| `GET /verifications/:id` | Fetch a single verification. |
+| `GET /receipts/:id/verifications` | List verifications referencing a receipt. |
 
 ### Error shape
 
@@ -311,3 +314,98 @@ Not deferred by accident — deferred because building them before the primitive
 | A2A | Agent ↔ Agent transport | Complementary — INAM doesn't replace how agents talk, only how their completed work is verified and scored afterward. |
 | AgentPass, AITP, Passport Alliance, W3C DID/VC | Identity & delegation | Complementary — `linked` (§2) references these; INAM does not mint or arbitrate authorization. §2.1's link-challenge wire format follows ATTP (the trust-transport protocol AgentPass is built on) so proof-of-control interops with that ecosystem's own key material, but INAM still doesn't call out to their registries as the authority on delegation/mandate scope — that stays theirs. |
 | x402, AP2, ACP | Payment | Complementary — `settlement.paymentRef` (§4.1) and a job's `budget` (§3.1) are designed to hold a reference into one of these; INAM does not move money itself. |
+
+## 12. Verification (independent attestation)
+
+A receipt's `verification.method` (§4.1) can be `independent_validator` or `test_suite_pass`, but until now neither had any enforcement behind it — a receipt could claim either value with nothing checking it. This section adds a **Verification** resource: a third party's signed attestation that a specific finalized receipt's output actually satisfies its job's requirements. It sits after Receipt in the chain, not inside it:
+
+```
+Job → Execution → Receipt (finalized) → Verification → verified / rejected
+```
+
+**v0.1 is deliberately narrow.** Locked for this version — not because these are bad ideas, but because shipping all of them at once is how a spec ends up with untested corners: single verifier per receipt (no multi-verifier consensus), `provider != verifier` strictly enforced (no exceptions), only `deterministic` and `agent_attestation` methods, no new dispute mechanism, no verifier-side reputation, no external-registry passthrough (OpenWork/AgentPass/etc. attestations). Multi-verifier consensus, `human_attestation`/`external_attestation`, and verifier reputation are the explicit v0.2 backlog (§12.7) — a registry **MUST NOT** need any of them to conform to this version.
+
+### 12.1 Shape
+
+```json
+{
+  "verificationVersion": "1.0",
+  "verificationId": "sha256:<hex>",
+  "receiptId": "sha256:...",
+  "jobId": "job_7f31c2",
+  "provider": "did:key:z...",
+  "verifier": "did:key:z...",
+  "method": "deterministic",
+  "outputHash": "sha256:...",
+  "result": "verified",
+  "score": 0.98,
+  "evidenceUri": "https://...",
+  "createdAt": "2026-08-22T15:00:00Z",
+  "signature": "base64..."
+}
+```
+
+`provider` and `jobId` are not independently supplied by the caller — a registry **MUST** derive both from the referenced `receiptId` (`provider` = that receipt's `agentB.id`, `jobId` = that receipt's `jobId`) rather than trusting client-asserted values that could disagree with the receipt itself. `outputHash` **MUST** match the referenced receipt's `result.outputHash` exactly — a registry **MUST** reject a mismatch with `VERIFICATION_TARGET_MISMATCH` rather than silently accepting an attestation about different output than what the receipt actually recorded. `evidenceUri` is optional and, like `outputUri` on a receipt (§4.1), a pointer, not a payload — same "carry the proof, not the data" principle as the rest of the spec. There is no separate `requirementsHash`: the job's own `specHash` (§3.1) is what the verifier is expected to have checked the output against.
+
+`method` is one of `deterministic` (an automated test/check ran and produced a pass/fail) or `agent_attestation` (another agent examined the work and attests to it) — a registry **MUST** reject any other value with `UNSUPPORTED_VERIFICATION_METHOD` in this version. `result` is `verified` or `rejected` — the verifier's own signed judgment, recorded either way; a rejected verification is not an error, it's a legitimate, queryable attestation that the work did not hold up. `score` is optional, `0..1`, a confidence/quality signal a registry **MAY** ignore.
+
+### 12.2 Verification ID (content addressing)
+
+```
+verificationId = "sha256:" + hex(sha256(canonical({
+  receiptId, jobId, provider, verifier, method, outputHash, result, score, evidenceUri
+})))
+```
+
+The signed content is this same set of fields plus `verificationVersion` and `verificationId` itself (the already-computed hash) — i.e. `signature = Ed25519(canonical({ verificationVersion: "1.0", verificationId, receiptId, jobId, provider, verifier, method, outputHash, result, score, evidenceUri }), verifierPrivateKey)`, mirroring exactly how a receipt's signed content embeds its own `receiptId` alongside the fields that were hashed to produce it (§4.1–§4.2). `createdAt` is server-assigned metadata, not part of the signed content — there's no window or reactivation logic here that depends on it the way a receipt's `dispute.windowClosesAt` does.
+
+Same content-addressing principle as a receipt (§4.2): the id is derived from the content, not assigned. A registry **MUST** treat a resubmission of byte-identical content as `DUPLICATE_VERIFICATION`.
+
+### 12.3 Creating a verification
+
+**`POST /verifications`** *(signed, caller MUST be the `verifier`)*. Unlike a receipt, a verification has no draft/countersign step — it's a single party's attestation, signed once, complete on submission. A registry **MUST** validate, in order, before accepting:
+
+1. The referenced `receiptId` exists and is `status: "finalized"` (§4.3) — **MUST** reject with `RECEIPT_NOT_FINALIZED` otherwise. Verifying a `draft` receipt makes no sense (it isn't reputation-eligible yet); verifying a `disputed` one is handled by §12.4 below, not by rejecting the request outright.
+2. The request's own INAM signature (§7) is by the same ID as `verifier` in the submitted content — **MUST** reject a mismatch with `NOT_VERIFIER`.
+3. `verifier` is not equal to `provider` (the receipt's `agentB.id`) — **MUST** reject a self-verification attempt with `SELF_VERIFICATION`. This is the core collusion guard: without it, a provider could rubber-stamp their own work.
+4. `outputHash` matches the receipt's `result.outputHash` — **MUST** reject a mismatch with `VERIFICATION_TARGET_MISMATCH` (§12.1).
+5. `method` is a supported value (§12.1).
+6. The `signature` verifies against `verifier`'s Ed25519 key over the canonical bytes of the content in §12.2 (including `verificationVersion` and `verificationId`, excluding `signature` itself) — **MUST** reject with `INVALID_VERIFICATION_SIGNATURE` otherwise. Same canonicalize-then-sign discipline as a receipt, reusing the identical `canonicalize()`/Ed25519 primitives (§4.2, §8); this version introduces no new signing scheme.
+7. A resubmission of byte-identical content (same `verificationId`) — **MUST** reject with `DUPLICATE_VERIFICATION` rather than creating a second record, same principle as a receipt (§4.2).
+
+A registry **MUST** create the record with whatever `result` the verifier signed (`verified` or `rejected`) once all checks pass — a registry **MUST NOT** substitute its own judgment for the verifier's. Response `201` with the full record.
+
+### 12.4 Relationship to Receipt disputes — no new dispute mechanism
+
+This version deliberately does **not** add a second dispute concept. A receipt's existing `dispute` state (§4.3) is the only dispute mechanism in the protocol; Verification does not get its own.
+
+- A registry **MUST** check the referenced receipt's *current* `status` before letting a `verified` Verification contribute to reputation (§12.5) — if the receipt is `disputed`, it stays excluded from the positive side of the reputation calculation exactly as §4.3 already requires, regardless of any Verification referencing it. A verified Verification does **not** resurrect a disputed receipt.
+- Disputing a receipt does **not** retroactively delete or invalidate an existing Verification record — it stays queryable as historical evidence (what a verifier attested, and when), only its effect on reputation is suppressed while the receipt remains disputed. If the dispute later resolves in a way a registry's operator considers the receipt trustworthy again (out of scope to define here — §4.3 doesn't specify a `resolved` reactivation path either), the Verification's contribution resumes automatically, since the check in §12.5 is computed live from current receipt status, not cached at verification-creation time.
+- A `rejected` Verification does **not** automatically open a dispute on the receipt in this version — a registry **MUST NOT** infer an automatic state transition on the receipt from a Verification result. A rejected Verification is evidence a receipt's own parties (or a future version of this spec) could act on; auto-disputing on rejection is explicit v0.2 backlog (§12.7).
+
+### 12.5 Reputation linkage
+
+No new event stream (§5.1's reasoning applies equally here: a second parallel ledger is a second source of truth waiting to drift). Instead, `computeReputation` (§5.2) **MUST** apply an additional weight multiplier to a finalized, non-disputed receipt that has at least one `verified` Verification referencing it — a registry **MAY** choose its own multiplier (the reference implementation uses a fixed boost; see `src/services/reputationService.ts`), but **MUST** apply it consistently in the same direction (independently-verified work counts for more, never less). A `rejected` Verification **MUST NOT** apply any weight change in this version (no penalty) — it's recorded and queryable, but scoring-neutral; a future version may change this (§12.7).
+
+A registry **MUST** additionally report an `attestedReceipts` count in the reputation response `components` (§5.3) — the number of an agent's finalized receipts backed by at least one `verified` Verification — so the boost is auditable rather than folded invisibly into `trustScore`, same principle as every other component.
+
+### 12.6 REST API additions
+
+| Method & path | Description |
+|---|---|
+| `POST /verifications` *(signed, caller = verifier)* | Submit a signed verification of a finalized receipt (§12.3). |
+| `GET /verifications/:id` | Fetch a single verification. |
+| `GET /receipts/:id/verifications` | List verifications referencing a receipt. |
+
+New error codes: `RECEIPT_NOT_FINALIZED`, `NOT_VERIFIER` (the request isn't signed by the `verifier` it names), `SELF_VERIFICATION`, `VERIFICATION_TARGET_MISMATCH`, `UNSUPPORTED_VERIFICATION_METHOD`, `INVALID_VERIFICATION_SIGNATURE`, `DUPLICATE_VERIFICATION`, `VERIFICATION_NOT_FOUND`.
+
+### 12.7 Explicitly deferred (v0.2 backlog)
+
+Not omitted by accident — deferred because shipping them alongside v0.1 would mean testing multiple new state spaces at once instead of proving one solid primitive first:
+
+- **Multi-verifier consensus** (`min_verifiers`, agreement-threshold policy) — v0.1 is exactly one verifier per verification; a job/receipt needing stronger assurance can accumulate multiple independent `POST /verifications` calls from different verifiers today (nothing prevents that), but a registry has no obligation to compute consensus across them yet.
+- **`human_attestation` / `external_attestation` methods** — including any passthrough for another system's own attestation (OpenWork, AgentPass, a cloud provider, etc.) verifying the work instead of an INAM-native verifier.
+- **Verifier-side reputation** — a verifier accumulating its own track record (agreement rate with eventual disputes, volume, etc.) as a second reputation dimension distinct from provider reputation.
+- **Auto-dispute on rejection** — a `rejected` Verification automatically opening a receipt dispute rather than sitting as inert evidence (§12.4).
+
+None of the above are needed for a registry to conform to this version. What is **not** deferred, unlike the list above: cross-runtime interop is a first-class v0.1 requirement, same as §8 — a verification signed by any conforming SDK in any language **MUST** verify identically against any conforming runtime. This is the acceptance bar that makes §12 a real protocol addition rather than one implementation's local feature: Node-created → Worker-verified, Worker-created → Python-verified, Python-created → Node-verified, all three producing byte-identical `verificationId`s for the same content.

@@ -35,3 +35,7 @@ echo "=== Phase B (Python): register worker, submit signed draft receipts ==="
 echo
 echo "=== Phase C (TypeScript): countersign Python's receipts, print reputation ==="
 npx tsx scripts/interop-phase-c-countersign.ts
+
+echo
+echo "=== Phase D (TypeScript): independent verification of a Python-drafted receipt ==="
+npx tsx scripts/interop-phase-d-verify.ts

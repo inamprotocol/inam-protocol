@@ -22,6 +22,8 @@ const SCHEMA_STATEMENTS = [
   "CREATE INDEX IF NOT EXISTS idx_jobs_posted_by ON jobs(posted_by)",
   "CREATE TABLE IF NOT EXISTS job_offers (job_id TEXT NOT NULL REFERENCES jobs(job_id), agent_id TEXT NOT NULL, message TEXT, created_at TEXT NOT NULL, PRIMARY KEY (job_id, agent_id))",
   "CREATE TABLE IF NOT EXISTS link_challenges (challenge_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id), protocol TEXT NOT NULL, external_public_key TEXT NOT NULL, key_type TEXT NOT NULL, challenge TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS verifications (verification_id TEXT PRIMARY KEY, receipt_id TEXT NOT NULL REFERENCES receipts(receipt_id), provider TEXT NOT NULL, verifier TEXT NOT NULL, result TEXT NOT NULL, data TEXT NOT NULL)",
+  "CREATE INDEX IF NOT EXISTS idx_verifications_receipt ON verifications(receipt_id)",
 ];
 
 beforeAll(async () => {
@@ -600,5 +602,271 @@ describe("external identity link challenges", () => {
     });
     expect(shortcutRes.status).toBe(400);
     expect((shortcutRes.json as { error: { code: string } }).error.code).toBe("CHALLENGE_REQUIRED");
+  });
+});
+
+describe("independent verification (SPEC.md §12)", () => {
+  async function finalizeReceipt(requester: Keypair, provider: Keypair) {
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    const input = job();
+    const content = buildSignableContent(requester.did, provider.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), provider.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", {
+      keypair: provider,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    const draft = draftRes.json as { receiptId: string; result: { outputHash: string } };
+
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+    const finalizedRes = await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, {
+      keypair: requester,
+      idempotencyKey: `countersign:${draft.receiptId}`,
+      body: { signature: counterSig },
+    });
+    return finalizedRes.json as { receiptId: string; jobId: string; result: { outputHash: string } };
+  }
+
+  async function signVerification(
+    verifierKeys: Keypair,
+    input: { receiptId: string; jobId: string; provider: string; verifier: string; method: string; outputHash: string; result: string },
+  ) {
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableVerificationContent } = await import("../../sdk-js/src/core/verificationContent.js");
+    const content = buildSignableVerificationContent(input as never);
+    const signature = toBase64(sign(new TextEncoder().encode(canonicalize(content)), verifierKeys.privateKey));
+    return { content, signature };
+  }
+
+  it("verifies a finalized receipt and boosts the provider's reputation", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const before = await call("GET", `/v1/agents/${provider.did}/reputation`);
+    expect((before.json as { components: { attestedReceipts: number } }).components.attestedReceipts).toBe(0);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const submitRes = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(submitRes.status).toBe(201);
+    const record = submitRes.json as { verificationId: string; provider: string };
+    expect(record.provider).toBe(provider.did);
+
+    const getRes = await call("GET", `/v1/verifications/${encodeURIComponent(record.verificationId)}`);
+    expect((getRes.json as { result: string }).result).toBe("verified");
+
+    const listRes = await call("GET", `/v1/receipts/${encodeURIComponent(receipt.receiptId)}/verifications`);
+    expect((listRes.json as { verifications: unknown[] }).verifications).toHaveLength(1);
+
+    const after = await call("GET", `/v1/agents/${provider.did}/reputation`);
+    const afterComponents = (after.json as { trustScore: number; components: { attestedReceipts: number } }).components;
+    expect(afterComponents.attestedReceipts).toBe(1);
+    expect((after.json as { trustScore: number }).trustScore).toBeGreaterThan((before.json as { trustScore: number }).trustScore);
+  });
+
+  it("rejects self-verification", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: provider.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(provider, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: provider,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: provider.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("SELF_VERIFICATION");
+  });
+
+  it("rejects verifying a receipt that is still a draft", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+    const input = job();
+    const content = buildSignableContent(requester.did, provider.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), provider.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", {
+      keypair: provider,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    const draft = draftRes.json as { receiptId: string; jobId: string; result: { outputHash: string } };
+
+    const verInput = { receiptId: draft.receiptId, jobId: draft.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: draft.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, verInput);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: verInput.receiptId, verifier: verifier.did, method: verInput.method, outputHash: verInput.outputHash, result: verInput.result, signature },
+    });
+    expect(res.status).toBe(409);
+    expect((res.json as { error: { code: string } }).error.code).toBe("RECEIPT_NOT_FINALIZED");
+  });
+
+  it("rejects an outputHash that doesn't match the receipt", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: "sha256:not_the_real_output", result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("VERIFICATION_TARGET_MISMATCH");
+  });
+
+  it("rejects a request not signed by the named verifier", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    const impostor = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await call("POST", "/v1/agents", { keypair: impostor, idempotencyKey: `reg:${impostor.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: impostor,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(403);
+    expect((res.json as { error: { code: string } }).error.code).toBe("NOT_VERIFIER");
+  });
+
+  it("rejects a forged signature", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    const impostor = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(impostor, input); // signed by the wrong key
+    const res = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("INVALID_VERIFICATION_SIGNATURE");
+  });
+
+  it("rejects an unsupported method", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "tee_attestation", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("UNSUPPORTED_VERIFICATION_METHOD");
+  });
+
+  it("rejects resubmitting byte-identical content", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const body = { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature };
+    await call("POST", "/v1/verifications", { keypair: verifier, idempotencyKey: `verify-a:${Date.now()}`, body });
+    const res = await call("POST", "/v1/verifications", { keypair: verifier, idempotencyKey: `verify-b:${Date.now()}`, body });
+    expect(res.status).toBe(409);
+    expect((res.json as { error: { code: string } }).error.code).toBe("DUPLICATE_VERIFICATION");
+  });
+
+  it("records a rejected verification without any reputation boost", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "agent_attestation", outputHash: receipt.result.outputHash, result: "rejected" };
+    const { signature } = await signVerification(verifier, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect((res.json as { result: string }).result).toBe("rejected");
+
+    const rep = await call("GET", `/v1/agents/${provider.did}/reputation`);
+    expect((rep.json as { components: { attestedReceipts: number } }).components.attestedReceipts).toBe(0);
+  });
+
+  it("does not let a verified attestation resurrect a since-disputed receipt's reputation contribution", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const submitRes = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    const verificationId = (submitRes.json as { verificationId: string }).verificationId;
+
+    const before = await call("GET", `/v1/agents/${provider.did}/reputation`);
+    expect((before.json as { components: { attestedReceipts: number } }).components.attestedReceipts).toBe(1);
+
+    const disputeRes = await call("POST", `/v1/receipts/${encodeURIComponent(receipt.receiptId)}/dispute`, {
+      keypair: requester,
+      idempotencyKey: `dispute:${Date.now()}`,
+      body: { reason: "output did not match what was agreed" },
+    });
+    expect(disputeRes.status).toBe(200);
+
+    const after = await call("GET", `/v1/agents/${provider.did}/reputation`);
+    const afterJson = after.json as { components: { attestedReceipts: number }; flags: string[] };
+    expect(afterJson.components.attestedReceipts).toBe(0);
+    expect(afterJson.flags).toContain("in_dispute");
+
+    // The Verification record itself is untouched — still queryable evidence.
+    const verGet = await call("GET", `/v1/verifications/${encodeURIComponent(verificationId)}`);
+    expect((verGet.json as { result: string }).result).toBe("verified");
   });
 });

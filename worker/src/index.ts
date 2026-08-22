@@ -7,6 +7,7 @@ import { ApiError, badRequest } from "./errors.js";
 import * as agentService from "./agentService.js";
 import * as receiptService from "./receiptService.js";
 import * as jobService from "./jobService.js";
+import * as verificationService from "./verificationService.js";
 import { computeReputation } from "./reputationService.js";
 import type { AppEnv } from "./types.js";
 
@@ -30,6 +31,8 @@ const PUBLIC_READ_PATHS = [
   "/v1/jobs/search",
   "/v1/jobs/:id",
   "/v1/receipts/:id",
+  "/v1/receipts/:id/verifications",
+  "/v1/verifications/:id",
 ];
 // /v1/jobs/:id/offers is GET *and* POST at the same path — a blanket .use()
 // would wrongly hand CORS headers to the signed POST too, so it's applied
@@ -162,6 +165,8 @@ app.post("/v1/receipts", requireSignedRequest, rateLimitWriteByAgent, requireIde
 
 app.get("/v1/receipts/:id", async (c) => c.json(await receiptService.getReceipt(c.env, c.req.param("id")!)));
 
+app.get("/v1/receipts/:id/verifications", async (c) => c.json({ verifications: await verificationService.listByReceipt(c.env, c.req.param("id")!) }));
+
 app.post("/v1/receipts/:id/countersign", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   const body = c.get("parsedBody") as { signature?: string } | undefined;
   if (!body?.signature) throw badRequest("VALIDATION_ERROR", "signature is required");
@@ -175,5 +180,18 @@ app.post("/v1/receipts/:id/dispute", requireSignedRequest, rateLimitWriteByAgent
   const receipt = await receiptService.openDispute(c.env, c.req.param("id")!, c.get("agentDid")!, body.reason);
   return c.json(receipt);
 });
+
+// ---- Verifications (SPEC.md §12) ----
+
+app.post("/v1/verifications", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  const body = c.get("parsedBody") as (verificationService.SubmitVerificationInput & Record<string, unknown>) | undefined;
+  if (!body?.receiptId || !body?.verifier || !body?.method || !body?.outputHash || !body?.result || !body?.signature) {
+    throw badRequest("VALIDATION_ERROR", "receiptId, verifier, method, outputHash, result, and signature are required");
+  }
+  const record = await verificationService.submitVerification(c.env, c.get("agentDid")!, body);
+  return c.json(record, 201);
+});
+
+app.get("/v1/verifications/:id", async (c) => c.json(await verificationService.getVerification(c.env, c.req.param("id")!)));
 
 export default app;

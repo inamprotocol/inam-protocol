@@ -1,7 +1,17 @@
 import { canonicalize } from "./crypto/canonical.js";
 import { sha256Hex, sign, toBase64, type Keypair } from "./crypto/keys.js";
 import { buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";
-import type { AgentRecord, ExecutionReceipt, ExternalKeyType, JobOffer, JobRecord, LinkChallenge, ReputationResult } from "./types.js";
+import { buildSignableVerificationContent, type VerificationContentInput } from "./core/verificationContent.js";
+import type {
+  AgentRecord,
+  ExecutionReceipt,
+  ExternalKeyType,
+  JobOffer,
+  JobRecord,
+  LinkChallenge,
+  ReputationResult,
+  VerificationRecord,
+} from "./types.js";
 
 /**
  * Minimal reference client — the seed of the future `@inamprotocol/agent-sdk`
@@ -95,6 +105,10 @@ export class InamClient {
     return this.request("GET", `/v1/agents/${encodeURIComponent(id)}/reputation`);
   }
 
+  getReceipt(receiptId: string): Promise<ExecutionReceipt> {
+    return this.request("GET", `/v1/receipts/${encodeURIComponent(receiptId)}`);
+  }
+
   listReceipts(agentId: string): Promise<{ receipts: ExecutionReceipt[] }> {
     return this.request("GET", `/v1/agents/${encodeURIComponent(agentId)}/receipts`);
   }
@@ -165,5 +179,32 @@ export class InamClient {
     return this.request("POST", `/v1/jobs/${encodeURIComponent(jobId)}/cancel`, undefined, {
       idempotencyKey: `cancel:${jobId}`,
     });
+  }
+
+  // ---- Verification (SPEC.md §12) — independent attestation of a finalized receipt ----
+
+  /** Called by the verifier (who must not be the receipt's own provider/agentB).
+   * `jobId`/`provider` are derived from the referenced receipt (fetched here)
+   * rather than taken as caller input — the server independently derives the
+   * same values and would reject a signature built over the wrong ones, so
+   * there's no correct way for a caller to supply them manually anyway. */
+  async submitVerification(input: Omit<VerificationContentInput, "verifier" | "jobId" | "provider">): Promise<VerificationRecord> {
+    const receipt = await this.getReceipt(input.receiptId);
+    const content = buildSignableVerificationContent({ ...input, jobId: receipt.jobId, provider: receipt.agentB.id, verifier: this.did });
+    const signature = toBase64(sign(new TextEncoder().encode(canonicalize(content)), this.keypair.privateKey));
+    return this.request(
+      "POST",
+      "/v1/verifications",
+      { receiptId: input.receiptId, verifier: this.did, method: input.method, outputHash: input.outputHash, result: input.result, score: input.score, evidenceUri: input.evidenceUri, signature },
+      { idempotencyKey: `verification:${content.verificationId}` },
+    );
+  }
+
+  getVerification(id: string): Promise<VerificationRecord> {
+    return this.request("GET", `/v1/verifications/${encodeURIComponent(id)}`);
+  }
+
+  listReceiptVerifications(receiptId: string): Promise<{ verifications: VerificationRecord[] }> {
+    return this.request("GET", `/v1/receipts/${encodeURIComponent(receiptId)}/verifications`);
   }
 }

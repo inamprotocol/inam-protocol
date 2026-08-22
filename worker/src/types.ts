@@ -66,6 +66,10 @@ export interface ReputationComponents {
   volumeUsd: number;
   stakeUsd: number;
   decayHalfLifeDays: number;
+  /** Count of finalized receipts backed by at least one `verified` Verification
+   * (SPEC.md §12.5) — distinct from `verifiedReceipts` above, which really
+   * means "two-party finalized," not independently attested. */
+  attestedReceipts: number;
 }
 
 export interface ReputationResult {
@@ -94,6 +98,28 @@ export interface JobRecord {
   receiptId?: string;
   createdAt: string;
   expiresAt?: string;
+}
+
+/** SPEC.md §12: independent attestation that a finalized receipt's output
+ * actually satisfies its job's requirements. Single verifier, no
+ * draft/countersign step — complete and signed on submission. */
+export type IndependentVerificationMethod = "deterministic" | "agent_attestation";
+export type VerificationResult = "verified" | "rejected";
+
+export interface VerificationRecord {
+  verificationVersion: "1.0";
+  verificationId: string;
+  receiptId: string;
+  jobId: string;
+  provider: string;
+  verifier: string;
+  method: IndependentVerificationMethod;
+  outputHash: string;
+  result: VerificationResult;
+  score?: number;
+  evidenceUri?: string;
+  createdAt: string;
+  signature: string;
 }
 
 export interface Env {

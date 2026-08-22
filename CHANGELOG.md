@@ -4,6 +4,14 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.5 (Draft) — 2026-08-22
+- Added the **Verification** resource (§12): a single independent verifier's signed attestation that a finalized receipt's output satisfies its job's requirements — the enforcement mechanism `verification.method: independent_validator`/`test_suite_pass` never had, called out as a gap since v0.1.
+- Deliberately narrow v0.1 scope, agreed with the user before implementation started: exactly one verifier per verification (no multi-verifier consensus), `provider != verifier` strictly enforced (the core collusion guard), only `deterministic`/`agent_attestation` methods, **no new dispute mechanism** — reuses the existing receipt dispute state (§4.3) rather than inventing a second one, and a `verified` Verification's reputation contribution disappears automatically the moment its receipt is disputed (the reputation computation's `finalized` filter already excludes disputed receipts — no separate check needed). No verifier-side reputation yet.
+- Reputation linkage: `computeReputation` (§5.2) applies a weight multiplier to a finalized, non-disputed receipt with at least one `verified` Verification, and reports the count as a new `attestedReceipts` component (§5.3) — no second event ledger, same principle as §5.1.
+- New error codes: `RECEIPT_NOT_FINALIZED`, `NOT_VERIFIER`, `SELF_VERIFICATION`, `VERIFICATION_TARGET_MISMATCH`, `UNSUPPORTED_VERIFICATION_METHOD`, `INVALID_VERIFICATION_SIGNATURE`, `DUPLICATE_VERIFICATION`, `VERIFICATION_NOT_FOUND`.
+- Explicitly deferred to a v0.2 backlog (§12.7): multi-verifier consensus, `human_attestation`/`external_attestation` methods (including passthrough for other systems' own attestations), verifier-side reputation, auto-dispute on rejection. A design sketch for these lives in `docs-design/verification-v0.2-backlog.md` — exploratory, not normative.
+- Implemented and verified in all three runtimes (Node, Cloudflare Workers, both SDKs), including a real cross-language proof: a receipt drafted in Python, finalized in TypeScript, then independently verified by a third TypeScript identity — correctly boosting the Python-side provider's reputation (`attestedReceipts` 0→2, `trustScore` 8.7→12.4 in the live demo run).
+
 ### v0.4 (Draft) — 2026-08-22
 - Added external-identity **link challenges** (§2.1): linking `agentpass_id` / `aitp_id` / `passport_id` now requires proving control of the claimed external public key via a single-use, ~60s signed challenge (Ed25519 or P-256) before a registry stores the link — closing the "self-signed unchecked claim" gap explicitly called out since v0.1. `a2a_endpoint` is unaffected (it's a service URL, not a key-derived identity).
 - Wire format aligns with ATTP (`draft-sharif-attp-00`, the trust-transport protocol AgentPass is built on): 32 random bytes hex-encoded, ECDSA-P256 or Ed25519, 64-byte compact `r‖s` signature encoding, canonical low-S required. Documented as best-effort alignment, not a certified ATTP conformance claim.
@@ -28,6 +36,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.3.0 — 2026-08-22
+- Added the Verification resource (SPEC.md §12): `client.submitVerification()`, `client.getVerification()`, `client.listReceiptVerifications()`, plus `sdk-js/src/core/verificationContent.ts` (`computeVerificationId`/`buildSignableVerificationContent` — same content-addressing pattern as receipts). `submitVerification` fetches the referenced receipt itself to derive `jobId`/`provider` rather than trusting caller input, since the server independently re-derives the same values and would reject a signature built over the wrong ones.
+- Also added `client.getReceipt(id)` — a pre-existing gap (`GET /v1/receipts/:id` had no client method at all) found and fixed while wiring `submitVerification`.
+
 ### 0.2.0 — 2026-08-22
 - Added external-identity link-challenge support (SPEC.md §2.1): `client.requestLinkChallenge()` / `client.completeLink()`, plus the underlying crypto — `sdk-js/src/crypto/p256.ts` (new: ECDSA P-256 sign/verify via `@noble/curves`, 64-byte compact `r‖s` format matching ATTP), and `verifyRawEd25519`/`toHex`/`fromHex` added to `crypto/keys.ts`.
 - New dependency: `@noble/curves`.
@@ -37,6 +49,13 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.5.0 — 2026-08-22 (Verification v0.1)
+- Added the Verification resource end-to-end (SPEC.md §12) in both runtimes: `POST /v1/verifications`, `GET /v1/verifications/:id`, `GET /v1/receipts/:id/verifications`. Worker stores verifications in a new `verifications` D1 table (plain `INSERT`, no compare-and-swap needed — a verification never transitions state after creation, unlike jobs/receipts); Node uses the same `JsonStore` pattern as everything else.
+- `reputationService` (both runtimes): a finalized, non-disputed receipt backed by a `verified` Verification gets a 1.5x weight multiplier; a new `attestedReceipts` component reports the count for auditability. A `rejected` Verification applies no weight change (evidence only, scoring-neutral in this version).
+- Node: 10 service-level tests (`tests/verificationFlow.test.ts`) + an HTTP smoke test (`scripts/verification-smoke-test.ts`, runnable against either runtime via `INAM_URL` — used to prove Node/Worker behavioral parity). Worker: the same 10 cases ported to `worker/tests/api.test.ts` (31 tests total after the port), including the concurrent-duplicate-submission race case.
+- Cross-language proof beyond the existing fixed-vector interop test: `scripts/interop-phase-d-verify.ts` (new phase D of the TS↔Python demo) has a fresh, independent TypeScript-side verifier submit a Verification against a receipt that was drafted in Python and finalized in TypeScript — a real object touched by both SDKs, not just parallel same-input vectors. Confirmed live: `attestedReceipts` 0→2 and `trustScore` 8.7→12.4 on the Python worker's reputation.
+- Deployed live: D1 migration applied to production (`verifications` table, additive), Worker deployed and re-verified against `https://api.inamprotocol.org`.
 
 ### 0.4.0 — 2026-08-22 (Phase 4: external identity link challenges)
 - Added the external-identity link-challenge flow end-to-end (SPEC.md §2.1) in both runtimes: `POST /agents/:id/link/challenge` issues a single-use, ~60s Ed25519/P-256 challenge; `POST /agents/:id/link` now requires proof of control (`challengeId` + `proofSignature`) for `agentpass_id`/`aitp_id`/`passport_id` — `a2a_endpoint` is unchanged (plain claim, no key to prove control of).
@@ -67,6 +86,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.4.0 — 2026-08-22
+- Added the Verification resource (SPEC.md §12): `submit_verification()`, `get_verification()`, `list_receipt_verifications()`, plus `inamprotocol/verification.py` (`compute_verification_id`/`build_signable_verification_content`, mirroring `sdk-js/src/core/verificationContent.ts`). Also added `get_receipt(receipt_id)` (same pre-existing gap as the TS SDK).
+- New `tests/test_verification_interop.py`: a fixed-vector cross-language test (ground truth generated once by `scripts/interop-vectors.ts`) proving `compute_verification_id`, the canonical JSON of the signed content, and the Ed25519 signature are all byte-identical to the TypeScript SDK for the same input and key — the real acceptance bar for this being one protocol rather than two similar SDKs.
+- New `examples/verification_demo.py`.
 
 ### 0.3.0 — 2026-08-22
 - Added external-identity link-challenge support: `request_link_challenge()` / `complete_link()`, plus new `inamprotocol/p256.py` (ECDSA P-256 sign/verify, wrapping `cryptography`'s DER API into the 64-byte compact `r‖s` format ATTP and `sdk-js` use) and `verify_raw_ed25519`/`to_hex`/`from_hex` in `keys.py`. `sdk-python/examples/link_challenge_demo.py` demonstrates both key types against a live server.
