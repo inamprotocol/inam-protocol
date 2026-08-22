@@ -1,6 +1,12 @@
-# INAM Protocol — Specification v0.1 (Draft)
+# INAM Protocol — Specification v0.2 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, file-backed storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`src/crypto/`, `src/core/receiptContent.ts`) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+
+**Changes from v0.1:** normative (MUST/SHOULD/MAY) language throughout, replacing descriptive prose where conformance actually matters (§2 identity/linking, §3.3 lifecycle transitions, §5 endpoint requirements, §6 signing); documented the rate limiting and CORS policies added during the v0.1→v0.2 hardening pass, including the `RATE_LIMITED` error code; documented the second live deployment (Cloudflare Workers) and its custom domain. No wire-format break — `receiptVersion` stays `"1.0"`.
+
+### Keyword conventions
+
+The key words **MUST**, **MUST NOT**, **SHOULD**, **SHOULD NOT**, and **MAY** in this document are to be interpreted as described in [RFC 2119](https://www.rfc-editor.org/rfc/rfc2119): MUST/MUST NOT mark conformance requirements every registry has to meet for interoperability; SHOULD/SHOULD NOT mark strong defaults a registry can deviate from with a documented reason; MAY marks a genuine implementation choice. Where a section describes the reference implementation's specific algorithm (e.g. the exact reputation formula in §4.2) rather than a conformance requirement, that's called out explicitly — registries are free to compute reputation differently as long as the response shape (§4.3) and its auditability are honored.
 
 ## 0. Positioning
 
@@ -30,7 +36,7 @@ An INAM ID is a [`did:key`](https://w3c-ccg.github.io/did-method-key/) built fro
 did:key:z<base58btc(multicodec(0xed01) || raw Ed25519 public key)>
 ```
 
-This is self-certifying: any verifier can validate a signature against an INAM ID without looking anything up in a registry — the public key is embedded in the identifier itself. A registry is only needed to learn an agent's *reputation*, *capabilities*, or *linked external identities*, never to validate that a signature belongs to a given ID.
+This is self-certifying: any verifier can validate a signature against an INAM ID without looking anything up in a registry — the public key is embedded in the identifier itself. A verifier **MUST** be able to validate a signature against an INAM ID using only the ID and RFC 8032 Ed25519 verification — it **MUST NOT** need to query a registry to do so. A registry is only needed to learn an agent's *reputation*, *capabilities*, or *linked external identities*.
 
 An agent's registry profile also carries a `linked` map to identities issued by other systems:
 
@@ -49,7 +55,7 @@ An agent's registry profile also carries a `linked` map to identities issued by 
 }
 ```
 
-**Not yet enforced:** `linked` entries are accepted as a self-signed claim (the request is signed by the INAM ID doing the linking) but the registry does not perform a challenge-response round trip against AgentPass/AITP/Passport Alliance to confirm the caller actually controls that external identity. Treat `linked` as "claimed," not "proven," until that challenge-response step ships.
+A registry **MUST** verify that a `POST /agents/:id/link` request is signed by the same INAM ID it targets (§6) before storing a `linked` entry — this proves control of the *INAM* ID, not control of the external identity being claimed. **Not yet enforced:** a registry does not currently perform a challenge-response round trip against AgentPass/AITP/Passport Alliance to confirm the caller actually controls that external identity too. Until that ships, a consuming client **MUST NOT** treat `linked` as verified — it **SHOULD** be surfaced as "claimed," not "proven."
 
 ## 3. Execution Receipt
 
@@ -86,7 +92,7 @@ receiptId = "sha256:" + hex(sha256(canonical({
 })))
 ```
 
-`canonical()` is the recursive key-sorted, whitespace-free JSON serializer defined in `src/crypto/canonical.ts` — a practical subset of RFC 8785 (JCS), not full JCS. Both the worker and the registry compute this independently and must agree; there is no server-assigned random ID. Two independent submissions of byte-identical content always collide on the same `receiptId` — the registry treats a repeat as `DUPLICATE_RECEIPT`, not a new record.
+`canonical()` is the recursive key-sorted, whitespace-free JSON serializer defined in `src/crypto/canonical.ts` — a practical subset of RFC 8785 (JCS), not full JCS. A registry **MUST NOT** assign its own random receipt ID — `receiptId` **MUST** be computed exactly as above, and every conforming SDK **MUST** implement byte-identical `canonical()` output (see §7) so two independent parties always derive the same ID from the same content. A registry **MUST** treat a resubmission of byte-identical content as `DUPLICATE_RECEIPT`, not a new record — this follows automatically from using `receiptId` as the primary key rather than an accident of the reference implementation.
 
 ### 3.3 Lifecycle
 
@@ -94,9 +100,11 @@ receiptId = "sha256:" + hex(sha256(canonical({
 draft ──(agent_a countersigns)──▶ finalized ──(either party, within window)──▶ disputed
 ```
 
-1. **Draft.** The worker (`agent_b`) signs the canonical content (everything above except `signatures`, `status`, `dispute`) with its own key and submits it. A unilateral submission is never enough on its own — `status: "draft"` does not count toward reputation.
-2. **Finalized.** The requester (`agent_a`) reviews and countersigns the *same* canonical content. Only once both signatures verify does `status` become `"finalized"` and a `dispute.windowClosesAt` (default 72h) is set. This is the point a receipt becomes reputation-eligible.
-3. **Disputed.** Either party may open a dispute before the window closes. A disputed receipt is excluded from the positive side of the reputation calculation and the agent's reputation response is flagged `in_dispute`.
+1. **Draft.** The worker (`agent_b`) signs the canonical content (everything above except `signatures`, `status`, `dispute`) with its own key and submits it. A registry **MUST NOT** count a `draft` receipt toward reputation — a unilateral submission from either side is never sufficient on its own.
+2. **Finalized.** The requester (`agent_a`) reviews and countersigns the *same* canonical content. A registry **MUST** verify both signatures against the identical canonical content before setting `status: "finalized"` — it **MUST NOT** finalize on a single valid signature. Only once both verify does a `dispute.windowClosesAt` (default 72h) get set. This is the point a receipt becomes reputation-eligible.
+3. **Disputed.** Either party **MAY** open a dispute before the window closes. A registry **MUST** exclude a disputed receipt from the positive side of the reputation calculation and **MUST** flag the agent's reputation response `in_dispute`.
+
+A registry **MUST** treat the `draft`→`finalized` and `finalized`→`disputed` transitions as atomic compare-and-swap operations (transition only if the receipt is still in the expected prior state at write time), not read-then-write — concurrent requests targeting the same receipt are expected, and a race that lets two conflicting writes both succeed is a conformance bug, not an edge case to shrug off. `worker/src/db.ts`'s `finalizeReceiptIfDraft`/`disputeReceiptIfFinalized` are the reference implementation of this requirement.
 
 Both signatures are independently verifiable by anyone holding the JSON — a receipt does not need the issuing registry to be trusted or even online to be checked.
 
@@ -108,7 +116,9 @@ There is no separate "reputation event" ledger distinct from receipts. A finaliz
 
 ### 4.2 Scoring
 
-For an agent, reputation is computed on demand (not cached/stored) from every `finalized`/`disputed` receipt it is party to:
+This section describes the reference implementation's algorithm, not a conformance requirement — a registry **MAY** compute `trustScore` differently as long as §4.3's response shape and the auditability principle below are honored: a registry **MUST NOT** report `trustScore` without also reporting the `components` that justify it, so a low-confidence score for a sparse-history agent is distinguishable from a bad one, not just an opaque number to trust blindly.
+
+For an agent, the reference implementation computes reputation on demand (not cached/stored) from every `finalized`/`disputed` receipt it is party to:
 
 - **Counterparty-trust weighting.** Each receipt's contribution is weighted by the counterparty's own independently-computed base trust (stake + volume + success ratio) — a one-step relaxation of a full EigenTrust fixed-point solve. **Not yet enforced at full strength:** this is single-pass, not an iterative solve over the whole interaction graph; that upgrade is deferred until there's enough transaction volume for it to matter.
 - **Sub-linear pair weighting.** Total weight contributed by one counterparty grows with `log(pairCount)`, not linearly — repeated receipts between the same two agents (wash-trading pattern) saturate instead of compounding.
@@ -138,7 +148,7 @@ For an agent, reputation is computed on demand (not cached/stored) from every `f
 
 ## 5. REST API
 
-Base path `/v1`. `(signed)` endpoints require the headers in §6 and an `Idempotency-Key` header.
+Base path `/v1`. A `(signed)` endpoint **MUST** reject a request missing a valid signature (§6) or `Idempotency-Key` header — these are conformance requirements, not defaults a registry can silently relax. A registry **MUST** implement every endpoint below with the request/response shapes given; it **MAY** add endpoints beyond this list (e.g. its own admin/billing routes) but **MUST NOT** repurpose these paths for something incompatible with this spec.
 
 | Method & path | Description |
 |---|---|
@@ -182,19 +192,21 @@ inam-signature:  base64(Ed25519(
                   ))
 ```
 
-`fullPath` is the complete request path including any mount prefix (e.g. `/v1/agents/:id/link`), not a router-relative path — implementers behind a sub-router must sign/verify against the full original URL. The registry rejects requests whose timestamp is more than 5 minutes (default) from server time, to bound replay.
+`fullPath` **MUST** be the complete request path including any mount prefix (e.g. `/v1/agents/:id/link`), not a router-relative path — implementers behind a sub-router **MUST** sign/verify against the full original URL, or every signature on a sub-routed endpoint fails to verify (this broke the reference implementation once; see `worker/src/signedRequest.ts`'s doc comment). A registry **MUST** reject a request whose timestamp is outside its configured clock-skew window (5 minutes in the reference implementation) to bound replay; it **SHOULD** use a window in that range — wide enough to tolerate real clock drift, narrow enough that a captured request/signature can't be replayed indefinitely.
 
-Idempotency: mutating endpoints require an `Idempotency-Key` header; a repeated `(caller, key)` pair replays the cached response instead of re-executing.
+Idempotency: a mutating endpoint **MUST** require an `Idempotency-Key` header and **MUST** replay the cached response for a repeated `(caller, key)` pair instead of re-executing the operation.
 
 ## 7. SDK architecture
 
-An INAM SDK, in any language, must provide:
+An INAM SDK, in any language, **MUST** provide:
 
 1. **Keypair generation and INAM ID encoding** (§2) — `did:key` from an Ed25519 public key.
-2. **Canonical JSON serialization** (§3.2) matching `src/crypto/canonical.ts` byte-for-byte — this is the one piece of logic that must be identical across every language implementation, since two SDKs disagreeing on canonicalization would sign/verify different bytes for what looks like the same receipt.
+2. **Canonical JSON serialization** (§3.2) matching `src/crypto/canonical.ts` **byte-for-byte** — this is the one piece of logic that **MUST** be identical across every language implementation; two SDKs disagreeing here sign/verify different bytes for what looks like the same receipt, and neither will notice until a cross-SDK countersign fails.
 3. **Request signing** per §6.
 4. **Receipt content + ID construction** per §3.2 (see `src/core/receiptContent.ts` for the reference logic).
 5. A thin client wrapping the REST calls in §5: `registerAgent`, `getAgent`, `linkIdentity`, `searchAgents`, `getReputation`, `listReceipts`, `submitWork` (draft), `acceptWork` (countersign), `disputeReceipt`.
+
+An SDK **SHOULD** ship a fixed-vector interop test — sign/canonicalize a known payload with a known test key and compare byte-for-byte against a value generated by another language's SDK — rather than relying on end-to-end demos alone to catch a canonicalization drift. `sdk-python/tests/test_interop.py` and `scripts/interop-vectors.ts` are the reference pattern.
 
 Reference implementations: `src/sdk/client.ts` (TypeScript, `InamClient`) and `sdk-python/inamprotocol/client.py` (Python, `InamClient`). Cross-language interop is a first-class correctness requirement — a receipt drafted by the Python SDK must countersign correctly against a TypeScript client and vice versa, because both compute the identical canonical bytes.
 

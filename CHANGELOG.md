@@ -2,6 +2,16 @@
 
 Each package in this repo (Node reference server, Cloudflare Worker, Python SDK) versions independently — they're separate deployables, not a single product release. Protocol-level compatibility is tracked separately: `receiptVersion` in the wire format, and the spec version at the top of `SPEC.md`.
 
+## Protocol specification (`SPEC.md`)
+
+### v0.2 (Draft) — 2026-08-22
+- Normative language pass: RFC 2119 (MUST/SHOULD/MAY) keywords applied throughout, distinguishing hard conformance requirements (identity self-certification, receipt signature verification, atomic lifecycle transitions, endpoint/signing requirements) from reference-implementation-specific detail (the exact reputation formula, which a registry MAY compute differently as long as the response shape stays auditable).
+- Documented the rate limiting and CORS policies, the `RATE_LIMITED` error code, and the second live Cloudflare Workers deployment with its custom domain (`api.inamprotocol.org`).
+- No wire-format break — `receiptVersion` stays `"1.0"`.
+
+### v0.1 (Draft) — 2026-08-21
+- Initial specification: positioning, INAM ID (`did:key`), Execution Receipt schema/lifecycle, reputation model, REST API, request signing, SDK architecture requirements, explicit non-goals, relationship to other protocols.
+
 ## Node reference server & Cloudflare Worker
 
 ### 0.2.0 — 2026-08-22 (Phase 1 hardening)
