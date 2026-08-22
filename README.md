@@ -47,6 +47,7 @@ npm run db:init:remote    # apply schema.sql to the real remote D1 database
 - `src/crypto/` — `did:key` (Ed25519) encode/decode, signing/verification, a JCS-subset canonical JSON serializer.
 - `src/middleware/signedRequest.ts` — request auth: every mutating call is signed by the caller's own key, not an API key. Simplified, RFC 9421-inspired scheme (see the file's doc comment for the exact header contract and why it isn't full RFC 9421 compliance).
 - `src/services/receiptService.ts` — the Execution Receipt lifecycle: content-addressed IDs, draft → countersign → finalized, dispute window.
+- `src/services/jobService.ts` — the optional Job resource (SPEC.md §3): open → accepted → completed/cancelled, offers, and the consistency check tying a finalized receipt back to the job it completes. Node reference server only for now — not yet ported to `worker/` or either SDK.
 - `src/services/reputationService.ts` — the sybil-resistant scoring engine: counterparty-trust weighting, sub-linear pair weighting (wash-trading resistance), time decay, stake component, concentrated-counterparty flag.
 - `src/core/receiptContent.ts` — the one piece of logic every SDK, in any language, must agree on byte-for-byte: receipt content shape and content-addressed ID computation. Shared by the server (`receiptService.ts`) and the TS SDK; the Python SDK has its own line-for-line port (`sdk-python/inamprotocol/receipt.py`).
 - `src/sdk/client.ts` — `InamClient`, the seed of the future `@inamprotocol/agent-sdk` package. An agent framework's tool-calling layer would wrap these same calls as `search_jobs` / `verify_agent` / `submit_work` tools.
@@ -66,6 +67,14 @@ GET  /agents/:id/reputation
 GET  /agents/:id/receipts
 GET  /agents/search?capability=&min_reputation=&supports=
 POST /agents/:id/link            (signed)
+
+POST /jobs                        post an open job (signed) — Node reference server only, see below
+GET  /jobs/:id
+GET  /jobs/search?capability=&status=
+POST /jobs/:id/offers             (signed)
+GET  /jobs/:id/offers
+POST /jobs/:id/accept             poster only (signed)
+POST /jobs/:id/cancel             poster only (signed)
 
 POST /receipts                    submit draft, agent_b's signature (signed)
 GET  /receipts/:id
