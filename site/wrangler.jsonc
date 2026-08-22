@@ -1,0 +1,12 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "inam-protocol-site",
+  "compatibility_date": "2025-01-01",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public"
+  },
+  "routes": [
+    { "pattern": "inamprotocol.org", "custom_domain": true }
+  ]
+}
