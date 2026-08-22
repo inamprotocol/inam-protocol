@@ -9,7 +9,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - A receipt whose `jobId` *does* reference a Job now has its parties validated against that job's poster/accepted-worker (`JOB_NOT_ACCEPTED`, `JOB_PARTY_MISMATCH`), and finalizing it automatically completes the job.
 - New error codes: `JOB_NOT_FOUND`, `JOB_NOT_OPEN`, `JOB_NOT_ACCEPTED`, `JOB_NOT_CANCELLABLE`, `JOB_PARTY_MISMATCH`, `NOT_POSTER`, `OFFER_NOT_FOUND`, `OFFER_ALREADY_SUBMITTED`.
 - Sections renumbered (Job inserted as §3; everything from the old §3 onward shifts by one) — no change to any existing field name or wire format.
-- Implemented in the Node reference server only; Cloudflare Worker and both SDKs not yet ported (tracked in §10).
+- Implemented and verified in all three runtimes (Node, Cloudflare Workers, and both SDKs), including against the live deployment.
 
 ### v0.2 (Draft) — 2026-08-22
 - Normative language pass: RFC 2119 (MUST/SHOULD/MAY) keywords applied throughout, distinguishing hard conformance requirements (identity self-certification, receipt signature verification, atomic lifecycle transitions, endpoint/signing requirements) from reference-implementation-specific detail (the exact reputation formula, which a registry MAY compute differently as long as the response shape stays auditable).
@@ -21,9 +21,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Node reference server & Cloudflare Worker
 
-### 0.3.0 (Node reference server only) — 2026-08-22
-- Added the Job resource end-to-end: `src/services/jobService.ts`, `src/routes/jobs.ts`, storage, tests (`tests/jobFlow.test.ts`, `scripts/job-smoke-test.ts`), wired into the receipt lifecycle (job auto-completes on receipt finalize; parties validated against the job when one is referenced).
-- The Cloudflare Worker stays at 0.2.0 until this is ported — see SPEC.md §10.
+### 0.3.0 — 2026-08-22
+- Added the Job resource end-to-end in both runtimes: `src/services/jobService.ts` (Node) and `worker/src/jobService.ts` (Worker, D1-backed — offers live in their own `job_offers` table specifically to avoid a read-modify-write race on a shared JSON blob when two agents offer concurrently), wired into the receipt lifecycle (job auto-completes on receipt finalize; parties validated against the job when one is referenced).
+- Tests: `tests/jobFlow.test.ts` (service layer) + `scripts/job-smoke-test.ts` (Node, real HTTP) + `worker/tests/api.test.ts` additions (Worker, including a concurrent-accept race regression test) + `scripts/worker-smoke-test.ts` additions, run against both local and the live deployment.
+- Also fixed an unrelated flaky test (`worker/tests/api.test.ts`'s rate-limit test used a hardcoded fixed IP that could pick up residual state from local Miniflare's on-disk persistence across separate test runs).
 
 ### 0.2.0 — 2026-08-22 (Phase 1 hardening)
 - Fixed a TOCTOU race in receipt countersign/dispute on D1 (compare-and-swap via `UPDATE ... WHERE status=X` + `meta.changes` check).
@@ -39,6 +40,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.2.0 — 2026-08-22
+- Added Job resource methods (`post_job`, `get_job`, `search_jobs`, `submit_offer`, `list_offers`, `accept_offer`, `cancel_job`) — `sdk-python/examples/job_demo.py` demonstrates the full flow, verified against both the local Node server and the live Cloudflare deployment.
+- Fixed a latent bug in `register_agent` (and applied the same fix to the new `submit_offer`): an omitted optional field was being sent as JSON `null` instead of leaving the key out entirely. Python's `json.dumps` serializes `None` as `null`, unlike JS's `JSON.stringify`, which drops `undefined`-valued keys — the server's zod schemas treat these fields as optional-if-absent, not nullable, so a literal `null` failed validation.
 
 ### 0.1.1 — 2026-08-22
 - Set an honest custom User-Agent (`inamprotocol-python-sdk/0.1.0`) — Cloudflare's bot protection on `*.workers.dev` was flagging the default `Python-urllib/x.y` User-Agent.

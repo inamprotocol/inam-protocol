@@ -16,6 +16,10 @@ const SCHEMA_STATEMENTS = [
   "CREATE TABLE IF NOT EXISTS receipts (receipt_id TEXT PRIMARY KEY, agent_a_id TEXT NOT NULL REFERENCES agents(id), agent_b_id TEXT NOT NULL REFERENCES agents(id), status TEXT NOT NULL, completed_at TEXT NOT NULL, amount_usd REAL NOT NULL DEFAULT 0, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_a ON receipts(agent_a_id)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_b ON receipts(agent_b_id)",
+  "CREATE TABLE IF NOT EXISTS jobs (job_id TEXT PRIMARY KEY, posted_by TEXT NOT NULL REFERENCES agents(id), capability TEXT NOT NULL, spec_hash TEXT NOT NULL, budget_amount TEXT, budget_currency TEXT, status TEXT NOT NULL, accepted_agent_id TEXT, receipt_id TEXT, created_at TEXT NOT NULL, expires_at TEXT)",
+  "CREATE INDEX IF NOT EXISTS idx_jobs_capability_status ON jobs(capability, status)",
+  "CREATE INDEX IF NOT EXISTS idx_jobs_posted_by ON jobs(posted_by)",
+  "CREATE TABLE IF NOT EXISTS job_offers (job_id TEXT NOT NULL REFERENCES jobs(job_id), agent_id TEXT NOT NULL, message TEXT, created_at TEXT NOT NULL, PRIMARY KEY (job_id, agent_id))",
 ];
 
 beforeAll(async () => {
@@ -243,7 +247,13 @@ describe("execution receipt lifecycle", () => {
 
 describe("rate limiting", () => {
   it("blocks registration after the per-IP limit is exceeded", async () => {
-    const ip = "203.0.113.55"; // fixed on purpose — this test deliberately exhausts one bucket
+    // Fixed *within this run* on purpose (deliberately exhausts one bucket),
+    // but unique *per run* — a hardcoded literal here would let residual
+    // rate-limit state from local Miniflare's on-disk persistence (.wrangler/state)
+    // leak between separate `vitest run` invocations and make this flaky. The
+    // rate limiter treats this purely as an opaque key, so it need not be a
+    // syntactically valid IP.
+    const ip = `test-fixed-ip-${crypto.randomUUID()}`;
     let lastStatus = 0;
     for (let i = 0; i < 12; i++) {
       const kp = generateKeypair();
@@ -275,5 +285,207 @@ describe("CORS", () => {
     const response = await worker.fetch(request, env, ctx);
     await waitOnExecutionContext(ctx);
     expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+
+  it("sets no CORS header on the mixed GET+POST /jobs/:id/offers path's POST", async () => {
+    const kp = generateKeypair();
+    const request = new Request("http://worker.test/v1/jobs/job_whatever/offers", {
+      method: "POST",
+      headers: { origin: "https://example.com", "content-type": "application/json" },
+      body: JSON.stringify({}),
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.headers.get("access-control-allow-origin")).toBeNull();
+  });
+});
+
+describe("job lifecycle", () => {
+  it("goes open -> accepted -> completed, and rejects the wrong parties along the way", async () => {
+    const poster = generateKeypair();
+    const worker_ = generateKeypair();
+    const stranger = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["translation.tr-en"] } });
+    await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["translation.tr-en"] } });
+
+    const postRes = await call("POST", "/v1/jobs", {
+      keypair: poster,
+      idempotencyKey: `job:${Date.now()}`,
+      body: { capability: "translation.tr-en", specHash: "sha256:spec_job" },
+    });
+    expect(postRes.status).toBe(201);
+    const jobId = (postRes.json as { jobId: string }).jobId;
+
+    const searchRes = await call("GET", "/v1/jobs/search?capability=translation.tr-en&status=open");
+    expect((searchRes.json as { jobs: { jobId: string }[] }).jobs.some((j) => j.jobId === jobId)).toBe(true);
+
+    const selfOffer = await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: poster, idempotencyKey: `o:${Date.now()}`, body: {} });
+    expect(selfOffer.status).toBe(400);
+    expect((selfOffer.json as { error: { code: string } }).error.code).toBe("SELF_DEALING");
+
+    const offerRes = await call("POST", `/v1/jobs/${jobId}/offers`, {
+      keypair: worker_,
+      idempotencyKey: `offer:${Date.now()}`,
+      body: { message: "I can do this" },
+    });
+    expect(offerRes.status).toBe(201);
+
+    const dupOffer = await call("POST", `/v1/jobs/${jobId}/offers`, {
+      keypair: worker_,
+      idempotencyKey: `offer-dup:${Date.now()}`,
+      body: {},
+    });
+    expect(dupOffer.status).toBe(409);
+    expect((dupOffer.json as { error: { code: string } }).error.code).toBe("OFFER_ALREADY_SUBMITTED");
+
+    const wrongAccept = await call("POST", `/v1/jobs/${jobId}/accept`, {
+      keypair: stranger,
+      idempotencyKey: `accept-wrong:${Date.now()}`,
+      body: { agentId: worker_.did },
+    });
+    expect(wrongAccept.status).toBe(403);
+    expect((wrongAccept.json as { error: { code: string } }).error.code).toBe("NOT_POSTER");
+
+    const acceptRes = await call("POST", `/v1/jobs/${jobId}/accept`, {
+      keypair: poster,
+      idempotencyKey: `accept:${Date.now()}`,
+      body: { agentId: worker_.did },
+    });
+    expect(acceptRes.status).toBe(200);
+    expect((acceptRes.json as { status: string }).status).toBe("accepted");
+
+    const { canonicalize } = await import("../../src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../src/core/receiptContent.js");
+    const now = new Date().toISOString();
+    const receiptInput = {
+      jobId,
+      task: { capability: "translation.tr-en", specHash: "sha256:spec_job", createdAt: now },
+      result: { outputHash: "sha256:out_job", completedAt: now },
+      verification: { method: "payer_confirmation", outcome: "success" },
+    };
+    const content = buildSignableContent(poster.did, worker_.did, receiptInput);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", {
+      keypair: worker_,
+      idempotencyKey: `receipt:${jobId}`,
+      body: { ...receiptInput, agentAId: poster.did, signature: draftSig },
+    });
+    expect(draftRes.status).toBe(201);
+    const receipt = draftRes.json as { receiptId: string };
+
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: receipt.receiptId })), poster.privateKey));
+    const finalizeRes = await call("POST", `/v1/receipts/${encodeURIComponent(receipt.receiptId)}/countersign`, {
+      keypair: poster,
+      idempotencyKey: `countersign:${receipt.receiptId}`,
+      body: { signature: counterSig },
+    });
+    expect(finalizeRes.status).toBe(200);
+
+    const jobAfter = await call("GET", `/v1/jobs/${jobId}`);
+    expect((jobAfter.json as { status: string; receiptId?: string }).status).toBe("completed");
+    expect((jobAfter.json as { receiptId?: string }).receiptId).toBe(receipt.receiptId);
+  });
+
+  it("rejects a receipt whose parties don't match the job, and one referencing a not-yet-accepted job", async () => {
+    const poster = generateKeypair();
+    const worker_ = generateKeypair();
+    const impostor = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: impostor, idempotencyKey: `reg:${impostor.did}`, body: { capabilities: ["x"] } });
+
+    const postRes = await call("POST", "/v1/jobs", {
+      keypair: poster,
+      idempotencyKey: `job:${Date.now()}`,
+      body: { capability: "x", specHash: "sha256:spec_open" },
+    });
+    const jobId = (postRes.json as { jobId: string }).jobId;
+
+    const { canonicalize } = await import("../../src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../src/core/receiptContent.js");
+    const now = new Date().toISOString();
+    const receiptInput = {
+      jobId,
+      task: { capability: "x", specHash: "sha256:spec_open", createdAt: now },
+      result: { outputHash: "sha256:out_open", completedAt: now },
+      verification: { method: "payer_confirmation", outcome: "success" },
+    };
+
+    // Not yet accepted at all.
+    const contentNotAccepted = buildSignableContent(poster.did, worker_.did, receiptInput);
+    const sigNotAccepted = toBase64(sign(new TextEncoder().encode(canonicalize({ ...contentNotAccepted, dispute: undefined })), worker_.privateKey));
+    const notAcceptedRes = await call("POST", "/v1/receipts", {
+      keypair: worker_,
+      idempotencyKey: `receipt-na:${Date.now()}`,
+      body: { ...receiptInput, agentAId: poster.did, signature: sigNotAccepted },
+    });
+    expect(notAcceptedRes.status).toBe(409);
+    expect((notAcceptedRes.json as { error: { code: string } }).error.code).toBe("JOB_NOT_ACCEPTED");
+
+    // Accept the real worker, then have an impostor try to submit the receipt.
+    await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: worker_, idempotencyKey: `o:${Date.now()}`, body: {} });
+    await call("POST", `/v1/jobs/${jobId}/accept`, { keypair: poster, idempotencyKey: `a:${Date.now()}`, body: { agentId: worker_.did } });
+
+    const contentImpostor = buildSignableContent(poster.did, impostor.did, receiptInput);
+    const sigImpostor = toBase64(sign(new TextEncoder().encode(canonicalize({ ...contentImpostor, dispute: undefined })), impostor.privateKey));
+    const impostorRes = await call("POST", "/v1/receipts", {
+      keypair: impostor,
+      idempotencyKey: `receipt-imp:${Date.now()}`,
+      body: { ...receiptInput, agentAId: poster.did, signature: sigImpostor },
+    });
+    expect(impostorRes.status).toBe(403);
+    expect((impostorRes.json as { error: { code: string } }).error.code).toBe("JOB_PARTY_MISMATCH");
+  });
+
+  it("lets the poster cancel an open job, and rejects a non-poster's cancel and a re-cancel", async () => {
+    const poster = generateKeypair();
+    const stranger = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["x"] } });
+
+    const postRes = await call("POST", "/v1/jobs", {
+      keypair: poster,
+      idempotencyKey: `job:${Date.now()}`,
+      body: { capability: "x", specHash: "sha256:spec_cancel" },
+    });
+    const jobId = (postRes.json as { jobId: string }).jobId;
+
+    const wrongCancel = await call("POST", `/v1/jobs/${jobId}/cancel`, { keypair: stranger, idempotencyKey: `c-wrong:${Date.now()}`, body: {} });
+    expect(wrongCancel.status).toBe(403);
+
+    const cancelRes = await call("POST", `/v1/jobs/${jobId}/cancel`, { keypair: poster, idempotencyKey: `c:${Date.now()}`, body: {} });
+    expect(cancelRes.status).toBe(200);
+    expect((cancelRes.json as { status: string }).status).toBe("cancelled");
+
+    const reCancel = await call("POST", `/v1/jobs/${jobId}/cancel`, { keypair: poster, idempotencyKey: `c2:${Date.now()}`, body: {} });
+    expect(reCancel.status).toBe(409);
+    expect((reCancel.json as { error: { code: string } }).error.code).toBe("JOB_NOT_CANCELLABLE");
+  });
+
+  it("only lets one of two concurrent accept attempts on the same job succeed", async () => {
+    const poster = generateKeypair();
+    const workerA = generateKeypair();
+    const workerB = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: workerA, idempotencyKey: `reg:${workerA.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: workerB, idempotencyKey: `reg:${workerB.did}`, body: { capabilities: ["x"] } });
+
+    const postRes = await call("POST", "/v1/jobs", {
+      keypair: poster,
+      idempotencyKey: `job:${Date.now()}`,
+      body: { capability: "x", specHash: "sha256:spec_race" },
+    });
+    const jobId = (postRes.json as { jobId: string }).jobId;
+    await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: workerA, idempotencyKey: `oa:${Date.now()}`, body: {} });
+    await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: workerB, idempotencyKey: `ob:${Date.now()}`, body: {} });
+
+    const [a, b] = await Promise.all([
+      call("POST", `/v1/jobs/${jobId}/accept`, { keypair: poster, idempotencyKey: `accept-a:${Date.now()}`, body: { agentId: workerA.did } }),
+      call("POST", `/v1/jobs/${jobId}/accept`, { keypair: poster, idempotencyKey: `accept-b:${Date.now()}`, body: { agentId: workerB.did } }),
+    ]);
+    const statuses = [a.status, b.status].sort();
+    expect(statuses).toEqual([200, 409]);
   });
 });

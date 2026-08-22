@@ -3,6 +3,7 @@ import { canonicalize } from "../../src/crypto/canonical.js";
 import { verify } from "../../src/crypto/keys.js";
 import { buildSignableContent, type ReceiptContentInput } from "../../src/core/receiptContent.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
+import * as jobService from "./jobService.js";
 import type { Env, ExecutionReceipt } from "./types.js";
 
 export type { ReceiptContentInput };
@@ -19,6 +20,7 @@ export async function createDraft(env: Env, callerDid: string, input: CreateDraf
   if (!worker) throw notFound("AGENT_NOT_FOUND", "Worker agent must be registered before submitting receipts");
   if (!requester) throw notFound("AGENT_NOT_FOUND", "Requester agent must be registered");
   if (callerDid === input.agentAId) throw badRequest("SELF_DEALING", "agent_a and agent_b must be different agents");
+  await jobService.assertReceiptMatchesJob(env, input.jobId, input.agentAId, callerDid);
 
   const content = buildSignableContent(input.agentAId, callerDid, input);
 
@@ -72,6 +74,7 @@ export async function countersign(env: Env, receiptId: string, callerDid: string
   if (!applied) {
     throw conflict("NOT_DRAFT", "Receipt was concurrently modified and is no longer in draft state");
   }
+  await jobService.markCompletedByReceipt(env, finalized.jobId, receiptId);
   return finalized;
 }
 

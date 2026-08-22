@@ -1,4 +1,4 @@
-import type { AgentRecord, Env, ExecutionReceipt } from "./types.js";
+import type { AgentRecord, Env, ExecutionReceipt, JobOffer, JobRecord } from "./types.js";
 
 const UNIQUE_VIOLATION = "UNIQUE constraint failed";
 
@@ -110,6 +110,157 @@ export async function receiptsByAgent(env: Env, agentId: string): Promise<Execut
     .bind(agentId, agentId)
     .all<{ data: string }>();
   return results.map((r) => JSON.parse(r.data));
+}
+
+// ---- Jobs ----
+
+export async function insertJob(env: Env, job: JobRecord): Promise<void> {
+  await env.DB.prepare(
+    `INSERT INTO jobs (job_id, posted_by, capability, spec_hash, budget_amount, budget_currency, status, accepted_agent_id, receipt_id, created_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(
+      job.jobId,
+      job.postedBy,
+      job.capability,
+      job.specHash,
+      job.budget?.amount ?? null,
+      job.budget?.currency ?? null,
+      job.status,
+      job.acceptedAgentId ?? null,
+      job.receiptId ?? null,
+      job.createdAt,
+      job.expiresAt ?? null,
+    )
+    .run();
+}
+
+export async function getJob(env: Env, jobId: string): Promise<JobRecord | null> {
+  const row = await env.DB.prepare("SELECT * FROM jobs WHERE job_id = ?").bind(jobId).first();
+  if (!row) return null;
+  const offers = await getOffers(env, jobId);
+  return rowToJob(row, offers);
+}
+
+export interface JobSearchQuery {
+  capability?: string;
+  status?: string;
+}
+
+export async function searchJobs(env: Env, query: JobSearchQuery): Promise<JobRecord[]> {
+  const conditions: string[] = [];
+  const params: unknown[] = [];
+  if (query.capability) {
+    conditions.push("capability = ?");
+    params.push(query.capability);
+  }
+  if (query.status) {
+    conditions.push("status = ?");
+    params.push(query.status);
+  }
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const { results } = await env.DB.prepare(`SELECT * FROM jobs ${where}`).bind(...params).all();
+  if (results.length === 0) return [];
+
+  const jobIds = results.map((r) => r.job_id as string);
+  const placeholders = jobIds.map(() => "?").join(",");
+  const { results: offerRows } = await env.DB.prepare(`SELECT * FROM job_offers WHERE job_id IN (${placeholders})`)
+    .bind(...jobIds)
+    .all();
+  const offersByJob = new Map<string, JobOffer[]>();
+  for (const row of offerRows) {
+    const jobId = row.job_id as string;
+    const offer = rowToOffer(row);
+    offersByJob.set(jobId, [...(offersByJob.get(jobId) ?? []), offer]);
+  }
+  return results.map((row) => rowToJob(row, offersByJob.get(row.job_id as string) ?? []));
+}
+
+export class OfferAlreadyExistsError extends Error {
+  constructor(
+    public readonly jobId: string,
+    public readonly agentId: string,
+  ) {
+    super(`Agent ${agentId} already has an offer on job ${jobId}`);
+  }
+}
+
+/** Plain INSERT — the (job_id, agent_id) PRIMARY KEY rejects a duplicate offer
+ * from the same agent as a UNIQUE violation, and two different agents
+ * offering concurrently are simply two independent row inserts, never a
+ * read-modify-write race on a shared list. */
+export async function insertOffer(env: Env, jobId: string, offer: JobOffer): Promise<void> {
+  try {
+    await env.DB.prepare(`INSERT INTO job_offers (job_id, agent_id, message, created_at) VALUES (?, ?, ?, ?)`)
+      .bind(jobId, offer.agentId, offer.message ?? null, offer.createdAt)
+      .run();
+  } catch (err) {
+    if (err instanceof Error && err.message.includes(UNIQUE_VIOLATION)) {
+      throw new OfferAlreadyExistsError(jobId, offer.agentId);
+    }
+    throw err;
+  }
+}
+
+export async function getOffers(env: Env, jobId: string): Promise<JobOffer[]> {
+  const { results } = await env.DB.prepare("SELECT * FROM job_offers WHERE job_id = ?").bind(jobId).all();
+  return results.map(rowToOffer);
+}
+
+export async function offerExists(env: Env, jobId: string, agentId: string): Promise<boolean> {
+  const row = await env.DB.prepare("SELECT 1 FROM job_offers WHERE job_id = ? AND agent_id = ?").bind(jobId, agentId).first();
+  return row !== null;
+}
+
+/** Compare-and-swap: only accepts if the job is still `open`. */
+export async function acceptJobIfOpen(env: Env, jobId: string, acceptedAgentId: string): Promise<boolean> {
+  const result = await env.DB.prepare(`UPDATE jobs SET status = 'accepted', accepted_agent_id = ? WHERE job_id = ? AND status = 'open'`)
+    .bind(acceptedAgentId, jobId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/** Compare-and-swap: only cancels a job that isn't already completed/cancelled. */
+export async function cancelJobIfCancellable(env: Env, jobId: string): Promise<boolean> {
+  const result = await env.DB.prepare(`UPDATE jobs SET status = 'cancelled' WHERE job_id = ? AND status NOT IN ('completed', 'cancelled')`)
+    .bind(jobId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/** Best-effort: called after a receipt referencing this job is finalized.
+ * A no-op (not an error) if the job doesn't exist or isn't `accepted` — the
+ * receipt itself is already the source of truth by this point. */
+export async function completeJobIfAccepted(env: Env, jobId: string, receiptId: string): Promise<void> {
+  await env.DB.prepare(`UPDATE jobs SET status = 'completed', receipt_id = ? WHERE job_id = ? AND status = 'accepted'`)
+    .bind(receiptId, jobId)
+    .run();
+}
+
+function rowToOffer(row: Record<string, unknown>): JobOffer {
+  return {
+    agentId: row.agent_id as string,
+    message: (row.message as string | null) ?? undefined,
+    createdAt: row.created_at as string,
+  };
+}
+
+function rowToJob(row: Record<string, unknown>, offers: JobOffer[]): JobRecord {
+  const budgetAmount = row.budget_amount as string | null;
+  const budgetCurrency = row.budget_currency as string | null;
+  return {
+    jobId: row.job_id as string,
+    postedBy: row.posted_by as string,
+    capability: row.capability as string,
+    specHash: row.spec_hash as string,
+    budget: budgetAmount || budgetCurrency ? { amount: budgetAmount ?? undefined, currency: budgetCurrency ?? undefined } : undefined,
+    status: row.status as JobRecord["status"],
+    offers,
+    acceptedAgentId: (row.accepted_agent_id as string | null) ?? undefined,
+    receiptId: (row.receipt_id as string | null) ?? undefined,
+    createdAt: row.created_at as string,
+    expiresAt: (row.expires_at as string | null) ?? undefined,
+  };
 }
 
 function rowToAgent(row: Record<string, unknown>): AgentRecord {

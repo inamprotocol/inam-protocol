@@ -129,6 +129,36 @@ async function main() {
   const reputation = await a.getReputation(b.did);
   check("reputation flags in_dispute after dispute", reputation.flags.includes("in_dispute"));
 
+  // ---- Job resource, exercised through the SDK itself (not raw HTTP) ----
+  const jobPoster = new InamClient(BASE_URL, generateKeypair());
+  const jobWorker = new InamClient(BASE_URL, generateKeypair());
+  await jobPoster.registerAgent(["job.posting"]);
+  await jobWorker.registerAgent(["translation.tr-en"]);
+
+  const postedJob = await jobPoster.postJob({ capability: "translation.tr-en", specHash: "sha256:spec_worker_smoke" });
+  check("job posted -> open", postedJob.status === "open");
+
+  const searchResult = await jobPoster.searchJobs({ capability: "translation.tr-en", status: "open" });
+  check("job discoverable via search", searchResult.jobs.some((j) => j.jobId === postedJob.jobId));
+
+  await expectError("poster offering on own job -> SELF_DEALING", "SELF_DEALING", () => jobPoster.submitOffer(postedJob.jobId));
+
+  await jobWorker.submitOffer(postedJob.jobId, "I can do this");
+  const acceptedJob = await jobPoster.acceptOffer(postedJob.jobId, jobWorker.did);
+  check("offer accepted -> accepted", acceptedJob.status === "accepted");
+
+  const jobDraft = await jobWorker.submitWork(jobPoster.did, {
+    jobId: postedJob.jobId,
+    task: { capability: "translation.tr-en", specHash: "sha256:spec_worker_smoke", createdAt: new Date().toISOString() },
+    result: { outputHash: "sha256:out_worker_smoke", completedAt: new Date().toISOString() },
+    verification: { method: "payer_confirmation", outcome: "success" },
+  });
+  const jobFinalized = await jobPoster.acceptWork(jobDraft);
+  check("receipt against accepted job finalizes", jobFinalized.status === "finalized");
+
+  const jobAfter = await jobPoster.getJob(postedJob.jobId);
+  check("job auto-completed by the finalized receipt", jobAfter.status === "completed" && jobAfter.receiptId === jobFinalized.receiptId);
+
   console.log(failures === 0 ? "\nAll worker smoke checks passed." : `\n${failures} check(s) FAILED.`);
   process.exitCode = failures === 0 ? 0 : 1;
 }

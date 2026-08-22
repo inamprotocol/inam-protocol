@@ -1,7 +1,7 @@
 import { canonicalize } from "../crypto/canonical.js";
 import { sha256Hex, sign, toBase64, type Keypair } from "../crypto/keys.js";
 import { buildSignableContent, type ReceiptContentInput } from "../core/receiptContent.js";
-import type { AgentRecord, ExecutionReceipt, ReputationResult } from "../types.js";
+import type { AgentRecord, ExecutionReceipt, JobOffer, JobRecord, ReputationResult } from "../types.js";
 
 /**
  * Minimal reference client — the seed of the future `@inamprotocol/agent-sdk`
@@ -101,6 +101,47 @@ export class InamClient {
   disputeReceipt(receiptId: string, reason: string): Promise<ExecutionReceipt> {
     return this.request("POST", `/v1/receipts/${encodeURIComponent(receiptId)}/dispute`, { reason }, {
       idempotencyKey: `dispute:${receiptId}`,
+    });
+  }
+
+  // ---- Jobs (SPEC.md §3) — optional pre-work discovery/offer/accept ----
+
+  postJob(input: { capability: string; specHash: string; budget?: { amount?: string; currency?: string }; expiresAt?: string }): Promise<JobRecord> {
+    return this.request("POST", "/v1/jobs", input, { idempotencyKey: `job:${input.capability}:${input.specHash}:${Date.now()}` });
+  }
+
+  getJob(id: string): Promise<JobRecord> {
+    return this.request("GET", `/v1/jobs/${encodeURIComponent(id)}`);
+  }
+
+  searchJobs(query: { capability?: string; status?: string }): Promise<{ jobs: JobRecord[] }> {
+    const params = new URLSearchParams();
+    if (query.capability) params.set("capability", query.capability);
+    if (query.status) params.set("status", query.status);
+    return this.request("GET", `/v1/jobs/search?${params.toString()}`);
+  }
+
+  submitOffer(jobId: string, message?: string): Promise<JobRecord> {
+    return this.request("POST", `/v1/jobs/${encodeURIComponent(jobId)}/offers`, { message }, {
+      idempotencyKey: `offer:${jobId}:${this.did}`,
+    });
+  }
+
+  listOffers(jobId: string): Promise<{ offers: JobOffer[] }> {
+    return this.request("GET", `/v1/jobs/${encodeURIComponent(jobId)}/offers`);
+  }
+
+  /** Called by the job's poster to accept one offer. */
+  acceptOffer(jobId: string, agentId: string): Promise<JobRecord> {
+    return this.request("POST", `/v1/jobs/${encodeURIComponent(jobId)}/accept`, { agentId }, {
+      idempotencyKey: `accept:${jobId}:${agentId}`,
+    });
+  }
+
+  /** Called by the job's poster to cancel a not-yet-completed job. */
+  cancelJob(jobId: string): Promise<JobRecord> {
+    return this.request("POST", `/v1/jobs/${encodeURIComponent(jobId)}/cancel`, undefined, {
+      idempotencyKey: `cancel:${jobId}`,
     });
   }
 }

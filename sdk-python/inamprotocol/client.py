@@ -74,12 +74,14 @@ class InamClient:
             raise InamApiError(method, path, e.code, payload) from None
 
     def register_agent(self, capabilities: List[str], metadata: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return self._request(
-            "POST",
-            "/v1/agents",
-            {"capabilities": capabilities, "metadata": metadata},
-            idempotency_key=f"register:{self.keypair.did}",
-        )
+        # Omit the key entirely rather than sending it as JSON null: the
+        # server's zod schema treats `metadata` as optional-if-absent, not
+        # nullable, and Python's json.dumps (unlike JS's JSON.stringify,
+        # which drops `undefined`-valued keys) serializes None as null.
+        body: Dict[str, Any] = {"capabilities": capabilities}
+        if metadata is not None:
+            body["metadata"] = metadata
+        return self._request("POST", "/v1/agents", body, idempotency_key=f"register:{self.keypair.did}")
 
     def get_agent(self, agent_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/v1/agents/{urllib.parse.quote(agent_id, safe='')}")
@@ -142,3 +144,60 @@ class InamClient:
             {"reason": reason},
             idempotency_key=f"dispute:{receipt_id}",
         )
+
+    # ---- Jobs (SPEC.md section 3) -- optional pre-work discovery/offer/accept ----
+
+    def post_job(
+        self,
+        capability: str,
+        spec_hash: str,
+        budget: Optional[Dict[str, Any]] = None,
+        expires_at: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        body: Dict[str, Any] = {"capability": capability, "specHash": spec_hash}
+        if budget is not None:
+            body["budget"] = budget
+        if expires_at is not None:
+            body["expiresAt"] = expires_at
+        return self._request("POST", "/v1/jobs", body, idempotency_key=f"job:{capability}:{spec_hash}:{time.time()}")
+
+    def get_job(self, job_id: str) -> Dict[str, Any]:
+        return self._request("GET", f"/v1/jobs/{urllib.parse.quote(job_id, safe='')}")
+
+    def search_jobs(self, capability: Optional[str] = None, status: Optional[str] = None) -> Dict[str, Any]:
+        params: Dict[str, str] = {}
+        if capability:
+            params["capability"] = capability
+        if status:
+            params["status"] = status
+        return self._request("GET", f"/v1/jobs/search?{urllib.parse.urlencode(params)}")
+
+    def submit_offer(self, job_id: str, message: Optional[str] = None) -> Dict[str, Any]:
+        encoded = urllib.parse.quote(job_id, safe="")
+        body: Dict[str, Any] = {}
+        if message is not None:
+            body["message"] = message
+        return self._request(
+            "POST",
+            f"/v1/jobs/{encoded}/offers",
+            body,
+            idempotency_key=f"offer:{job_id}:{self.did}",
+        )
+
+    def list_offers(self, job_id: str) -> Dict[str, Any]:
+        return self._request("GET", f"/v1/jobs/{urllib.parse.quote(job_id, safe='')}/offers")
+
+    def accept_offer(self, job_id: str, agent_id: str) -> Dict[str, Any]:
+        """Called by the job's poster to accept one offer."""
+        encoded = urllib.parse.quote(job_id, safe="")
+        return self._request(
+            "POST",
+            f"/v1/jobs/{encoded}/accept",
+            {"agentId": agent_id},
+            idempotency_key=f"accept:{job_id}:{agent_id}",
+        )
+
+    def cancel_job(self, job_id: str) -> Dict[str, Any]:
+        """Called by the job's poster to cancel a not-yet-completed job."""
+        encoded = urllib.parse.quote(job_id, safe="")
+        return self._request("POST", f"/v1/jobs/{encoded}/cancel", None, idempotency_key=f"cancel:{job_id}")
