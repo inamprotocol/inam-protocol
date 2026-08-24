@@ -1,0 +1,103 @@
+# Publish PyPI package (sdk-python)
+#
+# Publishes the Python SDK (sdk-python/) as the "inamprotocol" PyPI
+# project using PyPI Trusted Publishing (GitHub Actions OIDC) via
+# pypa/gh-action-pypi-publish, instead of a long-lived API token passed to
+# `twine upload`. This closes the PyPI gap flagged in SECURITY.md
+# ("inamprotocol@0.4.0 on PyPI was published via a maintainer running
+# `twine upload` locally with a PyPI API token").
+#
+# Trigger strategy: mirrors .github/workflows/publish-npm.yml for the same
+# reason — this repo cuts one GitHub Release for the repo as a whole, not
+# one per package per version bump, so a release doesn't always mean
+# sdk-python/pyproject.toml's version changed. The `check` job below
+# compares pyproject.toml's version to the release's git tag and only
+# lets `publish` run on a match; `workflow_dispatch` is also enabled so
+# the maintainer can publish sdk-python by hand right after bumping its
+# version, without needing a matching tag/release first.
+#
+# No PyPI API token secret is referenced below. Once PyPI Trusted
+# Publishing is configured for the "inamprotocol" project (see
+# docs-design/trusted-publishing-setup.md), PyPI exchanges this
+# workflow's OIDC identity for a short-lived, single-use publish token
+# automatically when `id-token: write` is granted.
+
+name: Publish PyPI package (sdk-python)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Decide whether to publish
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.decide.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare sdk-python version to release tag
+        id: decide
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "::notice::Manually triggered via workflow_dispatch — publishing sdk-python/ as-is, no tag comparison."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PKG_VERSION=$(grep -m1 '^version' sdk-python/pyproject.toml | sed -E 's/version *= *"([^"]+)"/\1/')
+          TAG_NAME="${GITHUB_REF_NAME}"
+          NORMALIZED_TAG="${TAG_NAME#v}"
+          echo "sdk-python/pyproject.toml version: $PKG_VERSION"
+          echo "Release tag: $TAG_NAME (normalized: $NORMALIZED_TAG)"
+
+          if [ "$PKG_VERSION" = "$NORMALIZED_TAG" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release tag ($TAG_NAME) does not match sdk-python/pyproject.toml's version ($PKG_VERSION) — skipping PyPI publish. This GitHub Release most likely corresponds to a change outside sdk-python/. If you meant to publish a new sdk-python version, trigger this workflow manually (Actions -> Publish PyPI package (sdk-python) -> Run workflow) after bumping sdk-python/pyproject.toml."
+          fi
+
+  publish:
+    name: Publish inamprotocol to PyPI
+    needs: check
+    if: needs.check.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for PyPI Trusted Publishing (OIDC)
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      # Run the SDK's own test suite before building/publishing, same
+      # invocation as .github/workflows/ci.yml's python-tests job.
+      - name: Install package (editable) and pytest
+        run: pip install -e . pytest
+        working-directory: sdk-python
+
+      - name: Run tests
+        run: pytest -q
+        working-directory: sdk-python
+
+      - name: Install build backend
+        run: pip install build
+
+      - name: Build sdist and wheel
+        run: python -m build
+        working-directory: sdk-python
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: sdk-python/dist
