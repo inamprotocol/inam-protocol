@@ -64,6 +64,19 @@ async function call(method: string, path: string, opts?: { body?: unknown; keypa
   return { status: response.status, json };
 }
 
+// Like `call`, but for endpoints that don't return JSON (badge.svg) — hands
+// back the raw response so tests can assert on Content-Type/body text.
+async function callRaw(path: string, opts?: { ip?: string }) {
+  const request = new Request(`http://worker.test${path}`, {
+    headers: { "cf-connecting-ip": opts?.ip ?? crypto.randomUUID() },
+  });
+  const ctx = createExecutionContext();
+  const response = await worker.fetch(request, env, ctx);
+  await waitOnExecutionContext(ctx);
+  const text = await response.text();
+  return { status: response.status, headers: response.headers, text };
+}
+
 function job(overrides?: Partial<Record<string, unknown>>) {
   const now = new Date().toISOString();
   return {
@@ -868,5 +881,102 @@ describe("independent verification (SPEC.md §12)", () => {
     // The Verification record itself is untouched — still queryable evidence.
     const verGet = await call("GET", `/v1/verifications/${encodeURIComponent(verificationId)}`);
     expect((verGet.json as { result: string }).result).toBe("verified");
+  });
+});
+
+describe("reputation badge (GET /agents/:id/badge.svg, /badge.json)", () => {
+  async function finalizeReceipt(requester: Keypair, provider: Keypair) {
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    const input = job();
+    const content = buildSignableContent(requester.did, provider.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), provider.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", {
+      keypair: provider,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    const draft = draftRes.json as { receiptId: string };
+
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+    await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, {
+      keypair: requester,
+      idempotencyKey: `countersign:${draft.receiptId}`,
+      body: { signature: counterSig },
+    });
+  }
+
+  it("renders a color-coded SVG badge for an agent with real reputation history", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    await finalizeReceipt(requester, provider);
+
+    const rep = await call("GET", `/v1/agents/${encodeURIComponent(provider.did)}/reputation`);
+    const { trustScore, components } = rep.json as { trustScore: number; components: { verifiedReceipts: number } };
+    expect(components.verifiedReceipts).toBe(1);
+
+    const badge = await callRaw(`/v1/agents/${encodeURIComponent(provider.did)}/badge.svg`);
+    expect(badge.status).toBe(200);
+    expect(badge.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
+    expect(badge.headers.get("access-control-allow-origin")).toBe("*");
+    expect(badge.headers.get("cache-control")).toMatch(/max-age=\d+/);
+    expect(badge.text).toContain("<svg");
+    expect(badge.text).toContain(">inam<");
+    // Score formatting matches computeReputation()'s own rounding, and a real,
+    // earned history means this is NOT the neutral "new" grey badge.
+    const expectedValue = Number.isInteger(trustScore) ? String(trustScore) : trustScore.toFixed(1);
+    expect(badge.text).toContain(`>${expectedValue}<`);
+    expect(badge.text).not.toContain(">new<");
+    expect(badge.text).not.toContain(">unknown<");
+  });
+
+  it("renders a distinct neutral grey badge for a brand-new agent with zero receipt history", async () => {
+    const fresh = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: fresh, idempotencyKey: `reg:${fresh.did}`, body: { capabilities: ["x"] } });
+
+    const badge = await callRaw(`/v1/agents/${encodeURIComponent(fresh.did)}/badge.svg`);
+    expect(badge.status).toBe(200);
+    expect(badge.text).toContain(">new<");
+    expect(badge.text).toContain("#9f9f9f"); // neutral grey, not a red/orange "penalized" color
+
+    const badgeJson = await call("GET", `/v1/agents/${encodeURIComponent(fresh.did)}/badge.json`);
+    expect(badgeJson.status).toBe(200);
+    expect(badgeJson.json).toMatchObject({ schemaVersion: 1, label: "inam", message: "new", status: "new" });
+  });
+
+  it("renders a graceful unknown-state badge for an unregistered did:key instead of a 404/broken image", async () => {
+    const unknownDid = "did:key:z6MkNoSuchAgentEverRegisteredHere00000000000";
+
+    // The underlying JSON route still 404s — badge.svg deliberately doesn't.
+    const rep = await call("GET", `/v1/agents/${encodeURIComponent(unknownDid)}/reputation`);
+    expect(rep.status).toBe(404);
+
+    const badge = await callRaw(`/v1/agents/${encodeURIComponent(unknownDid)}/badge.svg`);
+    expect(badge.status).toBe(200);
+    expect(badge.headers.get("content-type")).toBe("image/svg+xml; charset=utf-8");
+    expect(badge.text).toContain("<svg");
+    expect(badge.text).toContain(">unknown<");
+
+    const badgeJson = await call("GET", `/v1/agents/${encodeURIComponent(unknownDid)}/badge.json`);
+    expect(badgeJson.status).toBe(200);
+    expect(badgeJson.json).toMatchObject({ schemaVersion: 1, label: "inam", message: "unknown", status: "not_found" });
+  });
+
+  it("never interpolates agent-supplied metadata into the badge", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", {
+      keypair: agent,
+      idempotencyKey: `reg:${agent.did}`,
+      body: { capabilities: ["x"], metadata: { name: '<script>alert(1)</script>&"malicious"' } },
+    });
+
+    const badge = await callRaw(`/v1/agents/${encodeURIComponent(agent.did)}/badge.svg`);
+    expect(badge.status).toBe(200);
+    expect(badge.text).not.toContain("<script>");
+    expect(badge.text).not.toContain("malicious");
   });
 });

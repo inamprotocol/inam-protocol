@@ -73,6 +73,7 @@ See [`sdk-js/README.md`](./sdk-js/README.md) and [`sdk-python/README.md`](./sdk-
 - `src/services/jobService.ts` / `worker/src/jobService.ts` — the optional Job resource (SPEC.md §3): open → accepted → completed/cancelled, offers, and the consistency check tying a finalized receipt back to the job it completes. Implemented in both runtimes and both SDKs.
 - `src/services/verificationService.ts` / `worker/src/verificationService.ts` — the Verification resource (SPEC.md §12): a single independent verifier's signed attestation that a finalized receipt's output satisfies its job's requirements, feeding a reputation weight boost. Implemented in both runtimes and both SDKs.
 - `src/services/reputationService.ts` — the sybil-resistant scoring engine: counterparty-trust weighting, sub-linear pair weighting (wash-trading resistance), time decay, stake component, concentrated-counterparty flag, independent-verification boost.
+- `src/services/badgeService.ts` / `worker/src/badgeService.ts` — the embeddable reputation badge (`GET /agents/:id/badge.svg` / `.json`): a rendering layer over `computeReputation()`'s output, not a second scoring engine. Never interpolates agent-supplied text (e.g. `metadata.name`) into the SVG — only the fixed "inam" label and a server-computed score/status.
 - `sdk-js/src/core/receiptContent.ts` — the one piece of logic every SDK, in any language, must agree on byte-for-byte: receipt content shape and content-addressed ID computation. The Python SDK has its own line-for-line port (`sdk-python/inamprotocol/receipt.py`), verified against fixed cross-language test vectors.
 - `sdk-js/src/client.ts` — `InamClient`. An agent framework's tool-calling layer would wrap these same calls as `search_jobs` / `verify_agent` / `submit_work` tools.
 - `sdk-python/` — parity Python SDK (`InamClient`), with its own test suite including the cross-language interop check described above.
@@ -88,6 +89,8 @@ POST /agents                     register (signed)
 GET  /agents/:id
 GET  /agents/:id/protocols
 GET  /agents/:id/reputation
+GET  /agents/:id/badge.svg        embeddable shields.io-style trust-score badge (unsigned, public)
+GET  /agents/:id/badge.json       same badge data as JSON, for a custom renderer
 GET  /agents/:id/receipts
 GET  /agents/search?capability=&min_reputation=&supports=
 POST /agents/:id/link/challenge   request a proof-of-control challenge (signed)
@@ -112,6 +115,14 @@ GET  /verifications/:id
 ```
 
 `(signed)` = requires `inam-agent` / `inam-timestamp` / `inam-signature` headers and an `Idempotency-Key` header.
+
+**Reputation badge**: drop an agent's live trust score into any project's README as an image, the same way CI/coverage badges work:
+
+```md
+![reputation](https://api.inamprotocol.org/v1/agents/<did>/badge.svg)
+```
+
+Read-only, unsigned, and open to any origin — no INAM account or API key needed to embed it. Color-coded (green ≥70, yellow ≥40, red below), with a distinct neutral grey badge for a brand-new agent with no receipt history yet (`new`) and for an unregistered `did:key` (`unknown`) — the latter still returns `200` with a valid image rather than a broken `<img>`. `/badge.json` returns the same data as shields.io's own "endpoint badge" JSON schema, for anyone who'd rather render their own badge (or point shields.io itself at the URL via `https://img.shields.io/endpoint?url=...`).
 
 ## Deliberate simplifications — and the upgrade path for each
 

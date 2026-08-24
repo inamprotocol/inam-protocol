@@ -9,6 +9,7 @@ import * as receiptService from "./receiptService.js";
 import * as jobService from "./jobService.js";
 import * as verificationService from "./verificationService.js";
 import { computeReputation } from "./reputationService.js";
+import { badgeDataForReputation, badgeDataToJson, notFoundBadgeData, renderBadgeSvg } from "./badgeService.js";
 import type { AppEnv } from "./types.js";
 
 const app = new Hono<AppEnv>();
@@ -27,6 +28,8 @@ const PUBLIC_READ_PATHS = [
   "/v1/agents/:id",
   "/v1/agents/:id/protocols",
   "/v1/agents/:id/reputation",
+  "/v1/agents/:id/badge.svg",
+  "/v1/agents/:id/badge.json",
   "/v1/agents/:id/receipts",
   "/v1/jobs/search",
   "/v1/jobs/:id",
@@ -83,6 +86,38 @@ app.get("/v1/agents/:id/protocols", async (c) => {
 });
 
 app.get("/v1/agents/:id/reputation", rateLimitReadByIp, async (c) => c.json(await computeReputation(c.env, c.req.param("id")!)));
+
+// Read-only, unsigned, public badge rendering — a sibling of /reputation, not
+// a modification of it. Reuses computeReputation() directly rather than
+// re-implementing scoring; badgeService.ts only maps its output to a small
+// fixed set of colors/labels. AGENT_NOT_FOUND is caught here so an unknown
+// did:key still renders a valid badge image instead of a raw JSON error /
+// broken <img>.
+async function badgeDataForAgent(env: AppEnv["Bindings"], id: string) {
+  try {
+    return badgeDataForReputation(await computeReputation(env, id));
+  } catch (err) {
+    if (err instanceof ApiError && err.code === "AGENT_NOT_FOUND") return notFoundBadgeData();
+    throw err;
+  }
+}
+
+app.get("/v1/agents/:id/badge.svg", rateLimitReadByIp, async (c) => {
+  const data = await badgeDataForAgent(c.env, c.req.param("id")!);
+  // Short-lived but cacheable: badges get embedded in other projects'
+  // READMEs and hit repeatedly by viewers/crawlers, but are meant to reflect
+  // live reputation, so this shouldn't go stale for long either.
+  return c.body(renderBadgeSvg(data), 200, {
+    "Content-Type": "image/svg+xml; charset=utf-8",
+    "Cache-Control": "public, max-age=120",
+  });
+});
+
+app.get("/v1/agents/:id/badge.json", rateLimitReadByIp, async (c) => {
+  const data = await badgeDataForAgent(c.env, c.req.param("id")!);
+  c.header("Cache-Control", "public, max-age=120");
+  return c.json(badgeDataToJson(data));
+});
 
 app.get("/v1/agents/:id/receipts", async (c) => c.json({ receipts: await receiptService.listByAgent(c.env, c.req.param("id")!) }));
 

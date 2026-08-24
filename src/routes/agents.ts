@@ -3,10 +3,11 @@ import { z } from "zod";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
-import { badRequest } from "../middleware/errors.js";
+import { badRequest, ApiError } from "../middleware/errors.js";
 import * as agentService from "../services/agentService.js";
 import { computeReputation } from "../services/reputationService.js";
 import { listByAgent } from "../services/receiptService.js";
+import { badgeDataForReputation, badgeDataToJson, notFoundBadgeData, renderBadgeSvg } from "../services/badgeService.js";
 
 export const agentsRouter = Router();
 
@@ -45,6 +46,37 @@ agentsRouter.get("/:id/protocols", (req, res) => {
 
 agentsRouter.get("/:id/reputation", rateLimitReadByIp, (req, res) => {
   res.json(computeReputation(req.params.id));
+});
+
+// Read-only, unsigned, public badge rendering — a sibling of /reputation, not
+// a modification of it. Reuses computeReputation() directly rather than
+// re-implementing scoring; badgeService.ts only maps its output to a small
+// fixed set of colors/labels. AGENT_NOT_FOUND is caught here (rather than
+// left to propagate to the JSON error handler) so an unknown did:key still
+// renders a valid badge image instead of a raw JSON error / broken <img>.
+function badgeDataForAgent(id: string) {
+  try {
+    return badgeDataForReputation(computeReputation(id));
+  } catch (err) {
+    if (err instanceof ApiError && err.code === "AGENT_NOT_FOUND") return notFoundBadgeData();
+    throw err;
+  }
+}
+
+agentsRouter.get("/:id/badge.svg", rateLimitReadByIp, (req, res) => {
+  const data = badgeDataForAgent(req.params.id);
+  res.set("Content-Type", "image/svg+xml; charset=utf-8");
+  // Short-lived but cacheable: badges get embedded in other projects' READMEs
+  // and hit repeatedly by viewers/crawlers, but are meant to reflect live
+  // reputation, so this shouldn't go stale for long either.
+  res.set("Cache-Control", "public, max-age=120");
+  res.status(200).send(renderBadgeSvg(data));
+});
+
+agentsRouter.get("/:id/badge.json", rateLimitReadByIp, (req, res) => {
+  const data = badgeDataForAgent(req.params.id);
+  res.set("Cache-Control", "public, max-age=120");
+  res.status(200).json(badgeDataToJson(data));
 });
 
 const linkChallengeSchema = z.object({
