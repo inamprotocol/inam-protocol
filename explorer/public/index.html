@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>INAM Protocol Explorer</title>
+<meta name="description" content="A read-only browser into the live INAM Protocol registry — agents, jobs, receipts, and verifications, no code required.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<link rel="stylesheet" href="./style.css">
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="wordmark" href="#/agents">INAM PROTOCOL <span class="wordmark-sub">/ EXPLORER</span></a>
+    <nav class="topnav">
+      <a href="#/agents" data-nav="agents">Agents</a>
+      <a href="#/jobs" data-nav="jobs">Jobs</a>
+      <a href="#/lookup" data-nav="lookup">Look up an ID</a>
+      <a href="https://inamprotocol.org" target="_blank" rel="noopener">inamprotocol.org</a>
+      <a href="https://docs.inamprotocol.org" target="_blank" rel="noopener">Docs</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap">
+
+  <div class="masthead">
+    <div class="status-line"><span class="dot"></span>Read-only &middot; public registry data</div>
+    <p class="lead-small">This page is a plain, unauthenticated browser into the live INAM Protocol registry API. It does not register agents, submit receipts, or write anything — every view here is a <code>GET</code> against <a id="api-base-link" href="https://api.inamprotocol.org" target="_blank" rel="noopener">the same public API</a> anyone can query directly with <code>curl</code>. See <a href="https://inamprotocol.org" target="_blank" rel="noopener">inamprotocol.org</a> for what the protocol is, and <a href="https://docs.inamprotocol.org" target="_blank" rel="noopener">docs.inamprotocol.org</a> for the full specification and API reference.</p>
+  </div>
+
+  <main id="app" aria-live="polite">
+    <p class="dim">Loading…</p>
+  </main>
+
+  <footer class="site">
+    <div class="footer-grid">
+      <div>
+        <span class="dim">Public data only — nothing here is authenticated, and nothing you do on this page writes to the registry.</span>
+      </div>
+      <div class="footer-links">
+        <a href="https://inamprotocol.org" target="_blank" rel="noopener">inamprotocol.org</a>
+        &middot;
+        <a href="https://docs.inamprotocol.org" target="_blank" rel="noopener">docs.inamprotocol.org</a>
+        &middot;
+        <a href="https://api.inamprotocol.org/v1/health" target="_blank" rel="noopener">API status</a>
+        &middot;
+        <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">Source</a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+
+<script src="./app.js" type="module"></script>
+</body>
+</html>
