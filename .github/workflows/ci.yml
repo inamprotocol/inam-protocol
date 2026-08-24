@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  node-tests:
+    name: Node test suite (root)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install root dependencies
+        run: npm install
+      # Root tests import sdk-js source directly (see tsconfig.json's
+      # `include`), and sdk-js is its own nested package with its own
+      # dependencies (e.g. @noble/curves) — it must be installed
+      # separately or root tests fail to resolve those imports.
+      - name: Install sdk-js dependencies
+        run: npm install
+        working-directory: sdk-js
+      - name: Run tests
+        run: npm test
+
+  worker-tests:
+    name: Worker test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+      - name: Install worker dependencies
+        run: npm install
+        working-directory: worker
+      - name: Run tests
+        run: npm test
+        working-directory: worker
+
+  python-tests:
+    name: Python SDK test suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - name: Install package (editable) and pytest
+        run: pip install -e . pytest
+        working-directory: sdk-python
+      - name: Run tests
+        run: pytest -q
+        working-directory: sdk-python
+
+  typecheck:
+    name: TypeScript typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+      - name: Install root dependencies
+        run: npm install
+      - name: Install sdk-js dependencies
+        run: npm install
+        working-directory: sdk-js
+      - name: Typecheck root
+        run: npx tsc --noEmit -p tsconfig.json
+      - name: Install worker dependencies
+        run: npm install
+        working-directory: worker
+      - name: Typecheck worker
+        run: npm run typecheck
+        working-directory: worker

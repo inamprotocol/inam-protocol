@@ -314,6 +314,7 @@ Not deferred by accident — deferred because building them before the primitive
 | A2A | Agent ↔ Agent transport | Complementary — INAM doesn't replace how agents talk, only how their completed work is verified and scored afterward. |
 | AgentPass, AITP, Passport Alliance, W3C DID/VC | Identity & delegation | Complementary — `linked` (§2) references these; INAM does not mint or arbitrate authorization. §2.1's link-challenge wire format follows ATTP (the trust-transport protocol AgentPass is built on) so proof-of-control interops with that ecosystem's own key material, but INAM still doesn't call out to their registries as the authority on delegation/mandate scope — that stays theirs. |
 | x402, AP2, ACP | Payment | Complementary — `settlement.paymentRef` (§4.1) and a job's `budget` (§3.1) are designed to hold a reference into one of these; INAM does not move money itself. |
+| OpenWork.network | Reputation / economic-history | Overlapping claim, unverified implementation — OpenWork's public positioning covers similar ground (portable agent work history/reputation), but as of this writing its GitHub organization has zero public repositories, so there is nothing to compare at the code or spec level. Not treated as a peer protocol to interoperate with (like the rows above) until it ships something inspectable; revisit this row if that changes. |
 
 ## 12. Verification (independent attestation)
 
