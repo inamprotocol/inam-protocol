@@ -563,6 +563,220 @@ function renderVerificationsTable(verifications) {
   </table></div>`;
 }
 
+// ==================== Stats ====================
+
+const STATS_CACHE_KEY = "inam_explorer_stats_v1";
+const STATS_TTL_MS = 3 * 60 * 1000; // recompute at most every 3 minutes
+const STATS_AGENT_CAP = 500; // defensive cap on how many agents we iterate for receipts
+
+function statTile(label, num, sub) {
+  return `<div class="stat-tile">
+    <div class="stat-num">${num}</div>
+    <div class="stat-label">${escapeHtml(label)}</div>
+    ${sub ? `<div class="stat-sub">${sub}</div>` : ""}
+  </div>`;
+}
+
+function statTileUnavailable(label, note) {
+  return `<div class="stat-tile">
+    <div class="stat-num unavailable">unavailable</div>
+    <div class="stat-label">${escapeHtml(label)}</div>
+    ${note ? `<div class="stat-sub">${note}</div>` : ""}
+  </div>`;
+}
+
+// Registry-wide totals aren't a single endpoint -- /agents/search and
+// /jobs/search return every match with no result cap today (confirmed
+// against worker/src/index.ts), so an unfiltered call's array length is
+// an accurate total. Receipts/verifications have no system-wide listing
+// at all, only per-agent / per-receipt, so getting a real count means
+// iterating agents and deduping by receiptId (a receipt names both
+// agentA and agentB, so it shows up in both parties' lists).
+async function computeRegistryStats() {
+  const agentsData = await apiGet("/agents/search");
+  const allAgents = agentsData.agents || [];
+  const agentCapped = allAgents.length > STATS_AGENT_CAP;
+  const agents = agentCapped ? allAgents.slice(0, STATS_AGENT_CAP) : allAgents;
+
+  const jobsData = await apiGet("/jobs/search");
+  const jobs = jobsData.jobs || [];
+  const jobsByStatus = {};
+  for (const j of jobs) jobsByStatus[j.status] = (jobsByStatus[j.status] || 0) + 1;
+
+  // Batch the per-agent receipt fetches so a large registry someday
+  // doesn't fire hundreds of parallel requests at once.
+  const receiptsById = new Map();
+  const BATCH = 15;
+  for (let i = 0; i < agents.length; i += BATCH) {
+    const batch = agents.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map((a) =>
+        apiGet(`/agents/${encodeURIComponent(a.id)}/receipts`).catch(() => ({ receipts: [] }))
+      )
+    );
+    for (const r of results) {
+      for (const receipt of r.receipts || []) {
+        if (receipt.receiptId) receiptsById.set(receipt.receiptId, receipt);
+      }
+    }
+  }
+  const receipts = [...receiptsById.values()];
+  const receiptsByStatus = {};
+  for (const r of receipts) receiptsByStatus[r.status] = (receiptsByStatus[r.status] || 0) + 1;
+
+  // Independent verifications (SPEC.md §12) are per-receipt only. Cap how
+  // many receipts we probe so this stays cheap as the registry grows.
+  const VERIF_CAP = 500;
+  const verifTargets = receipts.slice(0, VERIF_CAP).map((r) => r.receiptId);
+  let verificationCount = 0;
+  for (let i = 0; i < verifTargets.length; i += BATCH) {
+    const batch = verifTargets.slice(i, i + BATCH);
+    const results = await Promise.all(
+      batch.map((id) =>
+        apiGet(`/receipts/${encodeURIComponent(id)}/verifications`).catch(() => ({ verifications: [] }))
+      )
+    );
+    for (const r of results) verificationCount += (r.verifications || []).length;
+  }
+
+  return {
+    computedAt: new Date().toISOString(),
+    totalAgents: allAgents.length,
+    agentCapped,
+    agentsScanned: agents.length,
+    jobsByStatus,
+    totalJobs: jobs.length,
+    totalReceipts: receipts.length,
+    receiptsByStatus,
+    receiptsCapped: receipts.length > VERIF_CAP,
+    verificationCount,
+  };
+}
+
+function readStatsCache() {
+  try {
+    const raw = sessionStorage.getItem(STATS_CACHE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (Date.now() - new Date(parsed.computedAt).getTime() > STATS_TTL_MS) return null;
+    return parsed;
+  } catch (_) { return null; }
+}
+
+function writeStatsCache(data) {
+  try { sessionStorage.setItem(STATS_CACHE_KEY, JSON.stringify(data)); } catch (_) { /* ignore */ }
+}
+
+// ---- external package/community signal ----
+// Verified by hand before shipping (curl -I against each): GitHub's and
+// npm's public APIs both send Access-Control-Allow-Origin: *, so a
+// browser fetch() works directly. pypistats.org does NOT send any CORS
+// header on its response -- a browser fetch to it fails silently with an
+// opaque network error, so PyPI downloads are shown as a link instead of
+// a fetched number rather than a broken/misleading tile.
+
+async function fetchGithubStats() {
+  const res = await fetch("https://api.github.com/repos/inamprotocol/inam-protocol");
+  if (!res.ok) throw new Error(`GitHub API returned ${res.status}`);
+  const j = await res.json();
+  return { stars: j.stargazers_count, forks: j.forks_count, watchers: j.subscribers_count };
+}
+
+async function fetchNpmDownloads() {
+  const [week, month] = await Promise.all([
+    fetch("https://api.npmjs.org/downloads/point/last-week/inamprotocol").then((r) => r.ok ? r.json() : Promise.reject(new Error(`npm API returned ${r.status}`))),
+    fetch("https://api.npmjs.org/downloads/point/last-month/inamprotocol").then((r) => r.ok ? r.json() : Promise.reject(new Error(`npm API returned ${r.status}`))),
+  ]);
+  return { week: week.downloads ?? 0, month: month.downloads ?? 0 };
+}
+
+async function renderStats() {
+  setApp(`
+    <h2 class="h">Registry &amp; adoption stats</h2>
+    <p class="dim">A live snapshot of the public registry, computed client-side from the same API anyone can query, plus package/community signal from npm, PyPI, and GitHub's own public APIs. Not a real-time feed -- see the timestamp below.</p>
+    <div id="stats-asof"></div>
+    <div id="stats-body"><p class="spinner-text">Loading stats…</p></div>
+  `);
+  await loadAndRenderStats(false);
+  document.getElementById("stats-asof").addEventListener("click", (e) => {
+    if (e.target && e.target.id === "stats-refresh") loadAndRenderStats(true);
+  });
+}
+
+function renderStatsAsOf(iso, fromCache) {
+  const el = document.getElementById("stats-asof");
+  if (!el) return;
+  const time = new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+  el.innerHTML = `<div class="stat-asof">
+    <span>Registry activity as of ${escapeHtml(time)}${fromCache ? " (cached)" : ""}</span>
+    <button id="stats-refresh" class="secondary" type="button">Refresh now</button>
+  </div>`;
+}
+
+async function loadAndRenderStats(forceRefresh) {
+  const body = document.getElementById("stats-body");
+  const cached = !forceRefresh && readStatsCache();
+
+  // External package/community stats: fetch independently of the registry
+  // aggregate and independently of each other, so one slow/failed source
+  // never blocks or blanks out the others.
+  const externalPromise = (async () => {
+    const [github, npm] = await Promise.all([
+      fetchGithubStats().catch((e) => ({ error: e })),
+      fetchNpmDownloads().catch((e) => ({ error: e })),
+    ]);
+    return { github, npm };
+  })();
+
+  let registry;
+  if (cached) {
+    registry = cached;
+  } else {
+    try {
+      registry = await computeRegistryStats();
+      writeStatsCache(registry);
+    } catch (err) {
+      body.innerHTML = errorBox(err, "Couldn't compute registry stats.");
+      return;
+    }
+  }
+  renderStatsAsOf(registry.computedAt, !!cached);
+
+  const jobDone = (registry.jobsByStatus.completed || 0);
+  const receiptFinal = (registry.receiptsByStatus.finalized || 0);
+  const receiptDisputed = (registry.receiptsByStatus.disputed || 0);
+
+  const external = await externalPromise;
+  const gh = external.github;
+  const npmD = external.npm;
+
+  body.innerHTML = `
+    <h3 class="h">Registry activity</h3>
+    <div class="stat-grid">
+      ${statTile("Registered agents", registry.totalAgents, registry.agentCapped ? `computed from the first ${registry.agentsScanned}` : "")}
+      ${statTile("Jobs posted", registry.totalJobs, `${jobDone} completed`)}
+      ${statTile("Finalized receipts", receiptFinal, `${registry.totalReceipts} total, ${receiptDisputed} disputed`)}
+      ${statTile("Independent verifications", registry.verificationCount, registry.receiptsCapped ? "capped scan" : "SPEC.md §12")}
+    </div>
+
+    <h3 class="h" style="margin-top:26px">Jobs by status</h3>
+    <div class="stat-grid">
+      ${["open", "accepted", "completed", "cancelled"].map((s) => statTile(s, registry.jobsByStatus[s] || 0)).join("")}
+    </div>
+
+    <h3 class="h" style="margin-top:26px">Package &amp; community</h3>
+    <div class="stat-grid">
+      ${gh && !gh.error
+        ? statTile("GitHub stars", gh.stars, `${gh.forks} forks &middot; ${gh.watchers} watching`)
+        : statTileUnavailable("GitHub stars", `<a class="stat-fallback" href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">github.com/inamprotocol/inam-protocol</a>`)}
+      ${npmD && !npmD.error
+        ? statTile("npm downloads", npmD.week, `${npmD.month} last 30 days`)
+        : statTileUnavailable("npm downloads", `<a class="stat-fallback" href="https://www.npmjs.com/package/inamprotocol" target="_blank" rel="noopener">npmjs.com/package/inamprotocol</a>`)}
+      ${statTileUnavailable("PyPI downloads", `pypistats.org doesn't allow browser requests &mdash; <a class="stat-fallback" href="https://pypistats.org/packages/inamprotocol" target="_blank" rel="noopener">pypistats.org/packages/inamprotocol</a>`)}
+    </div>
+  `;
+}
+
 // ==================== Lookup ====================
 
 function renderLookup() {
@@ -617,11 +831,11 @@ function setActiveNav(section) {
 }
 
 function renderNotFound() {
-  setApp(stateBox("Nothing here. Use the nav above to browse agents or jobs, or look up an ID directly.", false));
+  setApp(stateBox("Nothing here. Use the nav above for stats, agents, or jobs, or look up an ID directly.", false));
 }
 
 function route() {
-  const raw = location.hash.replace(/^#/, "") || "/agents";
+  const raw = location.hash.replace(/^#/, "") || "/stats";
   let url;
   try {
     url = new URL(raw, "http://explorer.local/");
@@ -632,7 +846,12 @@ function route() {
   const segments = url.pathname.split("/").filter(Boolean);
   const query = url.searchParams;
 
-  if (segments.length === 0 || segments[0] === "agents") {
+  if (segments.length === 0 || segments[0] === "stats") {
+    setActiveNav("stats");
+    renderStats();
+    return;
+  }
+  if (segments[0] === "agents") {
     if (segments.length === 2) {
       setActiveNav("agents");
       renderAgentDetail(decodeURIComponent(segments[1]));

@@ -206,6 +206,26 @@ footer.site { border-top: 1px solid var(--line); margin-top: 10px; padding: 22px
 .footer-links a { color: var(--ink-faint); }
 .footer-links a:hover { color: var(--accent-ink); }
 
+/* -- stats dashboard -- */
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 14px; margin-bottom: 8px; }
+.stat-tile {
+  border: 1px solid var(--line); border-radius: 6px; padding: 18px 16px; background: var(--bg);
+  display: flex; flex-direction: column; gap: 6px;
+}
+.stat-tile .stat-num { font-size: 2.1rem; font-weight: 700; font-family: "IBM Plex Mono", monospace; line-height: 1.1; }
+.stat-tile .stat-num.unavailable { font-size: 1rem; font-weight: 500; color: var(--ink-faint); }
+.stat-tile .stat-label {
+  font-family: "IBM Plex Mono", monospace; font-size: 11px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink-faint);
+}
+.stat-tile .stat-sub { font-size: 12px; color: var(--ink-faint); }
+.stat-tile a.stat-fallback { font-size: 12.5px; }
+.stat-asof {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; color: var(--ink-faint);
+  display: flex; align-items: center; gap: 10px; margin: 4px 0 22px;
+}
+.stat-asof button { font-size: 11px; padding: 4px 10px; }
+
 /* -- dev api banner -- */
 .dev-banner {
   font-family: "IBM Plex Mono", monospace; font-size: 12px; background: var(--warn-soft);
