@@ -38,6 +38,13 @@ jobs:
           node-version: "20"
           cache: npm
           cache-dependency-path: worker/package-lock.json
+      # The Worker imports sdk-js source directly too (README: "reuses
+      # sdk-js/src/crypto/ ... unchanged"), so it needs the same separate
+      # install as the root node-tests job or api.test.ts fails with
+      # Cannot find package '@noble/ed25519' from a Durable Object handler.
+      - name: Install sdk-js dependencies
+        run: npm install
+        working-directory: sdk-js
       - name: Install worker dependencies
         run: npm install
         working-directory: worker
