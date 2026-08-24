@@ -1,0 +1,113 @@
+# Publish npm package (sdk-js)
+#
+# Publishes the TypeScript SDK (sdk-js/) as the "inamprotocol" npm package
+# using npm Trusted Publishing (GitHub Actions OIDC) plus provenance
+# attestation, instead of a long-lived NPM_TOKEN secret. This closes the
+# npm gap flagged in SECURITY.md ("npm publishing does not yet use
+# `npm publish --provenance`").
+#
+# Trigger strategy (why both `release` and `workflow_dispatch`):
+# This repo cuts one GitHub Release for the repo as a whole, not one
+# release per package per version bump — a release driven by a Worker or
+# Python SDK change wouldn't necessarily mean sdk-js/package.json's
+# version changed. Requiring a separate, sdk-js-only release process would
+# be overkill for a small, currently-single-maintainer project, but
+# blindly publishing on every release risks a duplicate-version publish
+# failure (or worse, publishing something unintended). So:
+#
+#   1. On every published GitHub Release, the `check` job compares
+#      sdk-js/package.json's "version" against the release's git tag
+#      (accepting both "0.3.0" and "v0.3.0"-style tags) and only lets the
+#      `publish` job run if they match — otherwise it logs a clear
+#      ::notice:: explaining the skip and stops there.
+#   2. `workflow_dispatch` is also enabled so the maintainer can publish
+#      sdk-js by hand right after bumping its version, without needing to
+#      cut a matching tag/release first. This is the practical path while
+#      release volume is low and the two are still tracked manually.
+#
+# No NPM_TOKEN (or any other manually-created secret) is referenced below.
+# Once npm Trusted Publishing is configured for the "inamprotocol"
+# package (see docs-design/trusted-publishing-setup.md), npm exchanges
+# this workflow's OIDC identity for a short-lived publish token
+# automatically when `id-token: write` is granted.
+
+name: Publish npm package (sdk-js)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Decide whether to publish
+    runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.decide.outputs.should_publish }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compare sdk-js version to release tag
+        id: decide
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "::notice::Manually triggered via workflow_dispatch — publishing sdk-js/ as-is, no tag comparison."
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          PKG_VERSION=$(node -p "require('./sdk-js/package.json').version")
+          TAG_NAME="${GITHUB_REF_NAME}"
+          NORMALIZED_TAG="${TAG_NAME#v}"
+          echo "sdk-js/package.json version: $PKG_VERSION"
+          echo "Release tag: $TAG_NAME (normalized: $NORMALIZED_TAG)"
+
+          if [ "$PKG_VERSION" = "$NORMALIZED_TAG" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::Release tag ($TAG_NAME) does not match sdk-js/package.json's version ($PKG_VERSION) — skipping npm publish. This GitHub Release most likely corresponds to a change outside sdk-js/. If you meant to publish a new sdk-js version, trigger this workflow manually (Actions -> Publish npm package (sdk-js) -> Run workflow) after bumping sdk-js/package.json."
+          fi
+
+  publish:
+    name: Publish inamprotocol to npm
+    needs: check
+    if: needs.check.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm Trusted Publishing (OIDC) + provenance
+    defaults:
+      run:
+        working-directory: sdk-js
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: sdk-js/package-lock.json
+
+      # npm Trusted Publishing (OIDC) requires npm CLI >=11.5.1; the npm
+      # bundled with actions/setup-node's Node 22 build is often older,
+      # so upgrade explicitly rather than assuming the bundled version.
+      - name: Ensure npm CLI supports Trusted Publishing
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      # sdk-js has no standalone test script of its own (it's exercised by
+      # the root and worker vitest suites via CI); "build" (tsc) is its
+      # only pre-publish check, and also runs again via "prepublishOnly".
+      - name: Build
+        run: npm run build
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
