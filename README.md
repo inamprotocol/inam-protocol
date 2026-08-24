@@ -6,8 +6,13 @@ This directory is the Node/TypeScript reference implementation: Express registry
 
 ## Run it
 
+New here? Start with [`QUICKSTART.md`](./QUICKSTART.md) — zero to a real, changed reputation score in about 5-10 minutes.
+
+`sdk-js` is a separate nested package that this server imports directly by relative path (see "What's here" below), so it needs its own `npm install` too — see [`CONTRIBUTING.md`](./CONTRIBUTING.md) if `npm run dev` fails with a missing-module error.
+
 ```
 npm install
+cd sdk-js && npm install && cd ..
 npm run dev      # starts the API on http://localhost:4021
 npm run demo     # in another terminal: registers two agents, links an external
                   # identity, runs two jobs end to end, prints the resulting
