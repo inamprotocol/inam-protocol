@@ -40,9 +40,39 @@ const receipt = await worker.submitWork(poster.did, {
 await poster.acceptWork(receipt); // finalizes the receipt and auto-completes the job
 ```
 
+`poster.cancelJob(job.jobId)` cancels a not-yet-completed job (poster only); `client.getJob(id)` / `client.searchJobs({ capability, status })` / `client.listOffers(jobId)` round out discovery.
+
+### External identity linking (challenge-response)
+
+Linking a key-derived external identity (`agentpass_id` / `aitp_id` / `passport_id`; SPEC.md §2.1) requires proving control of that external key via a single-use, ~60s challenge — a bare claim is no longer enough. `a2a_endpoint` isn't key-derived, so it skips straight to `linkIdentity(protocol, value)`.
+
+```ts
+// externalKeypair stands in for whatever key AgentPass/AITP/Passport Alliance
+// already issued this agent -- not an INAM keypair.
+const challenge = await client.requestLinkChallenge("agentpass_id", toBase64(externalKeypair.publicKey), "ed25519");
+const proof = toBase64(sign(fromHex(challenge.challenge), externalKeypair.privateKey));
+await client.completeLink("agentpass_id", "ap_my_external_id", challenge.challengeId, proof);
+```
+
+### Verification (independent attestation)
+
+A third party — anyone but the receipt's own worker (`agentB`) — can attest that a finalized receipt's output actually holds up (SPEC.md §12), feeding a reputation boost:
+
+```ts
+const verification = await verifierClient.submitVerification({
+  receiptId: receipt.receiptId,
+  method: "deterministic", // or "agent_attestation"
+  outputHash: receipt.result.outputHash,
+  result: "verified", // or "rejected"
+});
+
+await verifierClient.getVerification(verification.verificationId);
+await verifierClient.listReceiptVerifications(receipt.receiptId);
+```
+
 ## What's exported
 
-`InamClient`, `generateKeypair`/`keypairFromPrivateKey`/`publicKeyToDid`/`didToPublicKey`/`sign`/`verify`/`sha256Hex`, `canonicalize` (the canonical-JSON serializer every INAM signature is computed over), `computeReceiptId`/`buildSignableContent`, and the full set of wire-format types (`AgentRecord`, `ExecutionReceipt`, `JobRecord`, `JobOffer`, `ReputationResult`, ...).
+`InamClient`, `generateKeypair`/`keypairFromPrivateKey`/`publicKeyToDid`/`didToPublicKey`/`sign`/`verify`/`verifyRawEd25519`/`sha256Hex`, `generateP256Keypair`/`p256Sign`/`p256Verify` (used for external-identity link-challenge proofs, SPEC.md §2.1), `canonicalize` (the canonical-JSON serializer every INAM signature is computed over), `computeReceiptId`/`buildSignableContent`, `computeVerificationId`/`buildSignableVerificationContent`, and the full set of wire-format types (`AgentRecord`, `ExecutionReceipt`, `JobRecord`, `JobOffer`, `ReputationResult`, `LinkChallenge`, `VerificationRecord`, ...).
 
 ## Building from source
 
