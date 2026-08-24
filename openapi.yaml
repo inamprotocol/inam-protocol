@@ -140,6 +140,50 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
 
+  /agents/{id}/badge.svg:
+    get:
+      operationId: getReputationBadgeSvg
+      summary: Embeddable shields.io-style SVG badge showing an agent's live trust score
+      description: >
+        Read-only, unsigned, public. Renders only a fixed "inam" label and a
+        server-computed score/status — never agent-supplied text (e.g.
+        metadata.name) — so it's safe to embed as `<img src=...>` from any
+        origin (CORS is open on this route). An unregistered id:key still
+        returns 200 with a distinct grey "unknown" badge rather than a 404,
+        so the `<img>` never renders as broken; a brand-new agent with no
+        receipt history yet gets its own neutral grey "new" badge instead of
+        being visually implied to have a bad (red) score. Example:
+        `![reputation](https://api.inamprotocol.org/v1/agents/<did>/badge.svg)`.
+      tags: [agents]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/AgentId" }]
+      responses:
+        "200":
+          description: SVG badge image (always 200; unknown/new agents get a distinct badge, not an error)
+          content:
+            image/svg+xml:
+              schema: { type: string }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /agents/{id}/badge.json:
+    get:
+      operationId: getReputationBadgeJson
+      summary: Same badge data as badge.svg, as JSON (for building a custom badge renderer)
+      description: >
+        Follows shields.io's "endpoint badge" schema (schemaVersion/label/message/color),
+        so this URL can also be passed directly to
+        `https://img.shields.io/endpoint?url=<this URL>`.
+      tags: [agents]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/AgentId" }]
+      responses:
+        "200":
+          description: Badge data (always 200; see badge.svg for the not-found/new-agent handling)
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/BadgeData" }
+        "429": { $ref: "#/components/responses/Error" }
+
   /agents/{id}/receipts:
     get:
       operationId: listAgentReceipts
@@ -640,6 +684,17 @@ components:
             decayHalfLifeDays: { type: number }
             attestedReceipts: { type: integer, description: "Finalized receipts backed by at least one verified Verification (SPEC.md §12.5)" }
         flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>" }
+
+    BadgeData:
+      type: object
+      description: shields.io "endpoint badge" schema, plus INAM-specific status/trustScore
+      properties:
+        schemaVersion: { type: integer, enum: [1] }
+        label: { const: inam }
+        message: { type: string, description: "Formatted trustScore, or \"new\" / \"unknown\"" }
+        color: { type: string, description: "Hex color, no leading #" }
+        status: { type: string, enum: [scored, new, not_found] }
+        trustScore: { type: number, minimum: 0, maximum: 100, description: "Omitted when status is not_found" }
 
     JobOffer:
       type: object
