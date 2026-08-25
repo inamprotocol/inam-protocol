@@ -1,6 +1,6 @@
 import type { Context, Next } from "hono";
 import { sha256Hex, verify, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
-import { unauthorized } from "./errors.js";
+import { unauthorized, badRequest } from "./errors.js";
 import type { AppEnv } from "./types.js";
 
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -41,6 +41,19 @@ export async function requireSignedRequest(c: Context<AppEnv>, next: Next) {
 
   c.set("agentDid", agentDid);
   c.set("rawBody", rawBody);
-  c.set("parsedBody", rawBody.length > 0 ? JSON.parse(rawBody) : undefined);
+  if (rawBody.length > 0) {
+    try {
+      c.set("parsedBody", JSON.parse(rawBody));
+    } catch {
+      // A malformed body (e.g. `{invalid`) previously reached app.onError's
+      // catch-all as an uncaught SyntaxError and surfaced as a 500
+      // INTERNAL_ERROR -- confirmed live before this fix, same underlying
+      // bug as the Node reference server's equivalent (src/middleware/
+      // errors.ts) had. A client mistake, not a server bug.
+      throw badRequest("INVALID_JSON", "Request body is not valid JSON");
+    }
+  } else {
+    c.set("parsedBody", undefined);
+  }
   await next();
 }
