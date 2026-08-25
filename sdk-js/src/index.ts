@@ -24,6 +24,24 @@ export { computeReceiptId, buildSignableContent, type ReceiptContentInput } from
 
 export { computeVerificationId, buildSignableVerificationContent, type VerificationContentInput } from "./core/verificationContent.js";
 
+// Request-body validation schemas — shared by the Node reference server and
+// the Cloudflare Worker so both accept/reject the exact same requests (see
+// core/schemas.ts's own header comment for why this exists). Exported
+// publicly too: a caller building requests by hand (rather than through
+// InamClient) can validate a payload client-side before sending it.
+export {
+  registerAgentSchema,
+  linkChallengeSchema,
+  linkSchema,
+  postJobSchema,
+  offerSchema,
+  acceptOfferSchema,
+  draftReceiptSchema,
+  countersignSchema,
+  disputeSchema,
+  submitVerificationSchema,
+} from "./core/schemas.js";
+
 export type {
   LinkedIdentities,
   ExternalKeyType,
