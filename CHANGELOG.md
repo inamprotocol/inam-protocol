@@ -36,7 +36,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
-### Unreleased
+### 0.3.1 — 2026-08-25
 - **Fixed a real, live cross-language signature bug**: `canonicalize()` now rejects `NaN`/`Infinity`/`-Infinity` outright instead of silently delegating to `JSON.stringify`, which turns all three into the string `"null"` — previously capable of corrupting a signed value with no error on either side. Number formatting itself was already correct here (native `JSON.stringify` follows ECMA-262 `Number::toString` by definition); the matching fix on the Python side (below) is what actually resolves the live bug, this side only closes the NaN/Infinity gap. New test vectors in `tests/canonical.test.ts` shared byte-for-byte with `sdk-python/tests/test_canonical.py`.
 
 ### 0.3.0 — 2026-08-22
@@ -90,7 +90,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Python SDK (`sdk-python`)
 
-### Unreleased
+### 0.4.1 — 2026-08-25
 - **Fixed a critical, live cross-language signature bug**: `canonicalize()`'s number formatting used Python's own `json.dumps`/`repr` rules (`1.0`, `1e-07`, `1e+20`, `-0.0`), which disagree with JavaScript's `JSON.stringify` (`1`, `1e-7`, `100000000000000000000`, `0`) for ordinary values — observed live as `submit_verification(..., score=1.0)` failing `INVALID_VERIFICATION_SIGNATURE` against the (always-TypeScript) server while `score=0.99` succeeded, with no actual tampering involved. `canonical.py`'s `_format_number` now reimplements the ECMA-262 `Number::toString` algorithm directly, so Python produces the exact digit string JavaScript would for the same value. Also now rejects `NaN`/`Infinity`/`-Infinity` explicitly (`ValueError`) rather than letting them reach `json.dumps` and produce a non-JSON literal. 17 new shared test vectors in `tests/test_canonical.py`, mirrored byte-for-byte in `sdk-js`'s `tests/canonical.test.ts`; the exact live-reproduced case (`score: 1.0`) is a dedicated regression test in both.
 - **Fixed a second, independent bug found while investigating the above**: the HTTP `user-agent` header was hardcoded to `inamprotocol-python-sdk/0.1.0` since the 0.1.1 release and never updated across four subsequent releases — every request from every installed version of this SDK misidentified itself as the first release. Now read from the installed package's own metadata (`importlib.metadata.version("inamprotocol")`) instead of a literal, so it can't drift out of sync with `pyproject.toml` again.
 
