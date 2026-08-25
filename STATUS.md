@@ -34,8 +34,8 @@ A single independent verifier's signed attestation that a finalized receipt's ou
 
 ## Current live state (verify independently before relying on this — it decays fast)
 
-- **GitHub**: `github.com/inamprotocol/inam-protocol`, public, `main` branch at commit `87f7f2f` as of this writing.
-- **Deployments**: `https://api.inamprotocol.org` (registry API), `https://docs.inamprotocol.org` (spec + API reference), `https://inamprotocol.org` (landing page) — all live Cloudflare Workers.
+- **GitHub**: `github.com/inamprotocol/inam-protocol`, public, `main` branch at commit `1ab2b95` as of this writing (2026-08-25). Branch protection on `main` now requires all 4 CI checks; repo "About" field set.
+- **Deployments**: `https://api.inamprotocol.org` (registry API, now including `GET /agents/:id/badge.svg`/`.json`), `https://docs.inamprotocol.org` (spec + API reference), `https://inamprotocol.org` (landing page), **`https://explorer.inamprotocol.org`** (new, 2026-08-25 — read-only public browser + live stats dashboard) — all live Cloudflare Workers, all verified responding 2026-08-25.
 - **SPEC.md**: v0.5 (Draft).
 - **Package versions in the repo** (committed, built, tested) vs. **actually published**:
   | Package | Repo version | Published version (checked 2026-08-23) | Gap |
