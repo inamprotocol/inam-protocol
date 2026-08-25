@@ -38,10 +38,11 @@ A single independent verifier's signed attestation that a finalized receipt's ou
 - **Deployments**: `https://api.inamprotocol.org` (registry API, now including `GET /agents/:id/badge.svg`/`.json`), `https://docs.inamprotocol.org` (spec + API reference), `https://inamprotocol.org` (landing page), **`https://explorer.inamprotocol.org`** (new, 2026-08-25 — read-only public browser + live stats dashboard) — all live Cloudflare Workers, all verified responding 2026-08-25.
 - **SPEC.md**: v0.5 (Draft).
 - **Package versions in the repo** (committed, built, tested) vs. **actually published**:
-  | Package | Repo version | Published version (checked 2026-08-23) | Gap |
+  | Package | Repo version | Published version (checked 2026-08-25) | Gap |
   |---|---|---|---|
-  | `inamprotocol` (npm, `sdk-js`) | 0.3.0 | **0.3.0** | None — up to date |
-  | `inamprotocol` (PyPI, `sdk-python`) | 0.4.0 | **0.4.0** (re-checked 2026-08-24, released 2026-08-22) | None — the venv retry from item 1 below did succeed; this was just never reflected back into this file |
+  | `inamprotocol` (npm, `sdk-js`) | 0.3.1 | **0.3.1** | None — published via the new trusted-publishing workflow after a real bug (a critical cross-language canonical-JSON signature bug — see below) |
+  | `inamprotocol` (PyPI, `sdk-python`) | 0.4.1 | **0.4.1** | None — same release, same fix |
+- **2026-08-25: an external audit found and this session fixed a critical, live bug** — `score: 1.0` submitted via the Python SDK failed `INVALID_VERIFICATION_SIGNATURE` (server is always TypeScript; Python's `json.dumps` and JS's `JSON.stringify` disagree on number formatting for ordinary values). Fixed in both SDKs, live-reproduced before/after, republished as `sdk-js@0.3.1`/`sdk-python@0.4.1`. The same audit raised 14 more findings (schema-validation parity between Node and Worker, verifier independence, reputation date/future-dating safety, provider/requester score conflation, rejected-verification handling, currency conflation in `volumeUsd`, replay/idempotency hardening, external-identity verification depth, key management, job/dispute state-machine completeness, no agent runtime, privacy/access control, search/reputation scaling, doc/version drift) — being worked through in priority order (P0 first), not all fixed yet as of this note.
 - **Test coverage**: 38 Node vitest + 31 Worker vitest + 23 Python pytest = 92 automated tests, re-run and confirmed green 2026-08-24 (all three suites, plus live 200s from `api.inamprotocol.org`, `docs.inamprotocol.org`, `inamprotocol.org`).
 
 ## Gaps and incomplete items found in this audit
