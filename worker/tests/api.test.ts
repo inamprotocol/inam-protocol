@@ -89,6 +89,47 @@ function job(overrides?: Partial<Record<string, unknown>>) {
   };
 }
 
+describe("malformed request bodies", () => {
+  it("returns 400 INVALID_JSON, not 500, for a syntactically invalid but correctly-signed body", async () => {
+    // Confirmed live before this fix: signedRequest.ts's JSON.parse(rawBody)
+    // had no try/catch, so a malformed body reached app.onError's catch-all
+    // as an uncaught SyntaxError and surfaced as a 500 INTERNAL_ERROR --
+    // misleadingly reporting a client mistake as a server bug (same
+    // underlying issue as the Node reference server's equivalent gap).
+    // Signature verification runs *before* JSON.parse here (unlike Node,
+    // where express.json() runs as global middleware ahead of any
+    // route-specific auth check), so this has to be a genuinely
+    // correctly-signed request over the malformed raw bytes to actually
+    // reach the JSON.parse failure rather than failing auth first.
+    const kp = generateKeypair();
+    const rawBody = "{invalid json";
+    const path = "/v1/agents";
+    const timestamp = Date.now().toString();
+    const bodyHash = sha256Hex(rawBody);
+    const signingString = `POST\n${path}\n${timestamp}\n${bodyHash}`;
+    const signature = toBase64(sign(new TextEncoder().encode(signingString), kp.privateKey));
+
+    const request = new Request(`http://worker.test${path}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "cf-connecting-ip": crypto.randomUUID(),
+        "inam-agent": kp.did,
+        "inam-timestamp": timestamp,
+        "inam-signature": signature,
+        "idempotency-key": "malformed-json-test",
+      },
+      body: rawBody,
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    expect(response.status).toBe(400);
+    const json = (await response.json()) as { error: { code: string } };
+    expect(json.error.code).toBe("INVALID_JSON");
+  });
+});
+
 describe("health", () => {
   it("responds ok", async () => {
     const { status, json } = await call("GET", "/v1/health");
