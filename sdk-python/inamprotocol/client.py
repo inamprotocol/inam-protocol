@@ -11,12 +11,27 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Dict, List, Optional
 
 from .canonical import canonicalize
 from .keys import Keypair, sha256_hex, sign, to_base64
 from .receipt import build_signable_content
 from .verification import build_signable_verification_content
+
+try:
+    _SDK_VERSION = version("inamprotocol")
+except PackageNotFoundError:
+    # Not installed as a package (e.g. running straight from a source
+    # checkout without `pip install -e .`) -- fall back rather than crash.
+    _SDK_VERSION = "0.0.0-dev"
+
+# Read from the installed package's own metadata (pyproject.toml's
+# `version`) instead of a hardcoded literal: a previous version of this
+# string was pinned to "0.1.0" and silently never updated across four
+# subsequent releases (0.2.0 through 0.4.0), so every request from every
+# version of this SDK identified itself as the very first release.
+_USER_AGENT = f"inamprotocol-python-sdk/{_SDK_VERSION}"
 
 
 class InamApiError(Exception):
@@ -52,7 +67,7 @@ class InamClient:
             "content-type": "application/json",
             # Cloudflare's bot protection on *.workers.dev flags Python's
             # default `Python-urllib/x.y` User-Agent; identify honestly instead.
-            "user-agent": "inamprotocol-python-sdk/0.1.0",
+            "user-agent": _USER_AGENT,
             "inam-agent": self.keypair.did,
             "inam-timestamp": timestamp,
             "inam-signature": signature,
