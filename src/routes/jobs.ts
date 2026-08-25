@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { z } from "zod";
+import { postJobSchema, offerSchema, acceptOfferSchema } from "../../sdk-js/src/core/schemas.js";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
@@ -7,13 +7,6 @@ import { badRequest } from "../middleware/errors.js";
 import * as jobService from "../services/jobService.js";
 
 export const jobsRouter = Router();
-
-const postJobSchema = z.object({
-  capability: z.string().min(1),
-  specHash: z.string().min(1),
-  budget: z.object({ amount: z.string().optional(), currency: z.string().optional() }).optional(),
-  expiresAt: z.string().optional(),
-});
 
 jobsRouter.post("/", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = postJobSchema.safeParse(req.body);
@@ -32,8 +25,6 @@ jobsRouter.get("/:id", (req, res) => {
   res.json(jobService.getJob(req.params.id));
 });
 
-const offerSchema = z.object({ message: z.string().optional() });
-
 jobsRouter.post("/:id/offers", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = offerSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
@@ -45,10 +36,8 @@ jobsRouter.get("/:id/offers", (req, res) => {
   res.json({ offers: jobService.getJob(req.params.id).offers });
 });
 
-const acceptSchema = z.object({ agentId: z.string().min(1) });
-
 jobsRouter.post("/:id/accept", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
-  const parsed = acceptSchema.safeParse(req.body);
+  const parsed = acceptOfferSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const job = jobService.acceptOffer(req.params.id, req.agentDid!, parsed.data.agentId);
   res.json(job);

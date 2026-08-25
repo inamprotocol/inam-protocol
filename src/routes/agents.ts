@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { z } from "zod";
+import { registerAgentSchema, linkChallengeSchema, linkSchema } from "../../sdk-js/src/core/schemas.js";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
@@ -11,13 +11,8 @@ import { badgeDataForReputation, badgeDataToJson, notFoundBadgeData, renderBadge
 
 export const agentsRouter = Router();
 
-const registerSchema = z.object({
-  capabilities: z.array(z.string().min(1)).min(1),
-  metadata: z.record(z.unknown()).optional(),
-});
-
 agentsRouter.post("/", rateLimitRegistrationByIp, requireSignedRequest, requireIdempotencyKey, (req, res) => {
-  const parsed = registerSchema.safeParse(req.body);
+  const parsed = registerAgentSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const record = agentService.registerAgent(req.agentDid!, parsed.data);
   res.status(201).json(record);
@@ -79,25 +74,12 @@ agentsRouter.get("/:id/badge.json", rateLimitReadByIp, (req, res) => {
   res.status(200).json(badgeDataToJson(data));
 });
 
-const linkChallengeSchema = z.object({
-  protocol: z.enum(["agentpass_id", "aitp_id", "passport_id"]),
-  externalPublicKey: z.string().min(1),
-  keyType: z.enum(["ed25519", "p256"]),
-});
-
 agentsRouter.post("/:id/link/challenge", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   agentService.requireSelf(req.agentDid, req.params.id);
   const parsed = linkChallengeSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const challenge = agentService.requestLinkChallenge(req.agentDid!, parsed.data.protocol, parsed.data.externalPublicKey, parsed.data.keyType);
   res.status(201).json(challenge);
-});
-
-const linkSchema = z.object({
-  protocol: z.enum(["agentpass_id", "aitp_id", "passport_id", "a2a_endpoint"]),
-  value: z.string().min(1),
-  challengeId: z.string().min(1).optional(),
-  proofSignature: z.string().min(1).optional(),
 });
 
 agentsRouter.post("/:id/link", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {

@@ -793,7 +793,43 @@ describe("independent verification (SPEC.md §12)", () => {
     expect((res.json as { error: { code: string } }).error.code).toBe("INVALID_VERIFICATION_SIGNATURE");
   });
 
-  it("rejects an unsupported method", async () => {
+  it("rejects an out-of-enum result and out-of-range score (the exact audit repro)", async () => {
+    // The concrete case an external audit found live: a signed
+    // POST /v1/verifications with { "result": "banana", "score": 999 } used
+    // to be accepted by the Worker (only field *presence* was checked) while
+    // the Node reference server correctly rejected it (Zod: result must be
+    // "verified"|"rejected", score must be 0..1) -- the exact "same request,
+    // different behavior" gap request-schema parity closes.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "agent_attestation", outputHash: receipt.result.outputHash, result: "banana", score: 999 };
+    const { signature } = await signVerification(verifier, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, score: input.score, signature },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+  });
+
+  it("rejects an unsupported method at the HTTP layer with VALIDATION_ERROR", async () => {
+    // Before request-schema parity was added (sdk-js/src/core/schemas.ts,
+    // shared with the Node reference server), the Worker's POST /v1/verifications
+    // handler only checked that `method` was *present*, so an out-of-enum value
+    // reached verificationService's own SUPPORTED_METHODS check and surfaced as
+    // UNSUPPORTED_VERIFICATION_METHOD. Now submitVerificationSchema's
+    // `z.enum([...])` rejects it before the service is ever called -- matching
+    // the Node reference server, which has always validated this the same way
+    // (its own equivalent service-level check is exercised by a direct,
+    // schema-bypassing unit test instead: tests/verificationFlow.test.ts's
+    // "rejects an unsupported method"). The service-level check stays in place
+    // in both runtimes as a defensive backstop for any caller that reaches it
+    // without going through HTTP validation.
     const requester = generateKeypair();
     const provider = generateKeypair();
     const verifier = generateKeypair();
@@ -808,7 +844,7 @@ describe("independent verification (SPEC.md §12)", () => {
       body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
     });
     expect(res.status).toBe(400);
-    expect((res.json as { error: { code: string } }).error.code).toBe("UNSUPPORTED_VERIFICATION_METHOD");
+    expect((res.json as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
   });
 
   it("rejects resubmitting byte-identical content", async () => {
