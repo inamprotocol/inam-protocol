@@ -16,6 +16,10 @@ import { z } from "zod";
  * independently-maintained ones happening to agree today.
  */
 
+export const setVerifierStatusSchema = z.object({
+  authorized: z.boolean(),
+});
+
 export const registerAgentSchema = z.object({
   capabilities: z.array(z.string().min(1)).min(1),
   metadata: z.record(z.unknown()).optional(),

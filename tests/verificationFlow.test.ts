@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
-import { registerAgent } from "../src/services/agentService.js";
+import { registerAgent, setVerifierStatus } from "../src/services/agentService.js";
+import { testOperatorKeypair } from "./testOperator.js";
 import { buildSignableContent, createDraft, countersign, openDispute } from "../src/services/receiptService.js";
 import { buildSignableVerificationContent, submitVerification, getVerification, listByReceipt } from "../src/services/verificationService.js";
 import { computeReputation } from "../src/services/reputationService.js";
@@ -50,6 +51,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
 
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
     const before = computeReputation(provider.did);
@@ -154,6 +156,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const firstInput: VerificationContentInput = {
@@ -180,6 +183,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
 
     const now = new Date().toISOString();
     const draftInput = {
@@ -212,6 +216,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const input: VerificationContentInput = {
@@ -235,6 +240,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     registerAgent(impostor.did, { capabilities: ["verification"] });
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
@@ -260,6 +266,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const input: VerificationContentInput = {
@@ -282,6 +289,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const input = {
@@ -304,6 +312,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const input: VerificationContentInput = {
@@ -327,6 +336,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const input: VerificationContentInput = {
@@ -353,6 +363,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const input: VerificationContentInput = {
@@ -394,7 +405,10 @@ describe("independent verification (SPEC.md §12)", () => {
     const verifiers = [generateKeypair(), generateKeypair(), generateKeypair()];
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
-    for (const v of verifiers) registerAgent(v.did, { capabilities: ["verification"] });
+    for (const v of verifiers) {
+      registerAgent(v.did, { capabilities: ["verification"] });
+      setVerifierStatus(testOperatorKeypair.did, v.did, true);
+    }
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const results: Array<"verified" | "rejected"> = ["verified", "rejected", "rejected"];
@@ -428,6 +442,7 @@ describe("independent verification (SPEC.md §12)", () => {
     registerAgent(requester.did, { capabilities: ["job.posting"] });
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
     const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
 
     const input: VerificationContentInput = {
@@ -443,5 +458,79 @@ describe("independent verification (SPEC.md §12)", () => {
     submitVerification(verifier.did, { ...input, signature });
 
     expect(computeReputation(provider.did).components.attestedReceipts).toBe(1);
+  });
+
+  it("rejects a verifier that is registered but not operator-authorized", async () => {
+    // The core fix: a receipt's own audit was right that "any registered
+    // agent" was never a real independence guarantee -- anyone could
+    // self-register and immediately verify. Only setVerifierStatus, called
+    // by the configured operator, may flip isAuthorizedVerifier.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const unauthorizedVerifier = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    registerAgent(unauthorizedVerifier.did, { capabilities: ["verification"] }); // registered, but never authorized
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: unauthorizedVerifier.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const { signature } = signVerification(unauthorizedVerifier, input);
+    await expectApiError(() => submitVerification(unauthorizedVerifier.did, { ...input, signature }), "VERIFIER_NOT_AUTHORIZED");
+  });
+
+  it("rejects a non-operator trying to grant verifier status", async () => {
+    const impostor = generateKeypair();
+    const target = generateKeypair();
+    registerAgent(target.did, { capabilities: ["verification"] });
+    await expectApiError(() => setVerifierStatus(impostor.did, target.did, true), "NOT_OPERATOR");
+    // Confirmed still unauthorized -- the impostor's call had no effect.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: target.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const { signature } = signVerification(target, input);
+    await expectApiError(() => submitVerification(target.did, { ...input, signature }), "VERIFIER_NOT_AUTHORIZED");
+  });
+
+  it("lets the operator revoke a previously-granted verifier status", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, false); // revoked immediately
+
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: verifier.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const { signature } = signVerification(verifier, input);
+    await expectApiError(() => submitVerification(verifier.did, { ...input, signature }), "VERIFIER_NOT_AUTHORIZED");
   });
 });

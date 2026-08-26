@@ -40,6 +40,7 @@ export {
   countersignSchema,
   disputeSchema,
   submitVerificationSchema,
+  setVerifierStatusSchema,
 } from "./core/schemas.js";
 
 export type {

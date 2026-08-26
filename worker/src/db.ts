@@ -22,9 +22,17 @@ export class AgentAlreadyExistsError extends Error {
 export async function insertAgent(env: Env, agent: AgentRecord): Promise<void> {
   try {
     await env.DB.prepare(
-      `INSERT INTO agents (id, capabilities, metadata, linked, stake_usd, created_at) VALUES (?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO agents (id, capabilities, metadata, linked, stake_usd, created_at, is_authorized_verifier) VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
-      .bind(agent.id, JSON.stringify(agent.capabilities), JSON.stringify(agent.metadata), JSON.stringify(agent.linked), agent.stakeUsd, agent.createdAt)
+      .bind(
+        agent.id,
+        JSON.stringify(agent.capabilities),
+        JSON.stringify(agent.metadata),
+        JSON.stringify(agent.linked),
+        agent.stakeUsd,
+        agent.createdAt,
+        agent.isAuthorizedVerifier ? 1 : 0,
+      )
       .run();
   } catch (err) {
     if (err instanceof Error && err.message.includes(UNIQUE_VIOLATION)) {
@@ -36,6 +44,10 @@ export async function insertAgent(env: Env, agent: AgentRecord): Promise<void> {
 
 export async function updateAgentLinked(env: Env, id: string, linked: AgentRecord["linked"]): Promise<void> {
   await env.DB.prepare("UPDATE agents SET linked = ? WHERE id = ?").bind(JSON.stringify(linked), id).run();
+}
+
+export async function updateAgentVerifierStatus(env: Env, id: string, authorized: boolean): Promise<void> {
+  await env.DB.prepare("UPDATE agents SET is_authorized_verifier = ? WHERE id = ?").bind(authorized ? 1 : 0, id).run();
 }
 
 export async function allAgents(env: Env): Promise<AgentRecord[]> {
@@ -347,5 +359,6 @@ function rowToAgent(row: Record<string, unknown>): AgentRecord {
     linked: JSON.parse(row.linked as string),
     stakeUsd: row.stake_usd as number,
     createdAt: row.created_at as string,
+    isAuthorizedVerifier: Boolean(row.is_authorized_verifier),
   };
 }
