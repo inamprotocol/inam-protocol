@@ -102,6 +102,19 @@ class InamClient:
     def get_agent(self, agent_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/v1/agents/{urllib.parse.quote(agent_id, safe='')}")
 
+    def set_verifier_status(self, target_agent_id: str, authorized: bool) -> Dict[str, Any]:
+        """Grants or revokes `target_agent_id`'s verifier status (SPEC.md
+        Section 12.3). Only succeeds when this client's own keypair is the
+        registry's configured operator identity -- anyone else gets
+        NOT_OPERATOR. There is no self-service path to becoming a verifier.
+        """
+        return self._request(
+            "POST",
+            f"/v1/agents/{urllib.parse.quote(target_agent_id, safe='')}/verifier-status",
+            {"authorized": authorized},
+            idempotency_key=f"verifier-status:{target_agent_id}:{authorized}:{int(time.time() * 1000)}",
+        )
+
     def link_identity(self, protocol: str, value: str) -> Dict[str, Any]:
         """Links `a2a_endpoint` -- the one protocol that isn't a key-derived
         identity, so there's nothing to prove control of beyond this

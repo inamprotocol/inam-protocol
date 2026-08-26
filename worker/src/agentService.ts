@@ -16,6 +16,10 @@ export async function registerAgent(
     linked: {},
     stakeUsd: 0,
     createdAt: new Date().toISOString(),
+    // Never settable at registration -- an agent cannot make itself a
+    // verifier by self-registering (SPEC.md §12.3). Only setVerifierStatus
+    // below, callable solely by env.OPERATOR_DID, can flip this.
+    isAuthorizedVerifier: false,
   };
   try {
     await db.insertAgent(env, record);
@@ -32,6 +36,25 @@ export async function getAgent(env: Env, id: string): Promise<AgentRecord> {
   const record = await db.getAgent(env, id);
   if (!record) throw notFound("AGENT_NOT_FOUND", `No agent registered with id ${id}`);
   return record;
+}
+
+/**
+ * Grants or revokes an agent's verifier status (SPEC.md §12.3). Callable
+ * only by the registry's configured operator identity (env.OPERATOR_DID) —
+ * an audit found that letting *any* registered agent act as a verifier (the
+ * only bar being "not a party to this receipt") meant verifier count didn't
+ * correspond to real independence: anyone could self-register and
+ * immediately start verifying. env.OPERATOR_DID unset (the default until a
+ * deployment deliberately configures it) means this always rejects — locked
+ * down, not silently permissive.
+ */
+export async function setVerifierStatus(env: Env, callerDid: string, targetAgentId: string, authorized: boolean): Promise<AgentRecord> {
+  if (!env.OPERATOR_DID || callerDid !== env.OPERATOR_DID) {
+    throw forbidden("NOT_OPERATOR", "Only the registry's configured operator identity may authorize or revoke a verifier");
+  }
+  await getAgent(env, targetAgentId); // AGENT_NOT_FOUND if it doesn't exist
+  await db.updateAgentVerifierStatus(env, targetAgentId, authorized);
+  return getAgent(env, targetAgentId);
 }
 
 const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "a2a_endpoint"] as const;

@@ -51,14 +51,17 @@ export async function submitVerification(env: Env, callerDid: string, input: Sub
   if (callerDid === provider || callerDid === requester) {
     throw badRequest("SELF_VERIFICATION", "Neither party to a receipt (its provider or requester) can act as its independent verifier");
   }
-  // A verifier must be a real, registered identity in this registry, not an
-  // arbitrary unregistered did:key — getAgent throws AGENT_NOT_FOUND
-  // otherwise. This doesn't prove the verifier is an independent
-  // organization (no cryptographic scheme can, on its own — see SPEC.md §0's
-  // own boundary: INAM isn't an identity/authorization system), only that
-  // it's a real participant in the registry, not a throwaway key minted for
-  // this one call.
-  await getAgent(env, callerDid);
+  // v0.10: being a registered agent is not enough — a verifier must be
+  // specifically operator-authorized (SPEC.md §12.3, agentService.setVerifierStatus).
+  // An audit found the earlier "any registered agent that isn't a party to
+  // the receipt" rule meant verifier count didn't correspond to real
+  // independence at all: anyone could self-register and immediately start
+  // verifying receipts. getAgent throws AGENT_NOT_FOUND for an unregistered
+  // did:key; the isAuthorizedVerifier check below is the actual gate.
+  const verifierAgent = await getAgent(env, callerDid);
+  if (!verifierAgent.isAuthorizedVerifier) {
+    throw forbidden("VERIFIER_NOT_AUTHORIZED", "This agent has not been authorized by the registry operator as a verifier");
+  }
   if (input.outputHash !== receipt.result.outputHash) {
     throw badRequest("VERIFICATION_TARGET_MISMATCH", "outputHash does not match the referenced receipt's result.outputHash");
   }

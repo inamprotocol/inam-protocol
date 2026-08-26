@@ -9,7 +9,16 @@ CREATE TABLE IF NOT EXISTS agents (
   metadata TEXT NOT NULL,       -- JSON object
   linked TEXT NOT NULL,         -- JSON object (LinkedIdentities)
   stake_usd REAL NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Verifier authorization (SPEC.md §12.3): only the registry's configured
+  -- operator identity can flip this, via setVerifierStatus /
+  -- POST /agents/:id/verifier-status -- never settable at registration.
+  -- CREATE TABLE IF NOT EXISTS only helps a *fresh* database; the existing
+  -- production `agents` table needs this column added separately (see the
+  -- ALTER TABLE note in STATUS.md / the commit that introduced this field --
+  -- do not deploy the code that reads/writes this column before that
+  -- migration has actually been applied to the live D1 database).
+  is_authorized_verifier INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS receipts (

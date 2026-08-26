@@ -32,6 +32,11 @@ export interface AgentRecord {
   linked: LinkedIdentities;
   stakeUsd: number;
   createdAt: string;
+  /** Whether the registry operator has authorized this agent as a verifier
+   * (SPEC.md §12.3) — false by default at registration. An agent cannot make
+   * itself a verifier by self-registering; only the registry's configured
+   * operator identity can grant this via POST /agents/:id/verifier-status. */
+  isAuthorizedVerifier: boolean;
 }
 
 export type VerificationMethod = "payer_confirmation" | "independent_validator" | "test_suite_pass";

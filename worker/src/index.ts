@@ -13,6 +13,7 @@ import { computeReputation } from "./reputationService.js";
 import { badgeDataForReputation, badgeDataToJson, notFoundBadgeData, renderBadgeSvg } from "./badgeService.js";
 import {
   registerAgentSchema,
+  setVerifierStatusSchema,
   linkChallengeSchema,
   linkSchema,
   postJobSchema,
@@ -87,6 +88,16 @@ app.post("/v1/agents", rateLimitRegistrationByIp, requireSignedRequest, requireI
   const body = parseBody(registerAgentSchema, c.get("parsedBody"));
   const record = await agentService.registerAgent(c.env, c.get("agentDid")!, body);
   return c.json(record, 201);
+});
+
+// Operator-only: grants or revokes an agent's verifier status (SPEC.md
+// §12.3). Not restricted to the target agent itself (unlike the link/link-
+// challenge routes' requireSelf) -- the whole point is that only the
+// registry's configured operator identity may call this, for any agent.
+app.post("/v1/agents/:id/verifier-status", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  const body = parseBody(setVerifierStatusSchema, c.get("parsedBody"));
+  const record = await agentService.setVerifierStatus(c.env, c.get("agentDid")!, c.req.param("id")!, body.authorized);
+  return c.json(record);
 });
 
 app.get("/v1/agents/search", rateLimitReadByIp, async (c) => {

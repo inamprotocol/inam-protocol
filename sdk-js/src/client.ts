@@ -65,6 +65,16 @@ export class InamClient {
     return this.request("GET", `/v1/agents/${encodeURIComponent(id)}`);
   }
 
+  /** Grants or revokes `targetAgentId`'s verifier status (SPEC.md §12.3).
+   * Only succeeds when this client's own keypair is the registry's
+   * configured operator identity — anyone else gets NOT_OPERATOR. There is
+   * no self-service path to becoming a verifier. */
+  setVerifierStatus(targetAgentId: string, authorized: boolean): Promise<AgentRecord> {
+    return this.request("POST", `/v1/agents/${encodeURIComponent(targetAgentId)}/verifier-status`, { authorized }, {
+      idempotencyKey: `verifier-status:${targetAgentId}:${authorized}:${Date.now()}`,
+    });
+  }
+
   /** Links `a2a_endpoint` — the one protocol that isn't a key-derived
    * identity, so there's nothing to prove control of beyond this request's
    * own INAM signature. For `agentpass_id` / `aitp_id` / `passport_id`, use

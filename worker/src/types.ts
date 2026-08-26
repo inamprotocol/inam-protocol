@@ -36,6 +36,11 @@ export interface AgentRecord {
   linked: LinkedIdentities;
   stakeUsd: number;
   createdAt: string;
+  /** Whether the registry operator has authorized this agent as a verifier
+   * (SPEC.md §12.3) — false by default at registration. An agent cannot make
+   * itself a verifier by self-registering; only the registry's configured
+   * operator identity can grant this via POST /agents/:id/verifier-status. */
+  isAuthorizedVerifier: boolean;
 }
 
 export type VerificationMethod = "payer_confirmation" | "independent_validator" | "test_suite_pass";
@@ -147,6 +152,15 @@ export interface Env {
   RATE_LIMIT_REGISTER: RateLimit;
   RATE_LIMIT_WRITE: RateLimit;
   RATE_LIMIT_READ: RateLimit;
+  /** The one identity allowed to grant/revoke an agent's verifier status
+   * (agentService.setVerifierStatus, SPEC.md §12.3). A public identifier
+   * (a did:key), not a secret. Deliberately absent from the committed
+   * wrangler.jsonc `vars` -- unset (undefined) is the safe default (no one
+   * can be authorized as operator) rather than shipping a placeholder value
+   * whose private key nobody controls, or worse, one anyone reading the
+   * source could reconstruct. A real deployment configures this itself
+   * (`vars` or `wrangler secret put`). */
+  OPERATOR_DID?: string;
 }
 
 export type AppEnv = {

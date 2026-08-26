@@ -17,6 +17,10 @@ export function registerAgent(callerDid: string, input: { capabilities: string[]
     linked: {},
     stakeUsd: 0,
     createdAt: new Date().toISOString(),
+    // Never settable at registration -- an agent cannot make itself a
+    // verifier by self-registering (SPEC.md §12.3). Only setVerifierStatus
+    // below, callable solely by config.operatorDid, can flip this.
+    isAuthorizedVerifier: false,
   };
   agents.set(callerDid, record);
   return record;
@@ -26,6 +30,26 @@ export function getAgent(id: string): AgentRecord {
   const record = agents.get(id);
   if (!record) throw notFound("AGENT_NOT_FOUND", `No agent registered with id ${id}`);
   return record;
+}
+
+/**
+ * Grants or revokes an agent's verifier status (SPEC.md §12.3). Callable
+ * only by the registry's configured operator identity (config.operatorDid)
+ * — an audit found that letting *any* registered agent act as a verifier
+ * (the only bar being "not a party to this receipt") meant verifier count
+ * didn't correspond to real independence: anyone could self-register and
+ * immediately start verifying. `config.operatorDid` unset (the default
+ * until a deployment deliberately configures it) means this always rejects
+ * — locked down, not silently permissive.
+ */
+export function setVerifierStatus(callerDid: string, targetAgentId: string, authorized: boolean): AgentRecord {
+  if (!config.operatorDid || callerDid !== config.operatorDid) {
+    throw forbidden("NOT_OPERATOR", "Only the registry's configured operator identity may authorize or revoke a verifier");
+  }
+  const record = getAgent(targetAgentId);
+  const updated: AgentRecord = { ...record, isAuthorizedVerifier: authorized };
+  agents.set(targetAgentId, updated);
+  return updated;
 }
 
 const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "a2a_endpoint"] as const;

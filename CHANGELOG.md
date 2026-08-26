@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.10 (Draft) — 2026-08-26
+- **Closed the actual verifier-independence gap**: v0.6 required a verifier to be "a registered agent," but registration is free and self-service — that requirement never restricted who could verify, so verifier *count* carried no real independence signal and could trivially defeat v0.9's verified-vs-rejected tiebreak by registering throwaway identities.
+- New `isAuthorizedVerifier` boolean on the agent record (§2), `false` by default at registration. Only a single registry-configured **operator** identity can flip it, via new `POST /agents/:id/verifier-status` (§12.6). §12.3 rule 4 now checks this flag, not mere registration.
+- New error codes: `VERIFIER_NOT_AUTHORIZED` (registered but not operator-authorized), `NOT_OPERATOR` (caller of the new endpoint isn't the configured operator). A registry with no operator configured accepts none of these requests — locked down by default.
+- Narrow scope, matching this session's established pattern: a single static operator key, no succession/rotation/multi-operator design (explicit future work, §12.6).
+
 ### v0.9 (Draft) — 2026-08-26
 - **Closed a reputation-boost exploit the same audit found**: §12.5's eligibility rule required only "at least one `verified` Verification exists," so a single `verified` record granted the boost regardless of how many independent verifiers `rejected` the same receipt — real for a receipt's own two parties (get one colluding/careless verifier to say `verified`), not a missing feature. Tightened to require `verified` strictly outnumbering `rejected` among all Verifications on the receipt.
 - Explicitly not a multi-verifier consensus mechanism (still v0.2 backlog, §12.7) — no verifier-trust weighting, no quorum, no new state. The ordinary single-verifier case (`verified`, zero `rejected`) is unaffected.
@@ -58,6 +64,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.3.2 — 2026-08-26
+- Added `client.setVerifierStatus(targetAgentId, authorized)` (SPEC.md v0.10, §12.6) — grants or revokes an agent's `isAuthorizedVerifier` flag. Only succeeds when the calling keypair is the registry's configured operator identity; anyone else gets `NOT_OPERATOR`. New `setVerifierStatusSchema` exported from `sdk-js/src/core/schemas.ts`.
+
 ### 0.3.1 — 2026-08-25
 - **Fixed a real, live cross-language signature bug**: `canonicalize()` now rejects `NaN`/`Infinity`/`-Infinity` outright instead of silently delegating to `JSON.stringify`, which turns all three into the string `"null"` — previously capable of corrupting a signed value with no error on either side. Number formatting itself was already correct here (native `JSON.stringify` follows ECMA-262 `Number::toString` by definition); the matching fix on the Python side (below) is what actually resolves the live bug, this side only closes the NaN/Infinity gap. New test vectors in `tests/canonical.test.ts` shared byte-for-byte with `sdk-python/tests/test_canonical.py`.
 
@@ -74,6 +83,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.4 — 2026-08-26 (external audit fixes, continued)
+- **Operator-authorized verifiers (SPEC.md v0.10, §12.3/§12.6)**: closes the actual verifier-independence gap left by v0.6's "must be a registered agent" rule — registration is free and self-service, so that rule never restricted who could verify, only that they'd registered first. Verifier eligibility is now an explicit grant: a new `isAuthorizedVerifier` boolean on `AgentRecord`, `false` by default at registration, settable only by a single registry-configured operator identity (`INAM_OPERATOR_DID` env var, Node; `OPERATOR_DID` binding, Worker — both unset by default, the locked-down state) via new `POST /agents/:id/verifier-status`. `submitVerification` (both runtimes) now checks this flag instead of mere registration, rejecting `VERIFIER_NOT_AUTHORIZED`; a non-operator calling the new endpoint gets `NOT_OPERATOR`.
+- New D1 migration `worker/migration-add-verifier-status.sql` (`ALTER TABLE agents ADD COLUMN is_authorized_verifier`) — **must run against production D1 before deploying this version's Worker code**, since `worker/schema.sql`'s `CREATE TABLE IF NOT EXISTS` is a no-op against an existing table.
+- New client methods: `InamClient.setVerifierStatus()` (sdk-js 0.3.2), `InamClient.set_verifier_status()` (sdk-python 0.4.2).
+- Live-proven end to end against a real running Node server with a real operator keypair: outsider grant attempt correctly rejected (`NOT_OPERATOR`), operator grant correctly applied, operator revoke correctly applied and immediately re-blocks verification submission. New regression tests in both runtimes covering unauthorized-registered-verifier rejection, non-operator-grant rejection, and operator revocation (Node 67, Worker 49).
 
 ### 0.6.3 — 2026-08-26 (external audit fixes, continued)
 - **Fixed a reputation-boost exploit (SPEC.md v0.9, §12.5)**: `hasVerifiedAttestation` (both runtimes) required only "at least one verified" among a receipt's Verifications, so a single colluding/careless verifier's `verified` unconditionally outvoted any number of independent `rejected` records from other verifiers. Now requires `verified` to strictly outnumber `rejected` — a narrow strict-majority tiebreak, not the multi-verifier consensus mechanism explicitly deferred to v0.2 (no verifier-trust weighting, no quorum). The ordinary single-verifier case is unaffected.
@@ -131,6 +146,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.4.2 — 2026-08-26
+- Added `set_verifier_status(target_agent_id, authorized)` (SPEC.md v0.10, §12.6) — mirrors the TypeScript SDK's `client.setVerifierStatus()`.
 
 ### 0.4.1 — 2026-08-25
 - **Fixed a critical, live cross-language signature bug**: `canonicalize()`'s number formatting used Python's own `json.dumps`/`repr` rules (`1.0`, `1e-07`, `1e+20`, `-0.0`), which disagree with JavaScript's `JSON.stringify` (`1`, `1e-7`, `100000000000000000000`, `0`) for ordinary values — observed live as `submit_verification(..., score=1.0)` failing `INVALID_VERIFICATION_SIGNATURE` against the (always-TypeScript) server while `score=0.99` succeeded, with no actual tampering involved. `canonical.py`'s `_format_number` now reimplements the ECMA-262 `Number::toString` algorithm directly, so Python produces the exact digit string JavaScript would for the same value. Also now rejects `NaN`/`Infinity`/`-Infinity` explicitly (`ValueError`) rather than letting them reach `json.dumps` and produce a non-JSON literal. 17 new shared test vectors in `tests/test_canonical.py`, mirrored byte-for-byte in `sdk-js`'s `tests/canonical.test.ts`; the exact live-reproduced case (`score: 1.0`) is a dedicated regression test in both.

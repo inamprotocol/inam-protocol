@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { registerAgentSchema, linkChallengeSchema, linkSchema } from "../../sdk-js/src/core/schemas.js";
+import { registerAgentSchema, linkChallengeSchema, linkSchema, setVerifierStatusSchema } from "../../sdk-js/src/core/schemas.js";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
@@ -16,6 +16,17 @@ agentsRouter.post("/", rateLimitRegistrationByIp, requireSignedRequest, requireI
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const record = agentService.registerAgent(req.agentDid!, parsed.data);
   res.status(201).json(record);
+});
+
+// Operator-only: grants or revokes an agent's verifier status (SPEC.md
+// §12.3). Not restricted to the target agent itself (unlike the link/link-
+// challenge routes' requireSelf) -- the whole point is that only the
+// registry's configured operator identity may call this, for any agent.
+agentsRouter.post("/:id/verifier-status", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
+  const parsed = setVerifierStatusSchema.safeParse(req.body);
+  if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
+  const record = agentService.setVerifierStatus(req.agentDid!, req.params.id, parsed.data.authorized);
+  res.json(record);
 });
 
 agentsRouter.get("/search", rateLimitReadByIp, (req, res) => {

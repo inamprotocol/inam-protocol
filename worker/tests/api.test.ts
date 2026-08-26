@@ -5,6 +5,7 @@ import worker from "../src/index.js";
 import { generateKeypair, sha256Hex, sign, toBase64 } from "../../sdk-js/src/crypto/keys.js";
 import { generateP256Keypair, p256Sign } from "../../sdk-js/src/crypto/p256.js";
 import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
+import { testOperatorKeypair } from "./testOperator.js";
 
 // Inlined rather than read from ../schema.sql at runtime: this test file
 // executes inside the Workers-simulated environment (via @cloudflare/vitest-plugin),
@@ -13,7 +14,7 @@ import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
 // One statement per array entry (not exec() with a multi-line blob) — D1's
 // exec() splits on newlines and chokes on a CREATE TABLE spanning several.
 const SCHEMA_STATEMENTS = [
-  "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, is_authorized_verifier INTEGER NOT NULL DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS receipts (receipt_id TEXT PRIMARY KEY, agent_a_id TEXT NOT NULL REFERENCES agents(id), agent_b_id TEXT NOT NULL REFERENCES agents(id), status TEXT NOT NULL, completed_at TEXT NOT NULL, amount_usd REAL NOT NULL DEFAULT 0, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_a ON receipts(agent_a_id)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_b ON receipts(agent_b_id)",
@@ -62,6 +63,21 @@ async function call(method: string, path: string, opts?: { body?: unknown; keypa
   await waitOnExecutionContext(ctx);
   const json = await response.json().catch(() => undefined);
   return { status: response.status, json };
+}
+
+// Grants verifier status via the real, signed operator endpoint (SPEC.md
+// §12.3) using the fixed test-operator keypair injected as env.OPERATOR_DID
+// in ../vitest.config.ts. Used everywhere a test needs an agent to actually
+// be able to submit a Verification -- registration alone is no longer
+// enough since an audit found that gave verifier count no relationship to
+// real independence.
+async function authorizeVerifier(agent: Keypair) {
+  const res = await call("POST", `/v1/agents/${encodeURIComponent(agent.did)}/verifier-status`, {
+    keypair: testOperatorKeypair,
+    idempotencyKey: `authorize-verifier:${agent.did}:${Date.now()}`,
+    body: { authorized: true },
+  });
+  if (res.status !== 200) throw new Error(`authorizeVerifier failed: ${JSON.stringify(res.json)}`);
 }
 
 // Like `call`, but for endpoints that don't return JSON (badge.svg) — hands
@@ -820,6 +836,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const before = await call("GET", `/v1/agents/${provider.did}/reputation`);
@@ -911,6 +928,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const firstInput = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
@@ -939,6 +957,7 @@ describe("independent verification (SPEC.md §12)", () => {
     await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
     await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
 
     const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
     const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
@@ -968,6 +987,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: "sha256:not_the_real_output", result: "verified" };
@@ -987,6 +1007,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const verifier = generateKeypair();
     const impostor = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     await call("POST", "/v1/agents", { keypair: impostor, idempotencyKey: `reg:${impostor.did}`, body: { capabilities: ["verification"] } });
     const receipt = await finalizeReceipt(requester, provider);
 
@@ -1007,6 +1028,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const verifier = generateKeypair();
     const impostor = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
@@ -1031,6 +1053,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "agent_attestation", outputHash: receipt.result.outputHash, result: "banana", score: 999 };
@@ -1061,6 +1084,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "tee_attestation", outputHash: receipt.result.outputHash, result: "verified" };
@@ -1079,6 +1103,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
@@ -1095,6 +1120,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "agent_attestation", outputHash: receipt.result.outputHash, result: "rejected" };
@@ -1115,6 +1141,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
@@ -1158,6 +1185,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const verifiers = [generateKeypair(), generateKeypair(), generateKeypair()];
     for (const v of verifiers) {
       await call("POST", "/v1/agents", { keypair: v, idempotencyKey: `reg:${v.did}`, body: { capabilities: ["verification"] } });
+      await authorizeVerifier(v);
     }
     const receipt = await finalizeReceipt(requester, provider);
 
@@ -1188,6 +1216,7 @@ describe("independent verification (SPEC.md §12)", () => {
     const provider = generateKeypair();
     const verifier = generateKeypair();
     await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
     const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
@@ -1200,6 +1229,82 @@ describe("independent verification (SPEC.md §12)", () => {
 
     const rep = await call("GET", `/v1/agents/${provider.did}/reputation`);
     expect((rep.json as { components: { attestedReceipts: number } }).components.attestedReceipts).toBe(1);
+  });
+
+  it("rejects a verifier that is registered but not operator-authorized", async () => {
+    // The core fix: a receipt's own audit was right that "any registered
+    // agent" was never a real independence guarantee -- anyone could
+    // self-register and immediately verify. Only the operator-only
+    // POST /agents/:id/verifier-status may flip isAuthorizedVerifier.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const unauthorizedVerifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: unauthorizedVerifier, idempotencyKey: `reg:${unauthorizedVerifier.did}`, body: { capabilities: ["verification"] } }); // registered, never authorized
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: unauthorizedVerifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(unauthorizedVerifier, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: unauthorizedVerifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: unauthorizedVerifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(403);
+    expect((res.json as { error: { code: string } }).error.code).toBe("VERIFIER_NOT_AUTHORIZED");
+  });
+
+  it("rejects a non-operator trying to grant verifier status", async () => {
+    const impostor = generateKeypair();
+    const target = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: target, idempotencyKey: `reg:${target.did}`, body: { capabilities: ["verification"] } });
+
+    const res = await call("POST", `/v1/agents/${encodeURIComponent(target.did)}/verifier-status`, {
+      keypair: impostor,
+      idempotencyKey: `authorize:${Date.now()}`,
+      body: { authorized: true },
+    });
+    expect(res.status).toBe(403);
+    expect((res.json as { error: { code: string } }).error.code).toBe("NOT_OPERATOR");
+
+    // Confirmed still unauthorized -- the impostor's call had no effect.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const receipt = await finalizeReceipt(requester, provider);
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: target.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(target, input);
+    const verifyRes = await call("POST", "/v1/verifications", {
+      keypair: target,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: target.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(verifyRes.status).toBe(403);
+    expect((verifyRes.json as { error: { code: string } }).error.code).toBe("VERIFIER_NOT_AUTHORIZED");
+  });
+
+  it("lets the operator revoke a previously-granted verifier status", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
+    const revokeRes = await call("POST", `/v1/agents/${encodeURIComponent(verifier.did)}/verifier-status`, {
+      keypair: testOperatorKeypair,
+      idempotencyKey: `revoke:${Date.now()}`,
+      body: { authorized: false },
+    });
+    expect(revokeRes.status).toBe(200);
+    expect((revokeRes.json as { isAuthorizedVerifier: boolean }).isAuthorizedVerifier).toBe(false);
+
+    const receipt = await finalizeReceipt(requester, provider);
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(403);
+    expect((res.json as { error: { code: string } }).error.code).toBe("VERIFIER_NOT_AUTHORIZED");
   });
 });
 
