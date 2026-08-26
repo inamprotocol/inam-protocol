@@ -1,6 +1,8 @@
-# INAM Protocol — Specification v0.7 (Draft)
+# INAM Protocol — Specification v0.8 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, file-backed storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+
+**Changes from v0.7:** the same external audit (v0.6/v0.7) also pointed out that `GET /agents/:id/reputation`'s aggregate fields don't distinguish an agent's history as a receipt's provider (did the work) from its history as requester (commissioned and paid for it) — two brand-new counterparties finishing one receipt get identical-looking aggregate reputations regardless of role, since nothing in the formula is role-aware. §5.3 gains two new, purely additive response fields, `components.asProvider`/`components.asRequester` (a role-filtered breakdown using the same weighting as the aggregate, not a new scoring formula), plus prose definitions clarifying `verifiedReceipts` (means finalized, not independently verified — a real naming footgun, but not changed since it's a live, published field and renaming it would be a breaking change) and the reference formula's ~80 asymptotic ceiling without a live staking mechanism. A full role-based scoring redesign (first-class `providerScore`/`requesterScore`/`verifierScore` values) is explicitly out of scope for this version — flagged as real follow-up design work, not attempted here. Additive and backward compatible; no existing field changes meaning or shape.
 
 **Changes from v0.6:** the same external audit that prompted v0.6 also found the reputation decay formula (§5.2) had no bounds on `result.completedAt`: a future timestamp makes `ageDays` negative, which the formula (`2^(-ageDays/halfLife)`) turns into a decay factor *greater than 1* — a receipt claiming to complete in the future would be weighted as more trustworthy than a receipt completing right now, unboundedly so the further out the claimed date. §4.3 gains a new `INVALID_TIMESTAMP` validation rule (reject a `result.completedAt` more than a small clock-skew tolerance in the future, or preceding `task.createdAt`) and §5.2's decay is now specified as clamped to `[0, 1]` regardless, so any receipt stored before this validation existed is still safe. `task.createdAt`/`result.completedAt` must also now be valid date-time strings (previously any non-empty string was accepted) — verified compatible with both this repo's TypeScript (`Date.prototype.toISOString()`, `...053Z` suffix) and Python (`datetime.isoformat()`, `...+00:00` suffix, different fractional-second precision) timestamp formats before shipping, live-proven against a local server with the Python SDK. Additive and backward compatible for any already-valid receipt; only rejects requests that were previously accepted by mistake.
 
@@ -207,13 +209,23 @@ For an agent, the reference implementation computes reputation on demand (not ca
     "successRate": 1.0,
     "volumeUsd": 25,
     "stakeUsd": 0,
-    "decayHalfLifeDays": 90
+    "decayHalfLifeDays": 90,
+    "attestedReceipts": 0,
+    "asProvider": { "receipts": 2, "successRate": 1.0, "volumeUsd": 25 },
+    "asRequester": { "receipts": 0, "successRate": 0, "volumeUsd": 0 }
   },
   "flags": []
 }
 ```
 
 `components` is returned in full, not collapsed into `trustScore` alone — the scoring is meant to be auditable, not a black box. A low score for a brand-new, unstaked agent with only one or two transactions is correct behavior, not a bug: `eigenWeight` (confidence) is deliberately slow to rise.
+
+Field definitions worth stating explicitly, since an audit found several were easy to misread from name alone:
+
+- **`verifiedReceipts`** means *finalized* — a receipt both parties signed — not independently verified. A `verified` Verification (§12) is a separate, stronger claim; `attestedReceipts` (below) counts those specifically. This naming is unfortunate in hindsight but not changed in this version — `verifiedReceipts` already ships in a live, published response shape, and renaming a field a consumer might already be parsing is a real breaking change, not a documentation fix. New registries **SHOULD** consider a less ambiguous name if starting from scratch.
+- **`eigenWeight`** is the reference implementation's confidence term (§5.2's one-step relaxation of a full EigenTrust fixed-point solve), not an actual EigenTrust output — same "not yet enforced at full strength" caveat as §5.2 already states.
+- **`asProvider`/`asRequester`** (added in v0.8): the same weighted receipt count / success rate / volume as the aggregate above, split by which role this agent held on each finalized receipt (`agentB`/provider did the work; `agentA`/requester requested and countersigned it). Added because the aggregate fields above are role-blind by construction — two brand-new counterparties finishing one receipt produce identical-looking aggregate reputations for both of them regardless of which side each was on, which is misleading for a use case like "find an agent good at doing X work" (a provider-side question) versus "find an agent that reliably commissions and pays for work" (a requester-side question). This is *not* a separate 0-100 score per role — assigning real weights to a `providerScore`/`requesterScore` pair (and a similar `verifierScore`, already-deferred verifier-side reputation per §12.7) is real scoring-model design work, not done here; a registry **MAY** compute such scores on top of this breakdown but this spec does not define one yet.
+- A registry **MAY** use a different formula for `trustScore` (§5.2), but without a staking mechanism live (`stakeUsd` stays 0 for every agent until Phase 6/payments ships — see README's "Deliberate simplifications"), the reference implementation's specific formula (`20·stakeComponent + 70·successRate·confidence + 10·confidence`) has a mathematical ceiling around 80, not 100, no matter how much successful history an agent accumulates — worth knowing before treating the `/100` scale as implying 100 is reachable through work history alone.
 
 ## 6. REST API
 

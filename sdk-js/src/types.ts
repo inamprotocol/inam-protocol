@@ -59,6 +59,19 @@ export type SignableReceiptContent = Omit<ExecutionReceipt, "signatures" | "stat
   dispute: { status: "none"; windowClosesAt: string };
 };
 
+/** Weighted receipt count/success-rate/volume for one side of an agent's
+ * history — see ReputationComponents.asProvider/asRequester. Same weighting
+ * (pairWeight * counterpartyTrust * decay * attestationBoost) as the
+ * aggregate trustScore, just filtered to receipts where this agent held
+ * that role. Not a separate 0-100 score (that's real scoring-model design
+ * work, not done here) — the raw signal an aggregate trustScore currently
+ * merges away. */
+export interface ReputationRoleBreakdown {
+  receipts: number;
+  successRate: number;
+  volumeUsd: number;
+}
+
 export interface ReputationComponents {
   eigenWeight: number;
   verifiedReceipts: number;
@@ -71,6 +84,12 @@ export interface ReputationComponents {
    * (SPEC.md §12.5) — distinct from `verifiedReceipts` above, which really
    * means "two-party finalized," not independently attested. */
   attestedReceipts: number;
+  /** This agent's history specifically as agentB (the one who did the work)
+   * on its finalized receipts (SPEC.md §5.3). */
+  asProvider: ReputationRoleBreakdown;
+  /** This agent's history specifically as agentA (the one who requested and
+   * countersigned the work) on its finalized receipts (SPEC.md §5.3). */
+  asRequester: ReputationRoleBreakdown;
 }
 
 export interface ReputationResult {

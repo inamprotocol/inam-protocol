@@ -305,6 +305,50 @@ describe("execution receipt lifecycle", () => {
     expect((res.json as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
   });
 
+  it("distinguishes an agent's provider history from its requester history", async () => {
+    // An audit found the aggregate trustScore/components don't distinguish
+    // "did the work" from "requested and paid for the work" at all -- two
+    // brand-new counterparties finishing one receipt ended up with
+    // identical-looking reputations regardless of which side each was on.
+    // agentP only ever does work (provider); agentQ both requests work from
+    // agentP once and separately does work for agentR once -- so agentQ's
+    // asProvider/asRequester counts should differ from each other, and
+    // agentP's asRequester should be empty.
+    const agentP = generateKeypair();
+    const agentQ = generateKeypair();
+    const agentR = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agentP, idempotencyKey: `reg:${agentP.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: agentQ, idempotencyKey: `reg:${agentQ.did}`, body: { capabilities: ["job.posting", "x"] } });
+    await call("POST", "/v1/agents", { keypair: agentR, idempotencyKey: `reg:${agentR.did}`, body: { capabilities: ["job.posting"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    async function finalize(requester: Keypair, worker_: Keypair, jobId: string) {
+      const input = job({ jobId });
+      const content = buildSignableContent(requester.did, worker_.did, input);
+      const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+      const draftRes = await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `receipt:${jobId}`, body: { ...input, agentAId: requester.did, signature: draftSig } });
+      const draft = draftRes.json as { receiptId: string };
+      const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+      await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, { keypair: requester, idempotencyKey: `countersign:${draft.receiptId}`, body: { signature: counterSig } });
+    }
+
+    // agentQ requests work from agentP (agentQ = requester, agentP = provider).
+    await finalize(agentQ, agentP, "job_q_requests_from_p");
+    // agentQ separately does work for agentR (agentQ = provider, agentR = requester).
+    await finalize(agentR, agentQ, "job_q_provides_for_r");
+
+    const pRep = (await call("GET", `/v1/agents/${encodeURIComponent(agentP.did)}/reputation`)).json as { components: { asProvider: { receipts: number }; asRequester: { receipts: number } } };
+    expect(pRep.components.asProvider.receipts).toBe(1);
+    expect(pRep.components.asRequester.receipts).toBe(0);
+
+    const qRep = (await call("GET", `/v1/agents/${encodeURIComponent(agentQ.did)}/reputation`)).json as { components: { asProvider: { receipts: number }; asRequester: { receipts: number }; verifiedReceipts: number } };
+    expect(qRep.components.asProvider.receipts).toBe(1);
+    expect(qRep.components.asRequester.receipts).toBe(1);
+    expect(qRep.components.asProvider.receipts + qRep.components.asRequester.receipts).toBe(qRep.components.verifiedReceipts);
+  });
+
   it("only lets one of two concurrent countersign attempts succeed (race-condition fix regression test)", async () => {
     const requester = generateKeypair();
     const worker_ = generateKeypair();

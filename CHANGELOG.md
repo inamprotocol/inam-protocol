@@ -4,6 +4,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.8 (Draft) — 2026-08-26
+- **Role-aware reputation breakdown** (same external audit): `GET /agents/:id/reputation`'s `components` gains `asProvider`/`asRequester` (§5.3) — the same weighted receipt-count/success-rate/volume signal as the aggregate, filtered by which side of the receipt the agent was on. Purely additive; no existing field changes.
+- Prose now explicitly defines `verifiedReceipts` (means finalized/two-party-signed, not independently verified — `attestedReceipts` is the latter) and states the reference `trustScore` formula's ~80 asymptotic ceiling without a live staking mechanism.
+- Explicitly deferred: real per-role scoring (`providerScore`/`requesterScore`/`verifierScore` as first-class weighted values) — this version exposes the raw signal, not a new scoring model.
+
 ### v0.7 (Draft) — 2026-08-26
 - **Closed a reputation-inflation gap the same audit found**: the decay formula (§5.2) had no bounds on `result.completedAt` — a future timestamp makes `ageDays` negative, so `2^(-ageDays/halfLife)` becomes a decay factor *greater than 1*, weighting a receipt claiming future completion as more trustworthy than one completing right now, unboundedly the further out the date.
 - New `INVALID_TIMESTAMP` validation (§4.3): a draft receipt's `result.completedAt` is rejected if it's more than a small clock-skew tolerance in the future, or precedes `task.createdAt`. `task.createdAt`/`result.completedAt` must now also be valid date-time strings (previously any non-empty string passed).
@@ -65,6 +70,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.2 — 2026-08-26 (external audit fixes, continued)
+- **Role-aware reputation breakdown (SPEC.md v0.8, §5.3)**: `computeReputation` (both runtimes) now also tracks `asProvider`/`asRequester` sub-totals using the same weighting as the existing aggregate (`pairWeight * counterpartyTrust * decay * attestationBoost`), filtered by whether the agent was `agentB` (provider) or `agentA` (requester) on each finalized receipt. `ReputationComponents` gains the two new fields (`sdk-js/src/types.ts`, plus the same duplicated type in `src/types.ts`/`worker/src/types.ts` per this repo's existing per-runtime-type convention). Purely additive.
+- New regression test in both runtimes proving two agents in different provider/requester mixes get correctly differentiated breakdowns, with the role counts summing back to the existing `verifiedReceipts` total (Node 62 tests, Worker 44).
 
 ### 0.6.1 — 2026-08-26 (external audit fixes, continued)
 - **Reputation date/future-dating safety (SPEC.md v0.7, §4.3/§5.2)**: a draft receipt's `result.completedAt` is now rejected (`INVALID_TIMESTAMP`) if it's more than 5 minutes in the future or precedes `task.createdAt`; both timestamps must now be valid date-time strings (`sdk-js/src/core/schemas.ts`'s `isoDateTime`, `z.string().datetime({ offset: true })` — accepts both TS's and Python's ISO output, confirmed live with the real Python SDK). Decay is also now clamped to `[0, 1]` in `reputationService.ts` (both runtimes) as defense for any receipt already stored, and a non-finite computed weight is treated as zero contribution rather than corrupting the whole agent's score via `NaN` propagation.

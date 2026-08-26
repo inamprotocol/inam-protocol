@@ -61,6 +61,27 @@ export function computeReputation(agentId: string): ReputationResult {
   let weightSum = 0;
   let volumeUsd = 0;
 
+  // Role breakdown: an audit found the aggregate trustScore/components above
+  // don't distinguish "did the work" (agentB/provider) from "requested and
+  // paid for the work" (agentA/requester) at all -- two brand-new agents
+  // that transact once end up with identical-looking reputations regardless
+  // of which side of the receipt each was on, since nothing in the formula
+  // is role-aware. This doesn't replace trustScore (that would be a real
+  // scoring-model redesign -- providerScore/requesterScore/verifierScore as
+  // first-class weighted scores is P1 follow-up work, not this fix) --  it
+  // exposes the role-split raw signal (receipt count / weighted success rate
+  // / volume) that already existed per-receipt but was being silently merged
+  // together, using the same weighting (pairWeight * counterpartyTrust *
+  // decay * attestationBoost) as the aggregate above, just filtered by role.
+  let asProviderWeightedSuccessSum = 0;
+  let asProviderWeightSum = 0;
+  let asProviderVolumeUsd = 0;
+  let asProviderCount = 0;
+  let asRequesterWeightedSuccessSum = 0;
+  let asRequesterWeightSum = 0;
+  let asRequesterVolumeUsd = 0;
+  let asRequesterCount = 0;
+
   // Memoize per counterparty within this one computation — a busy agent can
   // have many receipts against a small set of repeat counterparties, and
   // there's no reason to recompute the same counterparty's baseTrust for
@@ -113,7 +134,20 @@ export function computeReputation(agentId: string): ReputationResult {
     if (!Number.isFinite(weight)) weight = 0;
     weightedSuccessSum += weight * outcomeScore;
     weightSum += weight;
-    volumeUsd += Number(r.settlement?.amount ?? 0);
+    const amount = Number(r.settlement?.amount ?? 0);
+    volumeUsd += amount;
+
+    if (r.agentB.id === agentId) {
+      asProviderWeightedSuccessSum += weight * outcomeScore;
+      asProviderWeightSum += weight;
+      asProviderVolumeUsd += amount;
+      asProviderCount++;
+    } else {
+      asRequesterWeightedSuccessSum += weight * outcomeScore;
+      asRequesterWeightSum += weight;
+      asRequesterVolumeUsd += amount;
+      asRequesterCount++;
+    }
   }
 
   const successRate = weightSum > 0 ? weightedSuccessSum / weightSum : 0;
@@ -144,6 +178,16 @@ export function computeReputation(agentId: string): ReputationResult {
       stakeUsd: record.stakeUsd,
       decayHalfLifeDays: config.decayHalfLifeDays,
       attestedReceipts: attestedCount,
+      asProvider: {
+        receipts: asProviderCount,
+        successRate: asProviderWeightSum > 0 ? Math.round((asProviderWeightedSuccessSum / asProviderWeightSum) * 1000) / 1000 : 0,
+        volumeUsd: asProviderVolumeUsd,
+      },
+      asRequester: {
+        receipts: asRequesterCount,
+        successRate: asRequesterWeightSum > 0 ? Math.round((asRequesterWeightedSuccessSum / asRequesterWeightSum) * 1000) / 1000 : 0,
+        volumeUsd: asRequesterVolumeUsd,
+      },
     },
     flags,
   };
