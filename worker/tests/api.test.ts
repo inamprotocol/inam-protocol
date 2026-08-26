@@ -1145,6 +1145,62 @@ describe("independent verification (SPEC.md §12)", () => {
     const verGet = await call("GET", `/v1/verifications/${encodeURIComponent(verificationId)}`);
     expect((verGet.json as { result: string }).result).toBe("verified");
   });
+
+  it("does not let a minority 'verified' outvote a majority of independent 'rejected' verifications", async () => {
+    // An audit found the old rule (`.some(v => v.result === "verified")`)
+    // let exactly one `verified` record grant the reputation boost no
+    // matter how many *different* verifiers independently rejected the same
+    // receipt -- 1 verified + 9 rejected still counted as attested. This is
+    // a real exploit for the receipt's own parties (get one colluding or
+    // careless verifier to say "verified"), not a missing feature.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifiers = [generateKeypair(), generateKeypair(), generateKeypair()];
+    for (const v of verifiers) {
+      await call("POST", "/v1/agents", { keypair: v, idempotencyKey: `reg:${v.did}`, body: { capabilities: ["verification"] } });
+    }
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const results = ["verified", "rejected", "rejected"];
+    for (let i = 0; i < verifiers.length; i++) {
+      const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifiers[i].did, method: "agent_attestation", outputHash: receipt.result.outputHash, result: results[i] };
+      const { signature } = await signVerification(verifiers[i], input);
+      await call("POST", "/v1/verifications", {
+        keypair: verifiers[i],
+        idempotencyKey: `verify:${Date.now()}-${i}`,
+        body: { receiptId: input.receiptId, verifier: verifiers[i].did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+      });
+    }
+
+    const listRes = await call("GET", `/v1/receipts/${encodeURIComponent(receipt.receiptId)}/verifications`);
+    expect((listRes.json as { verifications: unknown[] }).verifications).toHaveLength(3);
+
+    // 1 verified vs. 2 rejected: no attestation boost, despite a `verified`
+    // record existing.
+    const rep = await call("GET", `/v1/agents/${provider.did}/reputation`);
+    expect((rep.json as { components: { attestedReceipts: number } }).components.attestedReceipts).toBe(0);
+  });
+
+  it("still attests on the ordinary, common case: one verifier, verified, zero rejections", async () => {
+    // Explicit non-regression check: the fix above must not raise the bar
+    // for the overwhelmingly common single-verifier case.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+
+    const rep = await call("GET", `/v1/agents/${provider.did}/reputation`);
+    expect((rep.json as { components: { attestedReceipts: number } }).components.attestedReceipts).toBe(1);
+  });
 });
 
 describe("reputation badge (GET /agents/:id/badge.svg, /badge.json)", () => {
