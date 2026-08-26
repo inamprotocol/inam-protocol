@@ -183,4 +183,45 @@ describe("execution receipt lifecycle", () => {
     const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
     await expectApiError(() => createDraft(worker.did, { ...input, agentAId: requester.did, signature }), "INVALID_TIMESTAMP");
   });
+
+  it("distinguishes an agent's provider history from its requester history", () => {
+    // An audit found the aggregate trustScore/components don't distinguish
+    // "did the work" from "requested and paid for the work" at all -- two
+    // brand-new counterparties finishing one receipt ended up with
+    // identical-looking reputations regardless of which side each was on.
+    // agentP only ever does work (provider); agentQ both requests work from
+    // agentP once and separately does work for agentR once -- so agentQ's
+    // asProvider/asRequester counts should differ from each other, and
+    // agentP's asRequester should be empty.
+    const agentP = generateKeypair();
+    const agentQ = generateKeypair();
+    const agentR = generateKeypair();
+    registerAgent(agentP.did, { capabilities: ["x"] });
+    registerAgent(agentQ.did, { capabilities: ["job.posting", "x"] });
+    registerAgent(agentR.did, { capabilities: ["job.posting"] });
+
+    function finalize(requester: ReturnType<typeof generateKeypair>, worker: ReturnType<typeof generateKeypair>, jobId: string) {
+      const input = freshInput(jobId);
+      const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
+      const draft = createDraft(worker.did, { ...input, agentAId: requester.did, signature });
+      countersign(draft.receiptId, requester.did, signCountersign(draft, requester.privateKey));
+    }
+
+    // agentQ requests work from agentP (agentQ = requester, agentP = provider).
+    finalize(agentQ, agentP, "job_q_requests_from_p");
+    // agentQ separately does work for agentR (agentQ = provider, agentR = requester).
+    finalize(agentR, agentQ, "job_q_provides_for_r");
+
+    const pRep = computeReputation(agentP.did);
+    expect(pRep.components.asProvider.receipts).toBe(1);
+    expect(pRep.components.asRequester.receipts).toBe(0);
+
+    const qRep = computeReputation(agentQ.did);
+    expect(qRep.components.asProvider.receipts).toBe(1);
+    expect(qRep.components.asRequester.receipts).toBe(1);
+    // Sanity: the two role counts sum to the same total the existing
+    // aggregate already reports, so this is a breakdown of the same
+    // underlying receipts, not a second, disconnected data source.
+    expect(qRep.components.asProvider.receipts + qRep.components.asRequester.receipts).toBe(qRep.components.verifiedReceipts);
+  });
 });

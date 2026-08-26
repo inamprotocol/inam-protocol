@@ -54,6 +54,7 @@ export type {
   ExecutionReceipt,
   SignableReceiptContent,
   ReputationComponents,
+  ReputationRoleBreakdown,
   ReputationResult,
   JobStatus,
   JobOffer,
