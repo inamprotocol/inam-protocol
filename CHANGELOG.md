@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.6 (Draft) — 2026-08-26
+- **Closed a verifier-independence gap an external audit found**: §12.3's self-verification guard checked only `verifier != provider`, so a receipt's *requester* (already a party to the same receipt via countersigning it) could name itself "independent verifier" with no check at all. Now excludes both parties.
+- New requirement: `verifier` must be a registered agent (`AGENT_NOT_FOUND` otherwise) — doesn't prove independence (out of scope, see §0), only that it's a real registry participant.
+- New requirement: a verifier may submit at most one decision per receipt (`VERIFIER_ALREADY_DECIDED`) — previously the same verifier could submit both `verified` and `rejected` for one receipt (different content sidesteps the existing content-hash duplicate check) with both standing as live, contradictory records.
+- Additive, backward compatible — no wire-format change; new checks only reject requests that were previously (unintentionally) accepted.
+
 ### v0.5 (Draft) — 2026-08-22
 - Added the **Verification** resource (§12): a single independent verifier's signed attestation that a finalized receipt's output satisfies its job's requirements — the enforcement mechanism `verification.method: independent_validator`/`test_suite_pass` never had, called out as a gap since v0.1.
 - Deliberately narrow v0.1 scope, agreed with the user before implementation started: exactly one verifier per verification (no multi-verifier consensus), `provider != verifier` strictly enforced (the core collusion guard), only `deterministic`/`agent_attestation` methods, **no new dispute mechanism** — reuses the existing receipt dispute state (§4.3) rather than inventing a second one, and a `verified` Verification's reputation contribution disappears automatically the moment its receipt is disputed (the reputation computation's `finalized` filter already excludes disputed receipts — no separate check needed). No verifier-side reputation yet.
@@ -52,6 +58,14 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.0 — 2026-08-26 (external audit fixes)
+- **Verifier independence (SPEC.md v0.6, §12.3)**: self-verification guard now excludes the receipt's requester as well as its provider; a verifier must be a registered agent (`AGENT_NOT_FOUND` otherwise); a verifier may submit at most one decision per receipt (`VERIFIER_ALREADY_DECIDED`). New regression tests in both runtimes reproducing each gap directly.
+- **Request-validation parity between Node and the Worker**: the Worker previously only checked that mutating-request fields were *present*, never that their values were valid (e.g. a signed `POST /v1/verifications` with `{"result":"banana","score":999}` was accepted by the Worker, rejected by Node). Every Zod schema moved from `src/routes/*.ts` into `sdk-js/src/core/schemas.ts` — one shared source both runtimes import, not two independently-maintained copies.
+- **Malformed JSON now returns 400 `INVALID_JSON`, not 500**, on both runtimes — previously an uncaught `SyntaxError` from body-parsing fell through to the generic 500 handler on each, misreporting a client mistake as a server bug.
+- Added the embeddable reputation badge: `GET /v1/agents/:id/badge.svg` / `.json` (shields.io-style, green/yellow/red by trust score, neutral grey for zero-history/unknown agents, never interpolates agent-supplied text into the SVG).
+- `sdk-js` gained `@types/node` as an explicit dependency — its own `npm run build` failed in true isolation (no parent `node_modules` to fall back on) with "Cannot find name 'Buffer'"/`TextEncoder`/`fetch`, exposed by (and now fixed for) the npm publish workflow specifically, since every other local/CI build path had root's `node_modules` present as a masking ancestor directory.
+- 129 tests green across all three runtimes after this batch (56 Node + 37 Worker + 36 Python).
 
 ### 0.5.0 — 2026-08-22 (Verification v0.1)
 - Added the Verification resource end-to-end (SPEC.md §12) in both runtimes: `POST /v1/verifications`, `GET /v1/verifications/:id`, `GET /v1/receipts/:id/verifications`. Worker stores verifications in a new `verifications` D1 table (plain `INSERT`, no compare-and-swap needed — a verification never transitions state after creation, unlike jobs/receipts); Node uses the same `JsonStore` pattern as everything else.
