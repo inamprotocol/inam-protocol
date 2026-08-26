@@ -97,6 +97,82 @@ describe("independent verification (SPEC.md §12)", () => {
     await expectApiError(() => submitVerification(provider.did, { ...input, signature }), "SELF_VERIFICATION");
   });
 
+  it("rejects the requester naming itself as verifier (not just the provider)", async () => {
+    // An external audit found only the provider (agentB) was blocked from
+    // self-verifying -- the requester (agentA), who already approved this
+    // work by countersigning it, could name itself as the "independent"
+    // verifier with no check at all.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: requester.did, // the requester trying to "independently" verify a receipt it's already party to
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const { signature } = signVerification(requester, input);
+    await expectApiError(() => submitVerification(requester.did, { ...input, signature }), "SELF_VERIFICATION");
+  });
+
+  it("rejects a verifier that isn't a registered agent", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const unregisteredVerifier = generateKeypair(); // deliberately never registered
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: unregisteredVerifier.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const { signature } = signVerification(unregisteredVerifier, input);
+    await expectApiError(() => submitVerification(unregisteredVerifier.did, { ...input, signature }), "AGENT_NOT_FOUND");
+  });
+
+  it("rejects a second, different decision from a verifier who already decided this receipt", async () => {
+    // Without this, the same verifier could submit "verified" and then,
+    // separately, "rejected" (different content -> different
+    // verificationId, so DUPLICATE_VERIFICATION's content-hash check
+    // doesn't catch it) for the same receipt, leaving both as live records
+    // with no way to tell which is authoritative.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    registerAgent(verifier.did, { capabilities: ["verification"] });
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+
+    const firstInput: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: verifier.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const first = signVerification(verifier, firstInput);
+    submitVerification(verifier.did, { ...firstInput, signature: first.signature });
+
+    const secondInput: VerificationContentInput = { ...firstInput, result: "rejected" };
+    const second = signVerification(verifier, secondInput);
+    await expectApiError(() => submitVerification(verifier.did, { ...secondInput, signature: second.signature }), "VERIFIER_ALREADY_DECIDED");
+  });
+
   it("rejects verifying a receipt that is still a draft", async () => {
     const requester = generateKeypair();
     const provider = generateKeypair();

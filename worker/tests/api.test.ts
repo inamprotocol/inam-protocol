@@ -746,6 +746,74 @@ describe("independent verification (SPEC.md §12)", () => {
     expect((res.json as { error: { code: string } }).error.code).toBe("SELF_VERIFICATION");
   });
 
+  it("rejects the requester naming itself as verifier (not just the provider)", async () => {
+    // An external audit found only the provider (agentB) was blocked from
+    // self-verifying -- the requester (agentA), who already approved this
+    // work by countersigning it, could name itself as the "independent"
+    // verifier with no check at all.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: requester.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(requester, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: requester,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: requester.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("SELF_VERIFICATION");
+  });
+
+  it("rejects a verifier that isn't a registered agent", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const unregisteredVerifier = generateKeypair(); // deliberately never registered
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: unregisteredVerifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(unregisteredVerifier, input);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: unregisteredVerifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: unregisteredVerifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(res.status).toBe(404);
+    expect((res.json as { error: { code: string } }).error.code).toBe("AGENT_NOT_FOUND");
+  });
+
+  it("rejects a second, different decision from a verifier who already decided this receipt", async () => {
+    // Without this, the same verifier could submit "verified" and then,
+    // separately, "rejected" (different content -> different
+    // verificationId, so DUPLICATE_VERIFICATION's content-hash check
+    // doesn't catch it) for the same receipt, leaving both as live records
+    // with no way to tell which is authoritative.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    const receipt = await finalizeReceipt(requester, provider);
+
+    const firstInput = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const first = await signVerification(verifier, firstInput);
+    await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}-1`,
+      body: { receiptId: firstInput.receiptId, verifier: verifier.did, method: firstInput.method, outputHash: firstInput.outputHash, result: firstInput.result, signature: first.signature },
+    });
+
+    const secondInput = { ...firstInput, result: "rejected" };
+    const second = await signVerification(verifier, secondInput);
+    const res = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}-2`,
+      body: { receiptId: secondInput.receiptId, verifier: verifier.did, method: secondInput.method, outputHash: secondInput.outputHash, result: secondInput.result, signature: second.signature },
+    });
+    expect(res.status).toBe(409);
+    expect((res.json as { error: { code: string } }).error.code).toBe("VERIFIER_ALREADY_DECIDED");
+  });
+
   it("rejects verifying a receipt that is still a draft", async () => {
     const requester = generateKeypair();
     const provider = generateKeypair();

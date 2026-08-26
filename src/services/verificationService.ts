@@ -4,6 +4,7 @@ import { verify } from "../../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
 import { buildSignableVerificationContent, type VerificationContentInput } from "../../sdk-js/src/core/verificationContent.js";
 import * as receiptService from "./receiptService.js";
+import { getAgent } from "./agentService.js";
 import type { VerificationRecord } from "../types.js";
 
 export type { VerificationContentInput } from "../../sdk-js/src/core/verificationContent.js";
@@ -37,14 +38,28 @@ export function submitVerification(callerDid: string, input: SubmitVerificationI
   }
 
   const provider = receipt.agentB.id;
+  const requester = receipt.agentA.id;
   const jobId = receipt.jobId;
 
   if (callerDid !== input.verifier) {
     throw forbidden("NOT_VERIFIER", "This request must be signed by the verifier it names");
   }
-  if (callerDid === provider) {
-    throw badRequest("SELF_VERIFICATION", "A receipt's own provider (agentB) cannot verify their own work");
+  // Independence means neither party to the receipt, not just "not the
+  // provider" — an audit found the requester (agentA, who already approved
+  // this work by countersigning it) could name itself as the "independent"
+  // verifier too, which defeats the point of an independent attestation
+  // just as much as the provider self-verifying its own work would.
+  if (callerDid === provider || callerDid === requester) {
+    throw badRequest("SELF_VERIFICATION", "Neither party to a receipt (its provider or requester) can act as its independent verifier");
   }
+  // A verifier must be a real, registered identity in this registry, not an
+  // arbitrary unregistered did:key — getAgent throws AGENT_NOT_FOUND
+  // otherwise. This doesn't prove the verifier is an independent
+  // organization (no cryptographic scheme can, on its own — see SPEC.md §0's
+  // own boundary: INAM isn't an identity/authorization system), only that
+  // it's a real participant in the registry, not a throwaway key minted for
+  // this one call.
+  getAgent(callerDid);
   if (input.outputHash !== receipt.result.outputHash) {
     throw badRequest("VERIFICATION_TARGET_MISMATCH", "outputHash does not match the referenced receipt's result.outputHash");
   }
@@ -63,8 +78,20 @@ export function submitVerification(callerDid: string, input: SubmitVerificationI
   const content = buildSignableVerificationContent(contentInput);
   const verificationId = content.verificationId;
 
+  // Checked before VERIFIER_ALREADY_DECIDED below: an exact resubmission
+  // (identical content, e.g. a client retrying after a dropped response) is
+  // a harmless no-op and should say so specifically, distinct from actually
+  // trying to submit a *second, different* decision for the same receipt.
   if (verifications.has(verificationId)) {
     throw conflict("DUPLICATE_VERIFICATION", "A verification with identical content already exists");
+  }
+  // One verifier, one decision per receipt — without this, the same
+  // verifier could submit a "verified" and, separately, a "rejected" for
+  // the same receipt (different content, so the identical-content check
+  // above doesn't catch it), and both would stand as live records
+  // simultaneously with no way to tell which is authoritative.
+  if (verifications.all().some((v) => v.receiptId === input.receiptId && v.verifier === callerDid)) {
+    throw conflict("VERIFIER_ALREADY_DECIDED", "This verifier has already submitted a verification for this receipt");
   }
 
   const signingBytes = new TextEncoder().encode(canonicalize(content));
