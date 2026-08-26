@@ -85,7 +85,14 @@ export function computeReputation(agentId: string): ReputationResult {
 
     const counterpartyTrust = cachedBaseTrust(counterparty);
     const ageDays = (Date.now() - new Date(r.result.completedAt).getTime()) / 86_400_000;
-    const decay = Math.pow(2, -ageDays / config.decayHalfLifeDays);
+    // Clamped to [0, 1]: receiptService.createDraft now rejects a future
+    // completedAt at submission time (INVALID_TIMESTAMP), but this clamp is
+    // the actual fix for any receipt already stored before that check
+    // existed — an audit found unclamped decay treats a future completedAt
+    // as *younger than brand new* (negative ageDays -> decay > 1), inflating
+    // that receipt's weight without bound rather than the intended "older
+    // work counts for less, down to a floor of zero, never more than fresh".
+    const decay = clamp(Math.pow(2, -ageDays / config.decayHalfLifeDays), 0, 1);
     const outcomeScore = r.verification.outcome === "success" ? 1 : r.verification.outcome === "partial" ? 0.5 : 0;
 
     // SPEC.md §12.5: independently-verified work counts for more. This loop
@@ -96,7 +103,14 @@ export function computeReputation(agentId: string): ReputationResult {
     if (isAttested) attestedCount++;
     const attestationBoost = isAttested ? ATTESTATION_BOOST : 1;
 
-    const weight = pairWeight * counterpartyTrust * decay * attestationBoost;
+    let weight = pairWeight * counterpartyTrust * decay * attestationBoost;
+    // Defense in depth against any other source of a non-finite weight (a
+    // malformed completedAt predating the INVALID_TIMESTAMP check above, a
+    // future edge case) corrupting this agent's *entire* score: `weightSum
+    // += NaN` poisons the running total for every other, perfectly valid
+    // receipt too, not just this one. Treat it as zero contribution instead
+    // of let it propagate.
+    if (!Number.isFinite(weight)) weight = 0;
     weightedSuccessSum += weight * outcomeScore;
     weightSum += weight;
     volumeUsd += Number(r.settlement?.amount ?? 0);

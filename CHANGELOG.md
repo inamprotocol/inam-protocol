@@ -4,6 +4,13 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.7 (Draft) — 2026-08-26
+- **Closed a reputation-inflation gap the same audit found**: the decay formula (§5.2) had no bounds on `result.completedAt` — a future timestamp makes `ageDays` negative, so `2^(-ageDays/halfLife)` becomes a decay factor *greater than 1*, weighting a receipt claiming future completion as more trustworthy than one completing right now, unboundedly the further out the date.
+- New `INVALID_TIMESTAMP` validation (§4.3): a draft receipt's `result.completedAt` is rejected if it's more than a small clock-skew tolerance in the future, or precedes `task.createdAt`. `task.createdAt`/`result.completedAt` must now also be valid date-time strings (previously any non-empty string passed).
+- Decay is now specified as clamped to `[0, 1]` (§5.2) regardless of the above — defense for any receipt stored before this validation existed, and for any other source of a non-finite/out-of-range value.
+- Verified the stricter date-format check doesn't break either SDK: TypeScript's `toISOString()` and Python's `datetime.isoformat()` produce different suffix styles (`Z` vs. `+00:00`) and fractional-second precision — both confirmed accepted, live, against a local server with the real Python SDK, including a live-reproduced future-date rejection.
+- Additive and backward compatible — rejects only requests that were previously accepted by mistake.
+
 ### v0.6 (Draft) — 2026-08-26
 - **Closed a verifier-independence gap an external audit found**: §12.3's self-verification guard checked only `verifier != provider`, so a receipt's *requester* (already a party to the same receipt via countersigning it) could name itself "independent verifier" with no check at all. Now excludes both parties.
 - New requirement: `verifier` must be a registered agent (`AGENT_NOT_FOUND` otherwise) — doesn't prove independence (out of scope, see §0), only that it's a real registry participant.
@@ -58,6 +65,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.1 — 2026-08-26 (external audit fixes, continued)
+- **Reputation date/future-dating safety (SPEC.md v0.7, §4.3/§5.2)**: a draft receipt's `result.completedAt` is now rejected (`INVALID_TIMESTAMP`) if it's more than 5 minutes in the future or precedes `task.createdAt`; both timestamps must now be valid date-time strings (`sdk-js/src/core/schemas.ts`'s `isoDateTime`, `z.string().datetime({ offset: true })` — accepts both TS's and Python's ISO output, confirmed live with the real Python SDK). Decay is also now clamped to `[0, 1]` in `reputationService.ts` (both runtimes) as defense for any receipt already stored, and a non-finite computed weight is treated as zero contribution rather than corrupting the whole agent's score via `NaN` propagation.
+- New regression tests in both runtimes: future-completedAt rejection, completedAt-before-createdAt rejection, non-ISO completedAt rejection at the schema layer (Worker only, HTTP-level) — 8 new tests total (Node 61, Worker 43).
 
 ### 0.6.0 — 2026-08-26 (external audit fixes)
 - **Verifier independence (SPEC.md v0.6, §12.3)**: self-verification guard now excludes the receipt's requester as well as its provider; a verifier must be a registered agent (`AGENT_NOT_FOUND` otherwise); a verifier may submit at most one decision per receipt (`VERIFIER_ALREADY_DECIDED`). New regression tests in both runtimes reproducing each gap directly.

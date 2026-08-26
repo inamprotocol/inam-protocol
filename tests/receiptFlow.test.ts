@@ -139,4 +139,48 @@ describe("execution receipt lifecycle", () => {
     const reputation = computeReputation(worker.did);
     expect(reputation.flags).toContain("in_dispute");
   });
+
+  it("rejects a future result.completedAt beyond clock-skew tolerance", async () => {
+    // An audit found reputationService.ts's decay formula treats a future
+    // completedAt as *younger than brand new* (negative age -> decay > 1),
+    // unboundedly inflating that receipt's weight. Closed at the source: a
+    // receipt with a future completedAt is now rejected at submission.
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+
+    const jobId = "job_future_completed";
+    const future = new Date(Date.now() + 60 * 24 * 3600_000).toISOString(); // 60 days from now
+    const input = {
+      jobId,
+      task: { capability: "translation.tr-en", specHash: `sha256:spec_${jobId}`, createdAt: future },
+      result: { outputHash: `sha256:out_${jobId}`, completedAt: future },
+      settlement: { amount: "12.50", currency: "USDC" },
+      verification: { method: "payer_confirmation" as const, outcome: "success" as const },
+    };
+    const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
+    await expectApiError(() => createDraft(worker.did, { ...input, agentAId: requester.did, signature }), "INVALID_TIMESTAMP");
+  });
+
+  it("rejects result.completedAt before task.createdAt", async () => {
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+
+    const jobId = "job_out_of_order_dates";
+    const now = new Date();
+    const created = now.toISOString();
+    const completedBeforeCreated = new Date(now.getTime() - 3600_000).toISOString(); // 1 hour earlier
+    const input = {
+      jobId,
+      task: { capability: "translation.tr-en", specHash: `sha256:spec_${jobId}`, createdAt: created },
+      result: { outputHash: `sha256:out_${jobId}`, completedAt: completedBeforeCreated },
+      settlement: { amount: "12.50", currency: "USDC" },
+      verification: { method: "payer_confirmation" as const, outcome: "success" as const },
+    };
+    const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
+    await expectApiError(() => createDraft(worker.did, { ...input, agentAId: requester.did, signature }), "INVALID_TIMESTAMP");
+  });
 });

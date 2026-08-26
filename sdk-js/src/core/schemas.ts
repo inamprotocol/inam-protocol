@@ -45,18 +45,28 @@ export const offerSchema = z.object({ message: z.string().optional() });
 
 export const acceptOfferSchema = z.object({ agentId: z.string().min(1) });
 
+// `{ offset: true }` accepts both JS's `Date.prototype.toISOString()` output
+// ("...526Z") and Python's `datetime.isoformat()` output for a UTC-aware
+// datetime ("...459111+00:00") -- confirmed by hand, since these differ in
+// both suffix style and fractional-second precision and an audit's
+// future-dating finding (SPEC.md v0.7 / CHANGELOG) made date validation here
+// necessary. Bounds/ordering (not-in-the-future, completedAt >= createdAt)
+// are enforced in receiptService.ts, not here -- this only validates shape,
+// consistent with the schema/business-rule split elsewhere in this file.
+const isoDateTime = z.string().datetime({ offset: true });
+
 export const draftReceiptSchema = z.object({
   jobId: z.string().min(1),
   agentAId: z.string().min(1),
   task: z.object({
     capability: z.string().min(1),
     specHash: z.string().min(1),
-    createdAt: z.string().min(1),
+    createdAt: isoDateTime,
   }),
   result: z.object({
     outputHash: z.string().min(1),
     outputUri: z.string().optional(),
-    completedAt: z.string().min(1),
+    completedAt: isoDateTime,
   }),
   settlement: z
     .object({

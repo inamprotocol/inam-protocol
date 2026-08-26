@@ -231,6 +231,80 @@ describe("execution receipt lifecycle", () => {
     expect((repRes.json as { components: { verifiedReceipts: number } }).components.verifiedReceipts).toBe(1);
   });
 
+  it("rejects a future result.completedAt beyond clock-skew tolerance", async () => {
+    // An audit found reputationService.ts's decay formula treats a future
+    // completedAt as *younger than brand new* (negative age -> decay > 1),
+    // unboundedly inflating that receipt's weight. Closed at the source: a
+    // receipt with a future completedAt is now rejected at submission.
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    const future = new Date(Date.now() + 60 * 24 * 3600_000).toISOString(); // 60 days from now
+    const input = job({ task: { capability: "test.capability", specHash: "sha256:spec", createdAt: future }, result: { outputHash: "sha256:out", completedAt: future } });
+    const content = buildSignableContent(requester.did, worker_.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+
+    const res = await call("POST", "/v1/receipts", {
+      keypair: worker_,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("INVALID_TIMESTAMP");
+  });
+
+  it("rejects result.completedAt before task.createdAt", async () => {
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    const now = new Date();
+    const created = now.toISOString();
+    const completedBeforeCreated = new Date(now.getTime() - 3600_000).toISOString(); // 1 hour earlier
+    const input = job({ task: { capability: "test.capability", specHash: "sha256:spec", createdAt: created }, result: { outputHash: "sha256:out", completedAt: completedBeforeCreated } });
+    const content = buildSignableContent(requester.did, worker_.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+
+    const res = await call("POST", "/v1/receipts", {
+      keypair: worker_,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("INVALID_TIMESTAMP");
+  });
+
+  it("rejects a non-ISO-8601 completedAt at the schema layer", async () => {
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    const input = job({ result: { outputHash: "sha256:out", completedAt: "not-a-real-date" } });
+    const content = buildSignableContent(requester.did, worker_.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+
+    const res = await call("POST", "/v1/receipts", {
+      keypair: worker_,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+  });
+
   it("only lets one of two concurrent countersign attempts succeed (race-condition fix regression test)", async () => {
     const requester = generateKeypair();
     const worker_ = generateKeypair();

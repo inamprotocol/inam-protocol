@@ -15,6 +15,28 @@ export interface CreateDraftInput extends ReceiptContentInput {
   signature: string; // base64 signature by agent_b over the canonical signable content
 }
 
+// Same tolerance as request-signature clock skew (src/middleware/signedRequest.ts)
+// — reused for consistency, not because the two checks are the same thing.
+// An audit found reputationService.ts's decay formula treats a *future*
+// result.completedAt as "younger than brand new" (negative age -> decay > 1,
+// unboundedly inflating that receipt's weight) rather than rejecting it —
+// this is where that gets closed off, at the one place a receipt's dates are
+// ever set. schemas.ts's isoDateTime already guarantees these parse to a
+// valid instant; this adds the bounds/ordering schema validation alone can't.
+const RECEIPT_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+function validateReceiptTimestamps(createdAt: string, completedAt: string): void {
+  const createdMs = new Date(createdAt).getTime();
+  const completedMs = new Date(completedAt).getTime();
+  const nowMs = Date.now();
+  if (completedMs > nowMs + RECEIPT_CLOCK_SKEW_MS) {
+    throw badRequest("INVALID_TIMESTAMP", "result.completedAt cannot be in the future");
+  }
+  if (completedMs < createdMs) {
+    throw badRequest("INVALID_TIMESTAMP", "result.completedAt cannot be before task.createdAt");
+  }
+}
+
 /**
  * Agent B (the worker) submits a draft receipt, signing the receipt content
  * with its own key. This signature is independent of the HTTP request
@@ -27,6 +49,7 @@ export function createDraft(callerDid: string, input: CreateDraftInput): Executi
   if (!agents.has(input.agentAId)) throw notFound("AGENT_NOT_FOUND", "Requester agent must be registered");
   if (callerDid === input.agentAId) throw badRequest("SELF_DEALING", "agent_a and agent_b must be different agents");
   jobService.assertReceiptMatchesJob(input.jobId, input.agentAId, callerDid);
+  validateReceiptTimestamps(input.task.createdAt, input.result.completedAt);
 
   const content = buildSignableContent(input.agentAId, callerDid, input);
   const receiptId = content.receiptId;

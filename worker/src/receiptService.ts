@@ -15,12 +15,36 @@ export interface CreateDraftInput extends ReceiptContentInput {
 
 const DISPUTE_WINDOW_HOURS = 72;
 
+// Same tolerance as request-signature clock skew (./signedRequest.ts) —
+// reused for consistency, not because the two checks are the same thing.
+// An audit found reputationService.ts's decay formula treats a *future*
+// result.completedAt as "younger than brand new" (negative age -> decay > 1,
+// unboundedly inflating that receipt's weight) rather than rejecting it —
+// this is where that gets closed off, at the one place a receipt's dates are
+// ever set. sdk-js/src/core/schemas.ts's isoDateTime already guarantees
+// these parse to a valid instant; this adds the bounds/ordering schema
+// validation alone can't.
+const RECEIPT_CLOCK_SKEW_MS = 5 * 60 * 1000;
+
+function validateReceiptTimestamps(createdAt: string, completedAt: string): void {
+  const createdMs = new Date(createdAt).getTime();
+  const completedMs = new Date(completedAt).getTime();
+  const nowMs = Date.now();
+  if (completedMs > nowMs + RECEIPT_CLOCK_SKEW_MS) {
+    throw badRequest("INVALID_TIMESTAMP", "result.completedAt cannot be in the future");
+  }
+  if (completedMs < createdMs) {
+    throw badRequest("INVALID_TIMESTAMP", "result.completedAt cannot be before task.createdAt");
+  }
+}
+
 export async function createDraft(env: Env, callerDid: string, input: CreateDraftInput): Promise<ExecutionReceipt> {
   const [worker, requester] = await Promise.all([db.getAgent(env, callerDid), db.getAgent(env, input.agentAId)]);
   if (!worker) throw notFound("AGENT_NOT_FOUND", "Worker agent must be registered before submitting receipts");
   if (!requester) throw notFound("AGENT_NOT_FOUND", "Requester agent must be registered");
   if (callerDid === input.agentAId) throw badRequest("SELF_DEALING", "agent_a and agent_b must be different agents");
   await jobService.assertReceiptMatchesJob(env, input.jobId, input.agentAId, callerDid);
+  validateReceiptTimestamps(input.task.createdAt, input.result.completedAt);
 
   const content = buildSignableContent(input.agentAId, callerDid, input);
 
