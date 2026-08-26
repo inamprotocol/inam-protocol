@@ -381,4 +381,67 @@ describe("independent verification (SPEC.md §12)", () => {
     // The Verification record itself is untouched — still queryable evidence.
     expect(getVerification(record.verificationId).result).toBe("verified");
   });
+
+  it("does not let a minority 'verified' outvote a majority of independent 'rejected' verifications", () => {
+    // An audit found the old rule (`.some(v => v.result === "verified")`)
+    // let exactly one `verified` record grant the reputation boost no
+    // matter how many *different* verifiers independently rejected the same
+    // receipt -- 1 verified + 9 rejected still counted as attested. This is
+    // a real exploit for the receipt's own parties (get one colluding or
+    // careless verifier to say "verified"), not a missing feature.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifiers = [generateKeypair(), generateKeypair(), generateKeypair()];
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    for (const v of verifiers) registerAgent(v.did, { capabilities: ["verification"] });
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+
+    const results: Array<"verified" | "rejected"> = ["verified", "rejected", "rejected"];
+    for (let i = 0; i < verifiers.length; i++) {
+      const input: VerificationContentInput = {
+        receiptId: receipt.receiptId,
+        jobId: receipt.jobId,
+        provider: provider.did,
+        verifier: verifiers[i].did,
+        method: "agent_attestation",
+        outputHash: receipt.result.outputHash,
+        result: results[i],
+      };
+      const { signature } = signVerification(verifiers[i], input);
+      submitVerification(verifiers[i].did, { ...input, signature });
+    }
+
+    expect(listByReceipt(receipt.receiptId)).toHaveLength(3);
+    // 1 verified vs. 2 rejected: no attestation boost, despite a `verified`
+    // record existing.
+    const rep = computeReputation(provider.did);
+    expect(rep.components.attestedReceipts).toBe(0);
+  });
+
+  it("still attests on the ordinary, common case: one verifier, verified, zero rejections", () => {
+    // Explicit non-regression check: the fix above must not raise the bar
+    // for the overwhelmingly common single-verifier case.
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    registerAgent(verifier.did, { capabilities: ["verification"] });
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: verifier.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const { signature } = signVerification(verifier, input);
+    submitVerification(verifier.did, { ...input, signature });
+
+    expect(computeReputation(provider.did).components.attestedReceipts).toBe(1);
+  });
 });

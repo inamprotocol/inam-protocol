@@ -4,6 +4,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.9 (Draft) — 2026-08-26
+- **Closed a reputation-boost exploit the same audit found**: §12.5's eligibility rule required only "at least one `verified` Verification exists," so a single `verified` record granted the boost regardless of how many independent verifiers `rejected` the same receipt — real for a receipt's own two parties (get one colluding/careless verifier to say `verified`), not a missing feature. Tightened to require `verified` strictly outnumbering `rejected` among all Verifications on the receipt.
+- Explicitly not a multi-verifier consensus mechanism (still v0.2 backlog, §12.7) — no verifier-trust weighting, no quorum, no new state. The ordinary single-verifier case (`verified`, zero `rejected`) is unaffected.
+
 ### v0.8 (Draft) — 2026-08-26
 - **Role-aware reputation breakdown** (same external audit): `GET /agents/:id/reputation`'s `components` gains `asProvider`/`asRequester` (§5.3) — the same weighted receipt-count/success-rate/volume signal as the aggregate, filtered by which side of the receipt the agent was on. Purely additive; no existing field changes.
 - Prose now explicitly defines `verifiedReceipts` (means finalized/two-party-signed, not independently verified — `attestedReceipts` is the latter) and states the reference `trustScore` formula's ~80 asymptotic ceiling without a live staking mechanism.
@@ -70,6 +74,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.3 — 2026-08-26 (external audit fixes, continued)
+- **Fixed a reputation-boost exploit (SPEC.md v0.9, §12.5)**: `hasVerifiedAttestation` (both runtimes) required only "at least one verified" among a receipt's Verifications, so a single colluding/careless verifier's `verified` unconditionally outvoted any number of independent `rejected` records from other verifiers. Now requires `verified` to strictly outnumber `rejected` — a narrow strict-majority tiebreak, not the multi-verifier consensus mechanism explicitly deferred to v0.2 (no verifier-trust weighting, no quorum). The ordinary single-verifier case is unaffected.
+- Live-reproduced end to end (real local server, real SDK): 1 `verified` + 2 independent `rejected` no longer grants `attestedReceipts`; 1 `verified` + 0 `rejected` still does. New regression tests in both runtimes for both cases (Node 64, Worker 46).
 
 ### 0.6.2 — 2026-08-26 (external audit fixes, continued)
 - **Role-aware reputation breakdown (SPEC.md v0.8, §5.3)**: `computeReputation` (both runtimes) now also tracks `asProvider`/`asRequester` sub-totals using the same weighting as the existing aggregate (`pairWeight * counterpartyTrust * decay * attestationBoost`), filtered by whether the agent was `agentB` (provider) or `agentA` (requester) on each finalized receipt. `ReputationComponents` gains the two new fields (`sdk-js/src/types.ts`, plus the same duplicated type in `src/types.ts`/`worker/src/types.ts` per this repo's existing per-runtime-type convention). Purely additive.

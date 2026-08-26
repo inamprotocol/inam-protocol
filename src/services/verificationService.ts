@@ -118,9 +118,31 @@ export function listByReceipt(receiptId: string): VerificationRecord[] {
   return verifications.all().filter((v) => v.receiptId === receiptId);
 }
 
-/** Used by reputationService: does this receipt have at least one `verified`
- * attestation? (SPEC.md §12.5 — dispute status is checked by the caller,
- * not here; this function only answers "was it ever independently verified".) */
+/** Used by reputationService: does this receipt's independent-verification
+ * evidence net out to `verified` (SPEC.md §12.5 — dispute status is checked
+ * by the caller, not here)?
+ *
+ * v0.3 fix (was `.some(v => v.result === "verified")`): §12.3's
+ * VERIFIER_ALREADY_DECIDED (added earlier in this same audit pass) stops any
+ * *one* verifier from being inconsistent with itself, but never restricted
+ * how many *different* verifiers can independently verify the same receipt
+ * — nothing in this protocol limits that. An audit found the old rule let a
+ * single `verified` outvote any number of `rejected` records from other
+ * verifiers (1 verified + 9 rejected still counted as attested), which is a
+ * real exploit for a receipt's own parties: get one colluding or careless
+ * verifier to say "verified" and the boost applies regardless of how many
+ * independent verifiers disagree.
+ *
+ * This is a narrow strict-majority tiebreak (verified count > rejected
+ * count; a tie does NOT count as attested), not the multi-verifier
+ * consensus mechanism SPEC.md §12.7 defers to v0.2 — no verifier-trust
+ * weighting, no quorum requirement, no new state. It only stops the
+ * previous rule's asymmetry, where a minority `verified` unconditionally
+ * won. The common case (exactly one verifier submits `verified`, zero
+ * `rejected`) is unaffected: 1 > 0 is still true. */
 export function hasVerifiedAttestation(receiptId: string): boolean {
-  return listByReceipt(receiptId).some((v) => v.result === "verified");
+  const records = listByReceipt(receiptId);
+  const verifiedCount = records.filter((v) => v.result === "verified").length;
+  const rejectedCount = records.filter((v) => v.result === "rejected").length;
+  return verifiedCount > rejectedCount;
 }
