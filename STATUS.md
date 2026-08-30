@@ -34,7 +34,7 @@ A single independent verifier's signed attestation that a finalized receipt's ou
 
 ## Current live state (verify independently before relying on this — it decays fast)
 
-- **GitHub**: `github.com/inamprotocol/inam-protocol`, public, `main` branch at commit `1ab2b95` as of this writing (2026-08-25). Branch protection on `main` now requires all 4 CI checks; repo "About" field set.
+- **GitHub**: `github.com/inamprotocol/inam-protocol`, public. **Branch protection on `main` is currently OFF** (2026-08-30 audit — `gh api .../branches/main/protection` returns 404 "Branch not protected"; it was configured earlier but is gone, most likely lost in the repo/machine migration). CI still runs on every push, it's just not *required* to merge. Re-enable with: `gh api -X PUT repos/inamprotocol/inam-protocol/branches/main/protection --input <json>` requiring the 4 checks ("Node test suite (root)", "Worker test suite", "Python SDK test suite", "TypeScript typecheck") with `strict: true` — see the CI/CD gaps section below.
 - **Deployments**: `https://api.inamprotocol.org` (registry API, now including `GET /agents/:id/badge.svg`/`.json`), `https://docs.inamprotocol.org` (spec + API reference), `https://inamprotocol.org` (landing page), **`https://explorer.inamprotocol.org`** (new, 2026-08-25 — read-only public browser + live stats dashboard) — all live Cloudflare Workers, all verified responding 2026-08-25.
 - **SPEC.md**: v0.12 (Draft).
 - **Package versions in the repo** (committed, built, tested) vs. **actually published**:
@@ -62,10 +62,31 @@ A single independent verifier's signed attestation that a finalized receipt's ou
 4. **Verification v0.2 backlog** (`docs-design/verification-v0.2-backlog.md`) is a design sketch only. Explicitly not to be started without the user asking — flagging here only so it isn't mistaken for in-progress work.
 5. **Phase 5 (payments/stake)** has a real, unresolved prerequisite that isn't a coding task: which payment rail `settlement.paymentRef` actually points at (x402, AP2, on-chain, something else). SPEC.md deliberately leaves this unenforced. This is a product/business decision, flagged in the v0.2 backlog doc too — worth a scoping conversation before any Phase 5 code gets written, not something to default into.
 6. **`data/` and `.interop-tmp/` are gitignored and get wiped by nearly every test/demo run** — this is intentional (documented in README), not a gap, but worth stating explicitly so a future session doesn't mistake an empty `data/` directory for data loss.
-7. **No CI pipeline** (GitHub Actions or equivalent) exists yet — every test run in this project so far has been manual (`npm test` / `pytest` run by hand before each commit). Not flagged as a problem by the user so far, but it's a real gap for a "protocol" project that wants external contributors to trust it.
+7. ~~**No CI pipeline exists yet.**~~ **Resolved** — `.github/workflows/ci.yml` runs 4 jobs (Node/Worker/Python test suites + TS typecheck) on every push/PR to `main`. See the CI/CD audit below for the state as of 2026-08-30.
 8. **npm SDK's `README.md`** (`sdk-js/README.md`) and the Python SDK's `README.md` — not re-audited in this pass for staleness against the latest Verification-resource additions; worth a quick check next time either SDK is touched, since neither was specifically reviewed for the Verification-era changes' documentation completeness (as opposed to the root README/CHANGELOG/SPEC, which were all updated).
 9. **Neither package uses provenance/trusted publishing.** `inamprotocol@0.4.0` on PyPI was uploaded with plain `twine` (no PyPI Trusted Publishing / OIDC); npm side likewise has no `npm publish --provenance`. Both require the user's own action on the npm/PyPI project settings pages (this session can write the GitHub Actions workflow side, not flip the account-level toggle) — flagged, not started.
 10. **Zero external-adoption signal** — 0 GitHub stars/forks/issues/releases as of this writing, no example integrations, no quickstart shorter than reading the full README. This isn't a code gap, it's *the* current bottleneck: the protocol works (92/92 tests, all three domains live) but nothing outside this repo has used it yet.
+
+## CI/CD end-to-end audit (2026-08-30)
+
+Full pass over `.github/`, branch protection, publish + deploy paths.
+
+**Fixed this session (commit alongside audit #8 follow-up):**
+- **Deprecated runners** — every workflow pinned `actions/checkout@v4` / `actions/setup-node@v4` / `actions/setup-python@v5`, all targeting the now-deprecated Node 20 (GitHub forces Node 24, warns on every run, will hard-fail later). Bumped to `checkout@v5` / `setup-node@v5` / `setup-python@v6` across `ci.yml`, `publish-npm.yml`, `publish-pypi.yml`.
+- **`npm install` → `npm ci`** in `ci.yml` (all jobs) — enforces lockfile, faster, reproducible. Lockfiles verified in sync (`npm ci --dry-run` clean at root + sdk-js + worker).
+- **`ci.yml` gained `workflow_dispatch`** — can now be re-run manually without a dummy push.
+- **`publish-npm.yml` now runs the root vitest suite** (the suite that actually exercises sdk-js's crypto/canonical code) before publishing — previously only `tsc` build ran, so a `workflow_dispatch` publish from a dirty local checkout could ship a regression CI would have caught.
+- **Added `.github/dependabot.yml`** — weekly, grouped: github-actions, npm (all 6 package dirs), pip. Was absent entirely.
+
+**Still open — needs the maintainer (account/admin access this session doesn't have):**
+- **Branch protection on `main` is OFF** (see "Current live state" above). Re-enable requiring the 4 CI checks + `strict: true`. This is the highest-value open item — right now a red CI run does not block anything.
+- **npm/PyPI Trusted Publishing account toggles** — the GitHub Actions side is done (OIDC, no token secrets); the one-time account-side config on npmjs.com and pypi.org is still pending (`docs-design/trusted-publishing-setup.md` has the exact fields). Until then a `workflow_dispatch` publish will fail at the OIDC exchange.
+
+**Reported, not changed (design decisions, not bugs):**
+- **No CD for the 4 Cloudflare Workers** (`api`, `docs-site`, `explorer`, `site`) — all deploy by hand via `wrangler deploy`. No deploy workflow, no post-deploy smoke check (`scripts/worker-smoke-test.ts` exists but isn't wired to anything). Deliberate so far (single maintainer controls deploy timing); worth an `on: workflow_dispatch` deploy workflow per Worker if that changes.
+- **No CodeQL / dependency-review / secret-scanning workflow.** `SECURITY.md` + the `security-review` skill cover the manual path.
+- **The `release`-triggered publish path is untested** — zero GitHub releases/tags exist, so `publish-*.yml` has only ever been reachable via `workflow_dispatch`. The version-vs-tag `check` job logic is sound on inspection but unproven against a real release event.
+- **No lint/format step** — no ESLint/Prettier/Biome config in the repo at all. Typecheck + tests are the only automated quality gates. Fine for a small codebase; add if contributor count grows.
 
 ## Next action
 

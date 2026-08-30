@@ -5,25 +5,26 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch: {}
 
 jobs:
   node-tests:
     name: Node test suite (root)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
       - name: Install root dependencies
-        run: npm install
+        run: npm ci
       # Root tests import sdk-js source directly (see tsconfig.json's
       # `include`), and sdk-js is its own nested package with its own
       # dependencies (e.g. @noble/curves) — it must be installed
       # separately or root tests fail to resolve those imports.
       - name: Install sdk-js dependencies
-        run: npm install
+        run: npm ci
         working-directory: sdk-js
       - name: Run tests
         run: npm test
@@ -32,8 +33,8 @@ jobs:
     name: Worker test suite
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
@@ -43,10 +44,10 @@ jobs:
       # install as the root node-tests job or api.test.ts fails with
       # Cannot find package '@noble/ed25519' from a Durable Object handler.
       - name: Install sdk-js dependencies
-        run: npm install
+        run: npm ci
         working-directory: sdk-js
       - name: Install worker dependencies
-        run: npm install
+        run: npm ci
         working-directory: worker
       - name: Run tests
         run: npm test
@@ -56,8 +57,8 @@ jobs:
     name: Python SDK test suite
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -72,20 +73,20 @@ jobs:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           cache: npm
       - name: Install root dependencies
-        run: npm install
+        run: npm ci
       - name: Install sdk-js dependencies
-        run: npm install
+        run: npm ci
         working-directory: sdk-js
       - name: Typecheck root
         run: npx tsc --noEmit -p tsconfig.json
       - name: Install worker dependencies
-        run: npm install
+        run: npm ci
         working-directory: worker
       - name: Typecheck worker
         run: npm run typecheck

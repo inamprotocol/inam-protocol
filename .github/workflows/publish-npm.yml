@@ -48,7 +48,7 @@ jobs:
     outputs:
       should_publish: ${{ steps.decide.outputs.should_publish }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Compare sdk-js version to release tag
         id: decide
@@ -85,9 +85,9 @@ jobs:
       run:
         working-directory: sdk-js
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: "22"
           registry-url: "https://registry.npmjs.org"
@@ -103,9 +103,20 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # sdk-js has no standalone test script of its own (it's exercised by
-      # the root and worker vitest suites via CI); "build" (tsc) is its
-      # only pre-publish check, and also runs again via "prepublishOnly".
+      # sdk-js has no standalone test script of its own — its crypto /
+      # canonicalization / client code is exercised by the root vitest
+      # suite (tests/canonical.test.ts, tests/keys.test.ts, …). Run it here
+      # so a workflow_dispatch publish can't ship a regression that a
+      # green CI run on `main` would have caught but a hand-triggered
+      # publish from a dirty local checkout would not.
+      - name: Run the suite that exercises sdk-js
+        working-directory: ${{ github.workspace }}
+        run: |
+          npm ci
+          npm test
+
+      # "build" (tsc) is sdk-js's own pre-publish check; also runs again
+      # via "prepublishOnly".
       - name: Build
         run: npm run build
 
