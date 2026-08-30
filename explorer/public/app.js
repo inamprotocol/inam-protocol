@@ -300,6 +300,10 @@ function renderReputation(rep) {
     ["Attested receipts", c.attestedReceipts ?? "—"],
     ["Success rate", c.successRate !== undefined ? `${(c.successRate * 100).toFixed(0)}%` : "—"],
     ["Volume (USD)", fmtUsd(c.volumeUsd)],
+    ...(() => {
+      const other = Object.entries(c.volumeByCurrency || {}).filter(([k]) => k !== "USD");
+      return other.length ? [["Volume (other currencies)", other.map(([k, v]) => `${fmtNum(v)} ${escapeHtml(k)}`).join(", ")]] : [];
+    })(),
     ["Stake (USD)", fmtUsd(c.stakeUsd)],
     ["Decay half-life", c.decayHalfLifeDays !== undefined ? `${c.decayHalfLifeDays} days` : "—"],
   ];

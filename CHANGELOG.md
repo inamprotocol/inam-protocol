@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.11 (Draft) — 2026-08-30
+- **Closed the currency-conflation gap the same audit found**: `GET /agents/:id/reputation` computed `components.volumeUsd` by summing every finalized receipt's `settlement.amount` regardless of `settlement.currency` — a receipt settled in 1000 TRY added 1000 to a USD-labelled field, next to a 25 USDC one. INAM does no FX and won't (§10).
+- §5.3's `components` gains `volumeByCurrency` — a `currency → total` map, amounts bucketed by the currency they were denominated in, never converted or cross-summed (keys upper-cased; an untagged amount → `"USD"`). `volumeUsd` is now defined as exactly the `"USD"` bucket; a stablecoin like `USDC` is its own bucket, not USD. `asProvider`/`asRequester` get the same split.
+- `settlement.amount`/`currency` and a job's `budget.amount`/`currency` (§3.1, §4.1) are now shape-validated: `amount` a non-negative decimal string, `currency` a `^[A-Za-z0-9]{1,16}$` token — `VALIDATION_ERROR` otherwise. Previously any string passed, so `{ "amount": "banana" }` reached the reputation math and `Number("banana")` → `NaN` poisoned the volume sums; the computation now also guards a non-finite/negative amount as `0` contribution.
+- Additive for a consumer reading `volumeUsd`, but its *value* changes for any agent with non-USD settlements (drops to the USD-only total), and a receipt/job with a malformed amount/currency that a prior version accepted is now rejected.
+
 ### v0.10 (Draft) — 2026-08-26
 - **Closed the actual verifier-independence gap**: v0.6 required a verifier to be "a registered agent," but registration is free and self-service — that requirement never restricted who could verify, so verifier *count* carried no real independence signal and could trivially defeat v0.9's verified-vs-rejected tiebreak by registering throwaway identities.
 - New `isAuthorizedVerifier` boolean on the agent record (§2), `false` by default at registration. Only a single registry-configured **operator** identity can flip it, via new `POST /agents/:id/verifier-status` (§12.6). §12.3 rule 4 now checks this flag, not mere registration.
@@ -64,6 +70,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.3.3 — 2026-08-30
+- `ReputationComponents` / `ReputationRoleBreakdown` types gain `volumeByCurrency: Record<string, number>` (SPEC.md v0.11, §5.3). `volumeUsd` stays, now documented as the `"USD"` bucket only.
+- `settlement.amount`/`currency` and `budget.amount`/`currency` in `sdk-js/src/core/schemas.ts` are now regex-validated (non-negative decimal string / short currency-code token) instead of bare `z.string()`. New `sdk-js/src/core/settlementVolume.ts` (`normalizeCurrency`/`parseSettlementAmount`/`accrueVolume`/`roundVolumes`) — the per-currency aggregation shared by both server runtimes.
+
 ### 0.3.2 — 2026-08-26
 - Added `client.setVerifierStatus(targetAgentId, authorized)` (SPEC.md v0.10, §12.6) — grants or revokes an agent's `isAuthorizedVerifier` flag. Only succeeds when the calling keypair is the registry's configured operator identity; anyone else gets `NOT_OPERATOR`. New `setVerifierStatusSchema` exported from `sdk-js/src/core/schemas.ts`.
 
@@ -83,6 +93,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.5 — 2026-08-30 (external audit fixes, continued)
+- **Currency conflation in reputation volume (SPEC.md v0.11, §5.3)**: `computeReputation` (both runtimes) now buckets `settlement.amount` by `settlement.currency` into `components.volumeByCurrency` instead of summing every currency into one `volumeUsd` number. `volumeUsd` is now the `"USD"` bucket alone (untagged amounts still count as USD); `USDC` and every other currency stay out of it. Same split added to `asProvider`/`asRequester`.
+- Malformed/negative `settlement.amount` or free-form `currency` (and the same on a job's `budget`) now rejected with `VALIDATION_ERROR` at the shared schema layer; the volume math also guards a non-finite/negative amount as `0`.
+- New shared module `sdk-js/src/core/settlementVolume.ts` imported by both `src/services/reputationService.ts` and `worker/src/reputationService.ts`. No DB migration — this is compute-only over existing receipt rows.
+- Live cross-language proof: Python SDK drafted USD/TRY/USDC receipts against a running Node server; `volumeUsd` came back `100` (the USD receipt only, not `1125.5`), `volumeByCurrency` `{USD:100, TRY:1000, USDC:25.5}`, lowercase `"usdc"` normalized, malformed amount rejected `400`. New regression tests (Node 73, Worker 51, Python 36).
 
 ### 0.6.4 — 2026-08-26 (external audit fixes, continued)
 - **Operator-authorized verifiers (SPEC.md v0.10, §12.3/§12.6)**: closes the actual verifier-independence gap left by v0.6's "must be a registered agent" rule — registration is free and self-service, so that rule never restricted who could verify, only that they'd registered first. Verifier eligibility is now an explicit grant: a new `isAuthorizedVerifier` boolean on `AgentRecord`, `false` by default at registration, settable only by a single registry-configured operator identity (`INAM_OPERATOR_DID` env var, Node; `OPERATOR_DID` binding, Worker — both unset by default, the locked-down state) via new `POST /agents/:id/verifier-status`. `submitVerification` (both runtimes) now checks this flag instead of mere registration, rejecting `VERIFIER_NOT_AUTHORIZED`; a non-operator calling the new endpoint gets `NOT_OPERATOR`.

@@ -184,6 +184,37 @@ describe("execution receipt lifecycle", () => {
     await expectApiError(() => createDraft(worker.did, { ...input, agentAId: requester.did, signature }), "INVALID_TIMESTAMP");
   });
 
+  it("buckets settlement volume by currency instead of summing every currency as USD", () => {
+    // An audit found `components.volumeUsd` summed `settlement.amount` across
+    // every currency -- a 1000 TRY receipt added 1000 to a USD-labelled
+    // field, right next to a USDC one. INAM does no FX, so volume is now
+    // bucketed by the currency it was actually denominated in.
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+
+    function finalizeWith(jobId: string, settlement: Record<string, string>) {
+      const input = { ...freshInput(jobId), settlement };
+      const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
+      const draft = createDraft(worker.did, { ...input, agentAId: requester.did, signature });
+      countersign(draft.receiptId, requester.did, signCountersign(draft, requester.privateKey));
+    }
+
+    finalizeWith("job_usd", { amount: "100.00", currency: "USD" });
+    finalizeWith("job_try", { amount: "1000.00", currency: "TRY" });
+    finalizeWith("job_eur", { amount: "50.00", currency: "eur" }); // case-insensitive
+    finalizeWith("job_bad", { amount: "banana" }); // must not poison the sum with NaN
+
+    const rep = computeReputation(worker.did);
+    expect(rep.components.volumeUsd).toBe(100); // the USD receipt only, not 1150
+    expect(Number.isFinite(rep.components.volumeUsd)).toBe(true);
+    expect(rep.components.volumeByCurrency).toEqual({ USD: 100, TRY: 1000, EUR: 50 });
+    // the role breakdown carries the same currency split, not a flat number
+    expect(rep.components.asProvider.volumeByCurrency).toEqual({ USD: 100, TRY: 1000, EUR: 50 });
+    expect(rep.components.asProvider.volumeUsd).toBe(100);
+  });
+
   it("distinguishes an agent's provider history from its requester history", () => {
     // An audit found the aggregate trustScore/components don't distinguish
     // "did the work" from "requested and paid for the work" at all -- two

@@ -65,7 +65,7 @@ async function main() {
     jobId: job.jobId,
     task: { capability: "translation.tr-en", specHash: "sha256:quickstart_spec", createdAt: new Date().toISOString() },
     result: { outputHash: "sha256:quickstart_output", completedAt: new Date().toISOString() },
-    settlement: { amount: "10.00", currency: "USDC", paymentRef: "x402:tx_quickstart_1" },
+    settlement: { amount: "10.00", currency: "USD", paymentRef: "x402:tx_quickstart_1" },
     verification: { method: "payer_confirmation", outcome: "success" },
   });
   log("Agent B submits a signed draft receipt", draft);
@@ -120,6 +120,7 @@ Reputation **before** any work — a brand-new agent with no history starts at e
     "rawReceipts": 0,
     "successRate": 0,
     "volumeUsd": 0,
+    "volumeByCurrency": {},
     "stakeUsd": 0,
     "decayHalfLifeDays": 90,
     "attestedReceipts": 0
@@ -177,6 +178,7 @@ And reputation **after** — one verified, finalized receipt is enough to move t
     "rawReceipts": 1,
     "successRate": 1,
     "volumeUsd": 10,
+    "volumeByCurrency": { "USD": 10 },
     "stakeUsd": 0,
     "decayHalfLifeDays": 90,
     "attestedReceipts": 0

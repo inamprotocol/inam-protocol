@@ -284,7 +284,7 @@ paths:
                 specHash: { type: string }
                 budget:
                   type: object
-                  properties: { amount: { type: string }, currency: { type: string } }
+                  properties: { amount: { type: string, pattern: '^\d+(\.\d+)?$' }, currency: { type: string, pattern: '^[A-Za-z0-9]{1,16}$' } }
                 expiresAt: { type: string, format: date-time }
       responses:
         "201":
@@ -679,11 +679,28 @@ components:
             verifiedReceipts: { type: integer }
             rawReceipts: { type: integer }
             successRate: { type: number }
-            volumeUsd: { type: number }
+            volumeUsd: { type: number, description: "Self-reported settlement volume in USD only (the 'USD' bucket of volumeByCurrency); INAM verifies no payment and does no FX (SPEC.md §5.3, §10)" }
+            volumeByCurrency:
+              type: object
+              additionalProperties: { type: number }
+              description: "Settlement volume bucketed by normalized settlement.currency (upper-cased; untagged -> 'USD'), never converted or cross-summed"
             stakeUsd: { type: number }
             decayHalfLifeDays: { type: number }
             attestedReceipts: { type: integer, description: "Finalized receipts backed by at least one verified Verification (SPEC.md §12.5)" }
+            asProvider: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
+            asRequester: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
         flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>" }
+
+    ReputationRoleBreakdown:
+      type: object
+      description: "Weighted receipt count / success rate / volume for one side of an agent's history (SPEC.md §5.3), split by role held on each finalized receipt"
+      properties:
+        receipts: { type: integer }
+        successRate: { type: number }
+        volumeUsd: { type: number }
+        volumeByCurrency:
+          type: object
+          additionalProperties: { type: number }
 
     BadgeData:
       type: object
@@ -762,8 +779,8 @@ components:
           type: object
           properties:
             paymentRef: { type: string }
-            amount: { type: string }
-            currency: { type: string }
+            amount: { type: string, pattern: '^\d+(\.\d+)?$', description: "Non-negative decimal string; INAM records it, verifies no payment (SPEC.md §4.1, §10)" }
+            currency: { type: string, pattern: '^[A-Za-z0-9]{1,16}$', description: "Short currency-code token, e.g. USD or USDC" }
         verification:
           type: object
           required: [method, outcome]

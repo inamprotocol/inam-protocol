@@ -10,3 +10,6 @@ sdk-python/*.egg-info/
 worker/node_modules/
 worker/.wrangler/
 worker/.dev.vars
+explorer/.wrangler/
+.claude/
+operator-key.json
