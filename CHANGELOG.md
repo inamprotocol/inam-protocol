@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.12 (Draft) — 2026-08-30
+- **Closed a request-replay gap the same audit found**: the signed-request string (`METHOD\npath\ntimestamp\nsha256(body)`, §7) doesn't cover the `Idempotency-Key`, so a captured signed request replayed with a *fresh* key re-verified and missed the `(caller, key)` idempotency cache — a duplicate side effect on any endpoint without its own content-address/state guard (`POST /jobs` most clearly), for the whole 5-minute clock-skew window.
+- §7: a registry now **MUST** bind each verified signature to the one `Idempotency-Key` it was first seen with (for ≥ the skew window) and reject the same signature with a different key as `REPLAYED_REQUEST` (409). Not wire-breaking — the signing string is unchanged, SDKs need no update.
+- §7 idempotency tightened: only a terminal **2xx** response is cached/replayed. A transient `5xx`/`429` is no longer cached (it previously pinned the failure for the cache TTL, making a legit retry impossible) — a non-2xx leaves the key unclaimed and a retry re-executes.
+- New error code: `REPLAYED_REQUEST`.
+
 ### v0.11 (Draft) — 2026-08-30
 - **Closed the currency-conflation gap the same audit found**: `GET /agents/:id/reputation` computed `components.volumeUsd` by summing every finalized receipt's `settlement.amount` regardless of `settlement.currency` — a receipt settled in 1000 TRY added 1000 to a USD-labelled field, next to a 25 USDC one. INAM does no FX and won't (§10).
 - §5.3's `components` gains `volumeByCurrency` — a `currency → total` map, amounts bucketed by the currency they were denominated in, never converted or cross-summed (keys upper-cased; an untagged amount → `"USD"`). `volumeUsd` is now defined as exactly the `"USD"` bucket; a stablecoin like `USDC` is its own bucket, not USD. `asProvider`/`asRequester` get the same split.
@@ -93,6 +99,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.6 — 2026-08-30 (external audit fixes, continued)
+- **Signature-replay guard (SPEC.md v0.12, §7, audit #8)**: `requireIdempotencyKey` (both runtimes) now binds each verified request signature to the single `Idempotency-Key` it was first presented with; the same signature with a different key is rejected `REPLAYED_REQUEST` (409). Closes the "replay a captured signed request with a fresh key" hole without touching the signing string (SDKs unchanged). Node keeps the binding in a new in-memory `signatureReplayCache` (TTL = clock-skew window), Worker in the existing KV namespace under a `replay:` prefix (300s TTL).
+- **Idempotency now caches successes only**: a non-2xx response is no longer stored — previously a transient `5xx`/`429` pinned the key for the full TTL and a legitimate retry could never get through. Node also gave `idempotencyCache` TTL eviction + a bounded opportunistic sweep (it previously grew unbounded from unique keys — a slow memory-exhaustion vector).
+- No DB migration. Live replay proof against a running Node server: same signature + fresh key → 409 `REPLAYED_REQUEST`, verbatim replay → cached 201 (no second job), exactly one job created despite 3 POSTs. New regression tests (Node 73→75, Worker 51→52; Python 36 unchanged, 163 total).
 
 ### 0.6.5 — 2026-08-30 (external audit fixes, continued)
 - **Currency conflation in reputation volume (SPEC.md v0.11, §5.3)**: `computeReputation` (both runtimes) now buckets `settlement.amount` by `settlement.currency` into `components.volumeByCurrency` instead of summing every currency into one `volumeUsd` number. `volumeUsd` is now the `"USD"` bucket alone (untagged amounts still count as USD); `USDC` and every other currency stay out of it. Same split added to `asProvider`/`asRequester`.

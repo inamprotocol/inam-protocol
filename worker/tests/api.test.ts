@@ -182,6 +182,47 @@ describe("agent registration", () => {
     expect(second.status).toBe(first.status);
     expect(second.json).toEqual(first.json);
   });
+
+  it("rejects a captured request replayed with a different Idempotency-Key (audit #8)", async () => {
+    // The signing string doesn't cover the Idempotency-Key, so a captured
+    // signed request replayed with a fresh key would otherwise re-execute:
+    // signature still verifies, idempotency cache (keyed on the new key)
+    // misses. The replay guard binds one verified signature to one key.
+    const poster = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["job.posting"] } });
+
+    const body = JSON.stringify({ capability: "translation.tr-en", specHash: "sha256:replay_worker" });
+    const path = "/v1/jobs";
+    const timestamp = Date.now().toString();
+    const signingString = `POST\n${path}\n${timestamp}\n${sha256Hex(body)}`;
+    const signature = toBase64(sign(new TextEncoder().encode(signingString), poster.privateKey));
+    const baseHeaders: Record<string, string> = {
+      "content-type": "application/json",
+      "cf-connecting-ip": crypto.randomUUID(),
+      "inam-agent": poster.did,
+      "inam-timestamp": timestamp,
+      "inam-signature": signature,
+    };
+    const fire = async (idempotencyKey: string) => {
+      const request = new Request(`http://worker.test${path}`, { method: "POST", headers: { ...baseHeaders, "idempotency-key": idempotencyKey }, body });
+      const ctx = createExecutionContext();
+      const response = await worker.fetch(request, env, ctx);
+      await waitOnExecutionContext(ctx);
+      return { status: response.status, json: (await response.json().catch(() => undefined)) as Record<string, unknown> | undefined };
+    };
+
+    const first = await fire("key-A");
+    expect(first.status).toBe(201);
+    const jobId = first.json!.jobId as string;
+
+    const replay = await fire("key-B"); // same signature, fresh key
+    expect(replay.status).toBe(409);
+    expect(replay.json!.error).toMatchObject({ code: "REPLAYED_REQUEST" });
+
+    const verbatim = await fire("key-A"); // exact same request -> idempotent replay
+    expect(verbatim.status).toBe(201);
+    expect(verbatim.json!.jobId).toBe(jobId);
+  });
 });
 
 describe("execution receipt lifecycle", () => {

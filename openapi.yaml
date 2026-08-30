@@ -624,7 +624,11 @@ components:
       in: header
       required: true
       schema: { type: string }
-      description: Required on every mutating request. A repeated (caller, key) pair replays the cached response.
+      description: >-
+        Required on every mutating request. A repeated (caller, key) pair replays the cached
+        response of the prior *successful* (2xx) operation; a non-2xx is not cached and a retry
+        re-executes. A given request signature is bound to one key — replaying a captured
+        signature with a different key is rejected 409 REPLAYED_REQUEST (SPEC.md §7).
 
   responses:
     Error:
