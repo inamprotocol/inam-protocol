@@ -38,10 +38,20 @@ export const linkSchema = z.object({
   proofSignature: z.string().min(1).optional(),
 });
 
+// An audit (SPEC.md v0.11) found `settlement.amount`/`currency` and a job's
+// `budget` were `z.string()` with no shape check: `{ amount: "banana" }` or a
+// negative amount passed validation, then `Number("banana")` -> NaN poisoned
+// the reputation volume sums. `amount` is a non-negative decimal string;
+// `currency` is a short code-shaped token (ISO-4217 like "USD" or a
+// stablecoin ticker like "USDC"), not free-form prose.
+const moneyAmount = z.string().regex(/^\d+(\.\d+)?$/, "must be a non-negative decimal string");
+const currencyCode = z.string().regex(/^[A-Za-z0-9]{1,16}$/, "must be a short currency code");
+const moneyFields = { amount: moneyAmount.optional(), currency: currencyCode.optional() };
+
 export const postJobSchema = z.object({
   capability: z.string().min(1),
   specHash: z.string().min(1),
-  budget: z.object({ amount: z.string().optional(), currency: z.string().optional() }).optional(),
+  budget: z.object({ ...moneyFields }).optional(),
   expiresAt: z.string().optional(),
 });
 
@@ -75,8 +85,7 @@ export const draftReceiptSchema = z.object({
   settlement: z
     .object({
       paymentRef: z.string().optional(),
-      amount: z.string().optional(),
-      currency: z.string().optional(),
+      ...moneyFields,
     })
     .optional(),
   verification: z.object({

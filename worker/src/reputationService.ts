@@ -2,6 +2,7 @@ import * as db from "./db.js";
 import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
 import { hasVerifiedAttestation } from "./verificationService.js";
+import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
 import type { Env, ReputationResult } from "./types.js";
 
 const CONFIDENCE_SATURATION = 5;
@@ -44,7 +45,11 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
 
   let weightedSuccessSum = 0;
   let weightSum = 0;
-  let volumeUsd = 0;
+  // Volume bucketed by settlement currency, never cross-summed — an audit
+  // found the old single `volumeUsd` added TRY/EUR/USDC amounts together as
+  // raw USD. INAM does no FX (SPEC.md §10), so `volumeUsd` below is just the
+  // "USD" bucket; everything else stays visible only in volumeByCurrency.
+  const volumeByCurrency: Record<string, number> = {};
 
   // Role breakdown: an audit found the aggregate trustScore/components above
   // don't distinguish "did the work" (agentB/provider) from "requested and
@@ -60,11 +65,11 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   // decay * attestationBoost) as the aggregate above, just filtered by role.
   let asProviderWeightedSuccessSum = 0;
   let asProviderWeightSum = 0;
-  let asProviderVolumeUsd = 0;
+  const asProviderVolumeByCurrency: Record<string, number> = {};
   let asProviderCount = 0;
   let asRequesterWeightedSuccessSum = 0;
   let asRequesterWeightSum = 0;
-  let asRequesterVolumeUsd = 0;
+  const asRequesterVolumeByCurrency: Record<string, number> = {};
   let asRequesterCount = 0;
 
   // A busy agent can have many receipts against a small set of repeat
@@ -117,18 +122,17 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     if (!Number.isFinite(weight)) weight = 0;
     weightedSuccessSum += weight * outcomeScore;
     weightSum += weight;
-    const amount = Number(r.settlement?.amount ?? 0);
-    volumeUsd += amount;
+    accrueVolume(volumeByCurrency, r.settlement);
 
     if (r.agentB.id === agentId) {
       asProviderWeightedSuccessSum += weight * outcomeScore;
       asProviderWeightSum += weight;
-      asProviderVolumeUsd += amount;
+      accrueVolume(asProviderVolumeByCurrency, r.settlement);
       asProviderCount++;
     } else {
       asRequesterWeightedSuccessSum += weight * outcomeScore;
       asRequesterWeightSum += weight;
-      asRequesterVolumeUsd += amount;
+      accrueVolume(asRequesterVolumeByCurrency, r.settlement);
       asRequesterCount++;
     }
   }
@@ -138,6 +142,10 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   const stakeComponent = clamp(Math.sqrt(record.stakeUsd) / Math.sqrt(STAKE_NORMALIZATION_USD), 0, 1);
 
   const trustScore = clamp(20 * stakeComponent + 70 * successRate * confidence + 10 * confidence, 0, 100);
+
+  const aggVolume = roundVolumes(volumeByCurrency);
+  const providerVolume = roundVolumes(asProviderVolumeByCurrency);
+  const requesterVolume = roundVolumes(asRequesterVolumeByCurrency);
 
   const flags: string[] = [];
   for (const [counterparty, count] of pairCounts.entries()) {
@@ -154,19 +162,22 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
       verifiedReceipts: finalized.length,
       rawReceipts: all.length,
       successRate: Math.round(successRate * 1000) / 1000,
-      volumeUsd,
+      volumeUsd: aggVolume.USD ?? 0,
+      volumeByCurrency: aggVolume,
       stakeUsd: record.stakeUsd,
       decayHalfLifeDays: DECAY_HALF_LIFE_DAYS,
       attestedReceipts: attestedCount,
       asProvider: {
         receipts: asProviderCount,
         successRate: asProviderWeightSum > 0 ? Math.round((asProviderWeightedSuccessSum / asProviderWeightSum) * 1000) / 1000 : 0,
-        volumeUsd: asProviderVolumeUsd,
+        volumeUsd: providerVolume.USD ?? 0,
+        volumeByCurrency: providerVolume,
       },
       asRequester: {
         receipts: asRequesterCount,
         successRate: asRequesterWeightSum > 0 ? Math.round((asRequesterWeightedSuccessSum / asRequesterWeightSum) * 1000) / 1000 : 0,
-        volumeUsd: asRequesterVolumeUsd,
+        volumeUsd: requesterVolume.USD ?? 0,
+        volumeByCurrency: requesterVolume,
       },
     },
     flags,

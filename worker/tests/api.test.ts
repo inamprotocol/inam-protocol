@@ -365,6 +365,59 @@ describe("execution receipt lifecycle", () => {
     expect(qRep.components.asProvider.receipts + qRep.components.asRequester.receipts).toBe(qRep.components.verifiedReceipts);
   });
 
+  it("buckets settlement volume by currency instead of summing every currency as USD", async () => {
+    // An audit found `components.volumeUsd` summed `settlement.amount` across
+    // every currency -- a 1000 TRY receipt added 1000 to a USD-labelled
+    // field. INAM does no FX, so volume is now bucketed by currency and
+    // `volumeUsd` is just the USD bucket.
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    async function finalizeWith(jobId: string, settlement: Record<string, string>) {
+      const input = job({ jobId, settlement });
+      const content = buildSignableContent(requester.did, worker_.did, input);
+      const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+      const draftRes = await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `receipt:${jobId}`, body: { ...input, agentAId: requester.did, signature: draftSig } });
+      const draft = draftRes.json as { receiptId: string };
+      const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+      await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, { keypair: requester, idempotencyKey: `countersign:${draft.receiptId}`, body: { signature: counterSig } });
+    }
+
+    await finalizeWith("job_usd", { amount: "100.00", currency: "USD" });
+    await finalizeWith("job_try", { amount: "1000.00", currency: "TRY" });
+    await finalizeWith("job_eur", { amount: "50.00", currency: "eur" }); // case-insensitive
+
+    const rep = (await call("GET", `/v1/agents/${encodeURIComponent(worker_.did)}/reputation`)).json as {
+      components: { volumeUsd: number; volumeByCurrency: Record<string, number>; asProvider: { volumeUsd: number; volumeByCurrency: Record<string, number> } };
+    };
+    expect(rep.components.volumeUsd).toBe(100); // the USD receipt only, not 1150
+    expect(rep.components.volumeByCurrency).toEqual({ USD: 100, TRY: 1000, EUR: 50 });
+    expect(rep.components.asProvider.volumeUsd).toBe(100);
+    expect(rep.components.asProvider.volumeByCurrency).toEqual({ USD: 100, TRY: 1000, EUR: 50 });
+  });
+
+  it("rejects a malformed settlement amount / free-form currency at the schema layer", async () => {
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    const input = job({ settlement: { amount: "banana", currency: "USD" } });
+    const content = buildSignableContent(requester.did, worker_.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+    const res = await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `receipt:${input.jobId}`, body: { ...input, agentAId: requester.did, signature: draftSig } });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
+  });
+
   it("only lets one of two concurrent countersign attempts succeed (race-condition fix regression test)", async () => {
     const requester = generateKeypair();
     const worker_ = generateKeypair();

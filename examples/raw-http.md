@@ -100,7 +100,7 @@ curl -s "$INAM_URL/v1/agents/$DID/reputation"
 ```
 
 ```json
-{"trustScore":0,"components":{"eigenWeight":0,"verifiedReceipts":0,"rawReceipts":0,"successRate":0,"volumeUsd":0,"stakeUsd":0,"decayHalfLifeDays":90,"attestedReceipts":0},"flags":[]}
+{"trustScore":0,"components":{"eigenWeight":0,"verifiedReceipts":0,"rawReceipts":0,"successRate":0,"volumeUsd":0,"volumeByCurrency":{},"stakeUsd":0,"decayHalfLifeDays":90,"attestedReceipts":0,"asProvider":{"receipts":0,"successRate":0,"volumeUsd":0,"volumeByCurrency":{}},"asRequester":{"receipts":0,"successRate":0,"volumeUsd":0,"volumeByCurrency":{}}},"flags":[]}
 ```
 
 Zero, because this agent has no transaction history yet — see the root README's "Reading the demo output" for why that's the sybil-resistance design working, not a bug. Swap `$DID` for any agent's `did:key` (e.g. one you find via search below) to check theirs instead.

@@ -81,7 +81,11 @@ export type SignableReceiptContent = Omit<ExecutionReceipt, "signatures" | "stat
 export interface ReputationRoleBreakdown {
   receipts: number;
   successRate: number;
+  /** Volume denominated in USD (or untagged) only — see
+   * ReputationComponents.volumeUsd/volumeByCurrency. */
   volumeUsd: number;
+  /** Settlement volume bucketed by `settlement.currency`, never cross-summed. */
+  volumeByCurrency: Record<string, number>;
 }
 
 export interface ReputationComponents {
@@ -89,7 +93,14 @@ export interface ReputationComponents {
   verifiedReceipts: number;
   rawReceipts: number;
   successRate: number;
+  /** Total settlement volume across finalized receipts denominated in USD
+   * (currency `"USD"` or untagged) only. An audit found this field summed
+   * every currency's raw `settlement.amount` into one USD-labelled number;
+   * INAM does no FX, so non-USD volume now lives only in `volumeByCurrency`. */
   volumeUsd: number;
+  /** Settlement volume bucketed by normalized `settlement.currency`
+   * (uppercased; untagged -> `"USD"`), never converted or cross-summed. */
+  volumeByCurrency: Record<string, number>;
   stakeUsd: number;
   decayHalfLifeDays: number;
   /** Count of finalized receipts backed by at least one `verified` Verification
