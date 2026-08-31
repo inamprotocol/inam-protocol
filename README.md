@@ -92,9 +92,11 @@ GET  /agents/:id/reputation
 GET  /agents/:id/badge.svg        embeddable shields.io-style trust-score badge (unsigned, public)
 GET  /agents/:id/badge.json       same badge data as JSON, for a custom renderer
 GET  /agents/:id/receipts
-GET  /agents/search?capability=&min_reputation=&supports=
+GET  /agents/search?capability=&min_reputation=&supports=&include_revoked=
 POST /agents/:id/link/challenge   request a proof-of-control challenge (signed)
 POST /agents/:id/link            (signed; agentpass_id/aitp_id/passport_id require a completed challenge)
+POST /agents/:id/revoke          one-way retire this INAM ID (signed, self)
+POST /agents/:id/verifier-status grant/revoke verifier authorization (signed, operator only)
 
 POST /jobs                        post an open job (signed)
 GET  /jobs/:id

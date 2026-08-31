@@ -24,7 +24,13 @@ CREATE TABLE IF NOT EXISTS agents (
   -- ALTER TABLE note in STATUS.md / the commit that introduced this field --
   -- do not deploy the code that reads/writes this column before that
   -- migration has actually been applied to the live D1 database).
-  is_authorized_verifier INTEGER NOT NULL DEFAULT 0
+  is_authorized_verifier INTEGER NOT NULL DEFAULT 0,
+  -- Self-signed, one-way identity revocation (SPEC.md §2.2). NULL for an
+  -- active agent. Same migration caveat as the columns above: an existing
+  -- production `agents` table needs these added via
+  -- migration-add-revocation.sql before deploying code that reads/writes them.
+  revoked_at TEXT,
+  revocation_reason TEXT
 );
 
 CREATE TABLE IF NOT EXISTS receipts (

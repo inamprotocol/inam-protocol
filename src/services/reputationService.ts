@@ -174,6 +174,7 @@ export function computeReputation(agentId: string): ReputationResult {
     }
   }
   if (disputedCount > 0) flags.push("in_dispute");
+  if (record.revokedAt) flags.push("revoked");
 
   return {
     trustScore: Math.round(trustScore * 10) / 10,

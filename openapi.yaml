@@ -82,6 +82,10 @@ paths:
           in: query
           description: One of agentpass_id, aitp_id, passport_id, a2a_endpoint
           schema: { type: string }
+        - name: include_revoked
+          in: query
+          description: "Set to `true` to include revoked agents (SPEC.md §2.2); excluded by default."
+          schema: { type: boolean }
       responses:
         "200":
           description: Matching agents
@@ -202,6 +206,37 @@ paths:
                 type: object
                 properties: { receipts: { type: array, items: { $ref: "#/components/schemas/Receipt" } } }
         "404": { $ref: "#/components/responses/Error" }
+
+  /agents/{id}/revoke:
+    post:
+      operationId: revokeAgent
+      summary: One-way retire this INAM ID (SPEC.md §2.2)
+      description: >-
+        Signed, self only. Sets `revokedAt`/`revocationReason` on the record.
+        After this the ID performs no further signed operations (403
+        AGENT_REVOKED), drops out of search, and is flagged `revoked` in its
+        reputation. One-way — no un-revoke.
+      tags: [agents]
+      parameters:
+        - { $ref: "#/components/parameters/AgentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reason]
+              properties: { reason: { type: string, minLength: 1, maxLength: 500 } }
+      responses:
+        "200":
+          description: Updated (revoked) agent record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
 
   /agents/{id}/link/challenge:
     post:
@@ -698,6 +733,8 @@ components:
         linkedProof: { $ref: "#/components/schemas/LinkedIdentityProofs" }
         stakeUsd: { type: number }
         isAuthorizedVerifier: { type: boolean, description: "SPEC.md §12.3 — operator-granted; false at registration" }
+        revokedAt: { type: string, format: date-time, description: "SPEC.md §2.2 — set when the agent retired this ID; absent for an active agent" }
+        revocationReason: { type: string }
         createdAt: { type: string, format: date-time }
 
     Reputation:

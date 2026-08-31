@@ -20,6 +20,10 @@ export const setVerifierStatusSchema = z.object({
   authorized: z.boolean(),
 });
 
+export const revokeAgentSchema = z.object({
+  reason: z.string().min(1).max(500),
+});
+
 export const registerAgentSchema = z.object({
   capabilities: z.array(z.string().min(1)).min(1),
   metadata: z.record(z.unknown()).optional(),

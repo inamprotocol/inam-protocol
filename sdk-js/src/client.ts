@@ -65,6 +65,17 @@ export class InamClient {
     return this.request("GET", `/v1/agents/${encodeURIComponent(id)}`);
   }
 
+  /** Retires this client's own INAM ID (SPEC.md §2.2). One-way — a revoked
+   * ID performs no further signed operations and drops out of search. This
+   * is the key-compromise / key-rotation-off tool: an INAM ID *is* its
+   * Ed25519 key, so a leaked key can't be re-pointed, only burned. Call
+   * this while you still control the key. */
+  revoke(reason: string): Promise<AgentRecord> {
+    return this.request("POST", `/v1/agents/${encodeURIComponent(this.keypair.did)}/revoke`, { reason }, {
+      idempotencyKey: `revoke:${this.keypair.did}`,
+    });
+  }
+
   /** Grants or revokes `targetAgentId`'s verifier status (SPEC.md §12.3).
    * Only succeeds when this client's own keypair is the registry's
    * configured operator identity — anyone else gets NOT_OPERATOR. There is

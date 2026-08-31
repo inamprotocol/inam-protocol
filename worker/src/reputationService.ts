@@ -154,6 +154,7 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     }
   }
   if (disputedCount > 0) flags.push("in_dispute");
+  if (record.revokedAt) flags.push("revoked");
 
   return {
     trustScore: Math.round(trustScore * 10) / 10,

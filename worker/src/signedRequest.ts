@@ -1,6 +1,7 @@
 import type { Context, Next } from "hono";
 import { sha256Hex, verify, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
-import { unauthorized, badRequest } from "./errors.js";
+import { unauthorized, badRequest, forbidden } from "./errors.js";
+import * as db from "./db.js";
 import type { AppEnv } from "./types.js";
 
 const CLOCK_SKEW_MS = 5 * 60 * 1000;
@@ -37,6 +38,16 @@ export async function requireSignedRequest(c: Context<AppEnv>, next: Next) {
   }
   if (!signatureOk) {
     throw unauthorized("INVALID_SIGNATURE", "Signature does not match the claimed agent DID for this request");
+  }
+
+  // A revoked INAM ID (SPEC.md §2.2) can perform no further signed
+  // operations — checked here, the one choke point every signed route passes
+  // through. An unregistered DID (a fresh registration) isn't in D1 yet, so
+  // this is a no-op for it. One extra D1 read per signed write; writes are
+  // rate-limited and not latency-critical.
+  const record = await db.getAgent(c.env, agentDid);
+  if (record?.revokedAt) {
+    throw forbidden("AGENT_REVOKED", `This INAM ID was revoked at ${record.revokedAt} and can no longer perform signed operations`);
   }
 
   c.set("agentDid", agentDid);
