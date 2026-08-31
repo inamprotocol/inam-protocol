@@ -14,7 +14,7 @@ import { testOperatorKeypair } from "./testOperator.js";
 // One statement per array entry (not exec() with a multi-line blob) — D1's
 // exec() splits on newlines and chokes on a CREATE TABLE spanning several.
 const SCHEMA_STATEMENTS = [
-  "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, is_authorized_verifier INTEGER NOT NULL DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, linked_proof TEXT NOT NULL DEFAULT '{}', stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, is_authorized_verifier INTEGER NOT NULL DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS receipts (receipt_id TEXT PRIMARY KEY, agent_a_id TEXT NOT NULL REFERENCES agents(id), agent_b_id TEXT NOT NULL REFERENCES agents(id), status TEXT NOT NULL, completed_at TEXT NOT NULL, amount_usd REAL NOT NULL DEFAULT 0, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_a ON receipts(agent_a_id)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_b ON receipts(agent_b_id)",
@@ -884,6 +884,39 @@ describe("external identity link challenges", () => {
     });
     expect(shortcutRes.status).toBe(400);
     expect((shortcutRes.json as { error: { code: string } }).error.code).toBe("CHALLENGE_REQUIRED");
+  });
+
+  it("records per-link assurance in linkedProof, exposed via GET /protocols (audit #9)", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["x"] } });
+    const external = generateKeypair();
+    const extKeyB64 = toBase64(external.publicKey);
+
+    await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link-a2a:${Date.now()}`,
+      body: { protocol: "a2a_endpoint", value: "https://agent.example/a2a" },
+    });
+
+    const chRes = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+      keypair: agent,
+      idempotencyKey: `ch:${Date.now()}`,
+      body: { protocol: "agentpass_id", externalPublicKey: extKeyB64, keyType: "ed25519" },
+    });
+    const { challengeId, challenge } = chRes.json as { challengeId: string; challenge: string };
+    const proof = toBase64(sign(new Uint8Array(Buffer.from(challenge, "hex")), external.privateKey));
+    const linkRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link:${challengeId}`,
+      body: { protocol: "agentpass_id", value: "agentpass:x", challengeId, proofSignature: proof },
+    });
+    const linkProof = (linkRes.json as { linkedProof: Record<string, { method: string; externalPublicKey?: string }> }).linkedProof;
+    expect(linkProof.agentpass_id).toMatchObject({ method: "key_possession", keyType: "ed25519", externalPublicKey: extKeyB64 });
+
+    const protoRes = await call("GET", `/v1/agents/${agent.did}/protocols`);
+    const lp = (protoRes.json as { linkedProof: Record<string, { method: string }> }).linkedProof;
+    expect(lp.a2a_endpoint.method).toBe("unverified_claim");
+    expect(lp.agentpass_id.method).toBe("key_possession");
   });
 });
 

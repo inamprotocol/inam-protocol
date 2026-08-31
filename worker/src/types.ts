@@ -7,6 +7,25 @@ export interface LinkedIdentities {
 
 export type ExternalKeyType = "ed25519" | "p256";
 
+/** How one `linked` entry was verified when it was recorded (SPEC.md §2.1).
+ * `key_possession` proves control of `externalPublicKey` at `verifiedAt` — not
+ * that the key is authoritative for the identity externally (cross-registry
+ * resolution is out of scope, §10). `unverified_claim` is an INAM-signed
+ * assertion only (`a2a_endpoint`). */
+export interface LinkProof {
+  method: "key_possession" | "unverified_claim";
+  verifiedAt: string;
+  keyType?: ExternalKeyType;
+  externalPublicKey?: string;
+}
+
+export interface LinkedIdentityProofs {
+  agentpass_id?: LinkProof;
+  aitp_id?: LinkProof;
+  passport_id?: LinkProof;
+  a2a_endpoint?: LinkProof;
+}
+
 /** Response shape from POST /agents/:id/link/challenge. */
 export interface LinkChallenge {
   challengeId: string;
@@ -34,6 +53,8 @@ export interface AgentRecord {
   capabilities: string[];
   metadata: Record<string, unknown>;
   linked: LinkedIdentities;
+  /** Per-protocol assurance metadata for `linked` (SPEC.md §2.1). */
+  linkedProof: LinkedIdentityProofs;
   stakeUsd: number;
   createdAt: string;
   /** Whether the registry operator has authorized this agent as a verifier

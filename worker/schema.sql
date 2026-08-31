@@ -8,6 +8,12 @@ CREATE TABLE IF NOT EXISTS agents (
   capabilities TEXT NOT NULL,   -- JSON array of strings
   metadata TEXT NOT NULL,       -- JSON object
   linked TEXT NOT NULL,         -- JSON object (LinkedIdentities)
+  -- Per-protocol assurance metadata for `linked` (SPEC.md §2.1) — key_possession
+  -- vs unverified_claim, plus the proven key. Same migration caveat as
+  -- is_authorized_verifier below: an existing production `agents` table needs
+  -- this column added via migration-add-linked-proof.sql before deploying code
+  -- that reads/writes it.
+  linked_proof TEXT NOT NULL DEFAULT '{}',
   stake_usd REAL NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   -- Verifier authorization (SPEC.md §12.3): only the registry's configured

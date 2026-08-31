@@ -2,7 +2,7 @@ import * as db from "./db.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
-import type { AgentRecord, Env, ExternalKeyType, LinkChallenge, LinkedIdentities } from "./types.js";
+import type { AgentRecord, Env, ExternalKeyType, LinkChallenge, LinkedIdentities, LinkedIdentityProofs, LinkProof } from "./types.js";
 
 export async function registerAgent(
   env: Env,
@@ -14,6 +14,7 @@ export async function registerAgent(
     capabilities: input.capabilities,
     metadata: input.metadata ?? {},
     linked: {},
+    linkedProof: {},
     stakeUsd: 0,
     createdAt: new Date().toISOString(),
     // Never settable at registration -- an agent cannot make itself a
@@ -82,8 +83,14 @@ export async function linkEndpoint(env: Env, callerDid: string, protocol: string
   }
   const record = await getAgent(env, callerDid);
   const linked: LinkedIdentities = { ...record.linked, [protocol]: value };
-  await db.updateAgentLinked(env, callerDid, linked);
-  return { ...record, linked };
+  // a2a_endpoint is a bare URL the agent asserted — backed only by the INAM
+  // signature on this request, no external proof. Record that honestly.
+  const linkedProof: LinkedIdentityProofs = {
+    ...record.linkedProof,
+    [protocol]: { method: "unverified_claim", verifiedAt: new Date().toISOString() } satisfies LinkProof,
+  };
+  await db.updateAgentLinks(env, callerDid, linked, linkedProof);
+  return { ...record, linked, linkedProof };
 }
 
 /**
@@ -149,8 +156,21 @@ export async function completeLink(env: Env, callerDid: string, protocol: string
 
   const agentRecord = await getAgent(env, callerDid);
   const linked: LinkedIdentities = { ...agentRecord.linked, [protocol]: value };
-  await db.updateAgentLinked(env, callerDid, linked);
-  return { ...agentRecord, linked };
+  // Record what was actually proven: possession of this external key now.
+  // Not a claim it's authoritative for `value` on the external side —
+  // cross-registry resolution is out of scope (SPEC.md §10). The key is kept
+  // so a consumer (or a future resolution step) can re-check it.
+  const linkedProof: LinkedIdentityProofs = {
+    ...agentRecord.linkedProof,
+    [protocol]: {
+      method: "key_possession",
+      verifiedAt: new Date().toISOString(),
+      keyType: record.keyType,
+      externalPublicKey: record.externalPublicKey,
+    } satisfies LinkProof,
+  };
+  await db.updateAgentLinks(env, callerDid, linked, linkedProof);
+  return { ...agentRecord, linked, linkedProof };
 }
 
 export function requireSelf(callerDid: string | undefined, subjectId: string) {

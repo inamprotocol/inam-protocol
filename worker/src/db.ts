@@ -22,13 +22,14 @@ export class AgentAlreadyExistsError extends Error {
 export async function insertAgent(env: Env, agent: AgentRecord): Promise<void> {
   try {
     await env.DB.prepare(
-      `INSERT INTO agents (id, capabilities, metadata, linked, stake_usd, created_at, is_authorized_verifier) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO agents (id, capabilities, metadata, linked, linked_proof, stake_usd, created_at, is_authorized_verifier) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
       .bind(
         agent.id,
         JSON.stringify(agent.capabilities),
         JSON.stringify(agent.metadata),
         JSON.stringify(agent.linked),
+        JSON.stringify(agent.linkedProof),
         agent.stakeUsd,
         agent.createdAt,
         agent.isAuthorizedVerifier ? 1 : 0,
@@ -42,8 +43,15 @@ export async function insertAgent(env: Env, agent: AgentRecord): Promise<void> {
   }
 }
 
-export async function updateAgentLinked(env: Env, id: string, linked: AgentRecord["linked"]): Promise<void> {
-  await env.DB.prepare("UPDATE agents SET linked = ? WHERE id = ?").bind(JSON.stringify(linked), id).run();
+export async function updateAgentLinks(
+  env: Env,
+  id: string,
+  linked: AgentRecord["linked"],
+  linkedProof: AgentRecord["linkedProof"],
+): Promise<void> {
+  await env.DB.prepare("UPDATE agents SET linked = ?, linked_proof = ? WHERE id = ?")
+    .bind(JSON.stringify(linked), JSON.stringify(linkedProof), id)
+    .run();
 }
 
 export async function updateAgentVerifierStatus(env: Env, id: string, authorized: boolean): Promise<void> {
@@ -357,6 +365,10 @@ function rowToAgent(row: Record<string, unknown>): AgentRecord {
     capabilities: JSON.parse(row.capabilities as string),
     metadata: JSON.parse(row.metadata as string),
     linked: JSON.parse(row.linked as string),
+    // Tolerate a row written before the linked_proof column existed (i.e.
+    // code deployed ahead of migration-add-linked-proof.sql) — degrade to an
+    // empty proof map rather than throwing on JSON.parse(undefined).
+    linkedProof: row.linked_proof ? JSON.parse(row.linked_proof as string) : {},
     stakeUsd: row.stake_usd as number,
     createdAt: row.created_at as string,
     isAuthorizedVerifier: Boolean(row.is_authorized_verifier),

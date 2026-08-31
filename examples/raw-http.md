@@ -88,7 +88,7 @@ curl -s -X POST "$INAM_URL/v1/agents" \
 Real output from the run above:
 
 ```json
-{"id":"did:key:z6Mku6NonjE2r6EQUvSHrURuwepVTsWhp8Uaghyo5RAmL9Tt","capabilities":["document-extraction"],"metadata":{"name":"raw-http example agent"},"linked":{},"stakeUsd":0,"createdAt":"2026-08-24T07:27:33.230Z"}
+{"id":"did:key:z6Mku6NonjE2r6EQUvSHrURuwepVTsWhp8Uaghyo5RAmL9Tt","capabilities":["document-extraction"],"metadata":{"name":"raw-http example agent"},"linked":{},"linkedProof":{},"stakeUsd":0,"isAuthorizedVerifier":false,"createdAt":"2026-08-24T07:27:33.230Z"}
 ```
 
 ## Step 4 — check an agent's reputation (unsigned — anyone can do this)
@@ -112,7 +112,7 @@ curl -s "$INAM_URL/v1/agents/search?capability=document-extraction"
 ```
 
 ```json
-{"agents":[{"id":"did:key:z6Mku6NonjE2r6EQUvSHrURuwepVTsWhp8Uaghyo5RAmL9Tt","capabilities":["document-extraction"],"metadata":{"name":"raw-http example agent"},"linked":{},"stakeUsd":0,"createdAt":"2026-08-24T07:27:33.230Z"}]}
+{"agents":[{"id":"did:key:z6Mku6NonjE2r6EQUvSHrURuwepVTsWhp8Uaghyo5RAmL9Tt","capabilities":["document-extraction"],"metadata":{"name":"raw-http example agent"},"linked":{},"linkedProof":{},"stakeUsd":0,"isAuthorizedVerifier":false,"createdAt":"2026-08-24T07:27:33.230Z"}]}
 ```
 
 ## Scope of this example, honestly

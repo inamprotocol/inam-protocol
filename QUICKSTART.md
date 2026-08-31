@@ -103,7 +103,9 @@ Registration — each agent's identity is its `did:key`, derived from its own fr
   "capabilities": ["job.posting"],
   "metadata": { "name": "Quickstart Requester" },
   "linked": {},
+  "linkedProof": {},
   "stakeUsd": 0,
+  "isAuthorizedVerifier": false,
   "createdAt": "2026-08-23T23:15:37.001Z"
 }
 ```

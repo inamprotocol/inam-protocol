@@ -4,7 +4,7 @@ import { config } from "../config.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
 import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
-import type { AgentRecord, ExternalKeyType, LinkChallenge, LinkedIdentities } from "../types.js";
+import type { AgentRecord, ExternalKeyType, LinkChallenge, LinkedIdentities, LinkedIdentityProofs, LinkProof } from "../types.js";
 
 export function registerAgent(callerDid: string, input: { capabilities: string[]; metadata?: Record<string, unknown> }): AgentRecord {
   if (agents.has(callerDid)) {
@@ -15,6 +15,7 @@ export function registerAgent(callerDid: string, input: { capabilities: string[]
     capabilities: input.capabilities,
     metadata: input.metadata ?? {},
     linked: {},
+    linkedProof: {},
     stakeUsd: 0,
     createdAt: new Date().toISOString(),
     // Never settable at registration -- an agent cannot make itself a
@@ -29,7 +30,9 @@ export function registerAgent(callerDid: string, input: { capabilities: string[]
 export function getAgent(id: string): AgentRecord {
   const record = agents.get(id);
   if (!record) throw notFound("AGENT_NOT_FOUND", `No agent registered with id ${id}`);
-  return record;
+  // `linkedProof` (SPEC.md v0.13) — default it so a record persisted before
+  // the field existed still returns a consistent shape.
+  return { ...record, linkedProof: record.linkedProof ?? {} };
 }
 
 /**
@@ -81,7 +84,14 @@ export function linkEndpoint(callerDid: string, protocol: string, value: string)
   }
   const record = getAgent(callerDid);
   const linked: LinkedIdentities = { ...record.linked, [protocol]: value };
-  const updated: AgentRecord = { ...record, linked };
+  // a2a_endpoint carries no external proof — it's a bare URL the agent
+  // asserted, backed only by the INAM signature on this request. Record that
+  // honestly so a consumer doesn't read it as a verified identity binding.
+  const linkedProof: LinkedIdentityProofs = {
+    ...record.linkedProof,
+    [protocol]: { method: "unverified_claim", verifiedAt: new Date().toISOString() } satisfies LinkProof,
+  };
+  const updated: AgentRecord = { ...record, linked, linkedProof };
   agents.set(callerDid, updated);
   return updated;
 }
@@ -153,7 +163,22 @@ export function completeLink(callerDid: string, protocol: string, value: string,
 
   const agentRecord = getAgent(callerDid);
   const linked: LinkedIdentities = { ...agentRecord.linked, [protocol]: value };
-  const updated: AgentRecord = { ...agentRecord, linked };
+  // Record *what was actually proven*: possession of this specific external
+  // key at this moment. Not a claim that the key is the one AgentPass/AITP/
+  // Passport Alliance currently recognizes as authoritative for `value` --
+  // that live cross-registry check is out of scope (SPEC.md §10). Keeping the
+  // key means a consumer can re-check it, and it's the anchor a future
+  // resolution step would compare against.
+  const linkedProof: LinkedIdentityProofs = {
+    ...agentRecord.linkedProof,
+    [protocol]: {
+      method: "key_possession",
+      verifiedAt: new Date().toISOString(),
+      keyType: record.keyType,
+      externalPublicKey: record.externalPublicKey,
+    } satisfies LinkProof,
+  };
+  const updated: AgentRecord = { ...agentRecord, linked, linkedProof };
   agents.set(callerDid, updated);
   return updated;
 }

@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.13 (Draft) — 2026-08-31
+- **Made external-identity link assurance explicit (audit #9)**: the `linked` map (§2) presented every external identity identically — a consumer couldn't tell an `a2a_endpoint` (a bare URL, INAM-signed only) from a challenge-verified `agentpass_id`/`aitp_id`/`passport_id`. The registry also didn't record which key a challenge proved, or when.
+- New `linkedProof` map on the agent record (§2), keyed by the same protocol names: `{ method, verifiedAt, keyType?, externalPublicKey? }`. `method` is `key_possession` (challenge-verified — proven key + type recorded) or `unverified_claim` (`a2a_endpoint`). `GET /agents/:id/protocols` returns it alongside `linked`.
+- Does **not** add cross-registry resolution (still out of scope, §10) — `key_possession` still means "controlled this key at link time," not "this key is authoritative for the identity." The change makes that limit legible in the API.
+- `linked` is unchanged — additive and backward compatible. New Worker D1 column `linked_proof` (migration `worker/migration-add-linked-proof.sql` — **must run before deploying** this version's Worker).
+
 ### v0.12 (Draft) — 2026-08-30
 - **Closed a request-replay gap the same audit found**: the signed-request string (`METHOD\npath\ntimestamp\nsha256(body)`, §7) doesn't cover the `Idempotency-Key`, so a captured signed request replayed with a *fresh* key re-verified and missed the `(caller, key)` idempotency cache — a duplicate side effect on any endpoint without its own content-address/state guard (`POST /jobs` most clearly), for the whole 5-minute clock-skew window.
 - §7: a registry now **MUST** bind each verified signature to the one `Idempotency-Key` it was first seen with (for ≥ the skew window) and reject the same signature with a different key as `REPLAYED_REQUEST` (409). Not wire-breaking — the signing string is unchanged, SDKs need no update.
@@ -76,6 +82,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.3.4 — 2026-08-31
+- `AgentRecord` type gains `linkedProof: LinkedIdentityProofs` (SPEC.md v0.13, §2). New exported types `LinkProof` / `LinkedIdentityProofs`. Additive; no client method change.
+
 ### 0.3.3 — 2026-08-30
 - `ReputationComponents` / `ReputationRoleBreakdown` types gain `volumeByCurrency: Record<string, number>` (SPEC.md v0.11, §5.3). `volumeUsd` stays, now documented as the `"USD"` bucket only.
 - `settlement.amount`/`currency` and `budget.amount`/`currency` in `sdk-js/src/core/schemas.ts` are now regex-validated (non-negative decimal string / short currency-code token) instead of bare `z.string()`. New `sdk-js/src/core/settlementVolume.ts` (`normalizeCurrency`/`parseSettlementAmount`/`accrueVolume`/`roundVolumes`) — the per-currency aggregation shared by both server runtimes.
@@ -99,6 +108,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.7 — 2026-08-31 (external audit fixes, continued)
+- **`linkedProof` assurance metadata (SPEC.md v0.13, §2, audit #9)**: both runtimes now record, per linked external identity, how it was verified — `key_possession` (challenge-verified, with the proven `keyType` + `externalPublicKey`) or `unverified_claim` (`a2a_endpoint`). Returned on the agent record everywhere and explicitly by `GET /agents/:id/protocols`. `linked` unchanged.
+- New D1 column `agents.linked_proof` (`worker/schema.sql` + `worker/migration-add-linked-proof.sql`). **Migration must run against production D1 before deploying** — `insertAgent` names the column; `rowToAgent` tolerates its absence on read only. Node reference: `getAgent` defaults the field for records persisted before it existed.
+- `worker/src/db.ts`: `updateAgentLinked` → `updateAgentLinks` (writes `linked` + `linked_proof` in one UPDATE).
+- Live cross-language proof: Python SDK linked an `a2a_endpoint` + a challenge-verified `agentpass_id` against a running Node server; `linkedProof` came back `{a2a_endpoint: {method: "unverified_claim"}, agentpass_id: {method: "key_possession", keyType: "ed25519", externalPublicKey: …}}`, confirmed via `GET /agents/:id` and `GET /protocols`. New regression tests (Node 75→76, Worker 52→53; Python 36 unchanged, 165 total).
 
 ### 0.6.6 — 2026-08-30 (external audit fixes, continued)
 - **Signature-replay guard (SPEC.md v0.12, §7, audit #8)**: `requireIdempotencyKey` (both runtimes) now binds each verified request signature to the single `Idempotency-Key` it was first presented with; the same signature with a different key is rejected `REPLAYED_REQUEST` (409). Closes the "replay a captured signed request with a fresh key" hole without touching the signing string (SDKs unchanged). Node keeps the binding in a new in-memory `signatureReplayCache` (TTL = clock-skew window), Worker in the existing KV namespace under a `replay:` prefix (300s TTL).

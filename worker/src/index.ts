@@ -117,7 +117,7 @@ app.get("/v1/agents/:id", async (c) => c.json(await agentService.getAgent(c.env,
 
 app.get("/v1/agents/:id/protocols", async (c) => {
   const agent = await agentService.getAgent(c.env, c.req.param("id")!);
-  return c.json({ linked: agent.linked });
+  return c.json({ linked: agent.linked, linkedProof: agent.linkedProof });
 });
 
 app.get("/v1/agents/:id/reputation", rateLimitReadByIp, async (c) => c.json(await computeReputation(c.env, c.req.param("id")!)));
