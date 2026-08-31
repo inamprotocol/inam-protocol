@@ -1,6 +1,8 @@
-# INAM Protocol — Specification v0.12 (Draft)
+# INAM Protocol — Specification v0.13 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, file-backed storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+
+**Changes from v0.12:** the same external audit flagged that the `linked` map (§2) presents every external-identity type identically — a flat `{ protocol: value }` — so a consumer can't tell an `a2a_endpoint` (a bare URL the agent asserted, backed only by its INAM signature) from an `agentpass_id`/`aitp_id`/`passport_id` that went through the §2.1 challenge/response. Both read as "verified identity X." The registry also didn't record *which* external key a challenge-verified link proved possession of, or *when* — so the proof couldn't be re-checked and there was nothing for a future cross-registry resolution step to anchor to. Fixed additively: the agent record gains `linkedProof`, a sibling map keyed by the same protocol names, each entry `{ method, verifiedAt, keyType?, externalPublicKey? }`. `method` is `"key_possession"` for a challenge-verified link (with the proven `keyType` + `externalPublicKey` recorded) or `"unverified_claim"` for `a2a_endpoint`. `linked` is unchanged — existing consumers keep working; a consumer that wants the assurance level reads `linkedProof`. `GET /agents/:id/protocols` now returns both. This does **not** add live cross-registry resolution (still out of scope, §10) — `key_possession` still means "proved control of this key at link time," not "this key is authoritative for the identity on the external side." It makes that limit legible in the API instead of leaving it to a doc paragraph. New D1 column `linked_proof` on the Worker (migration `migration-add-linked-proof.sql` — must run before deploy). Additive and backward compatible.
 
 **Changes from v0.11:** the same external audit found the replay window (§7) was bounded only by the 5-minute clock-skew tolerance: the signed-request string is `METHOD\npath\ntimestamp\nsha256(body)` and does **not** cover the `Idempotency-Key`, so a captured signed request could be replayed with a *fresh* `Idempotency-Key` — the signature still verifies, and the idempotency cache (keyed on `(caller, key)`) misses, so the handler re-executes. For endpoints without their own content-address or state-machine guard (`POST /jobs` most clearly) that meant a duplicate side effect on every replay. Fixed without a wire-format change: §7 now requires a registry to bind each verified request signature to the single `Idempotency-Key` it was first seen with, for at least the clock-skew window, and reject the same signature presented with a different key as `REPLAYED_REQUEST` (409). Separately, §7's idempotency rule is tightened: a registry **MUST** cache and replay only a *terminal successful* (2xx) response — caching a transient `5xx`/`429` would pin that failure for the cache's whole TTL, so a legitimate retry with the same key could never get through; a non-2xx now leaves the key unclaimed and a retry re-executes. New error code `REPLAYED_REQUEST`. The reference implementation's in-memory caches also gained TTL eviction (they previously grew unbounded — a slow memory-exhaustion vector from unique keys). Not wire-breaking; the signing string is unchanged and existing SDKs need no update. Implemented and verified in both runtimes with new regression tests plus a live replay proof against a running server.
 
@@ -55,7 +57,7 @@ did:key:z<base58btc(multicodec(0xed01) || raw Ed25519 public key)>
 
 This is self-certifying: any verifier can validate a signature against an INAM ID without looking anything up in a registry — the public key is embedded in the identifier itself. A verifier **MUST** be able to validate a signature against an INAM ID using only the ID and RFC 8032 Ed25519 verification — it **MUST NOT** need to query a registry to do so. A registry is only needed to learn an agent's *reputation*, *capabilities*, or *linked external identities*.
 
-An agent's registry profile also carries a `linked` map to identities issued by other systems:
+An agent's registry profile also carries a `linked` map to identities issued by other systems, plus a `linkedProof` map (v0.13) recording how each link was verified:
 
 ```json
 {
@@ -63,15 +65,29 @@ An agent's registry profile also carries a `linked` map to identities issued by 
   "capabilities": ["translation.tr-en"],
   "linked": {
     "agentpass_id": "ap_x91k...",
-    "aitp_id": "aitp:9f2...",
-    "passport_id": "apis:8821...",
     "a2a_endpoint": "https://worker.example/a2a"
+  },
+  "linkedProof": {
+    "agentpass_id": {
+      "method": "key_possession",
+      "verifiedAt": "2026-08-21T18:59:26Z",
+      "keyType": "p256",
+      "externalPublicKey": "A2c3..."
+    },
+    "a2a_endpoint": { "method": "unverified_claim", "verifiedAt": "2026-08-21T19:02:10Z" }
   },
   "stakeUsd": 0,
   "isAuthorizedVerifier": false,
   "createdAt": "2026-08-21T18:59:26Z"
 }
 ```
+
+`linkedProof` is keyed by the same protocol names as `linked`. Each entry's `method` is one of:
+
+- **`key_possession`** — the link went through §2.1's challenge/response; the caller proved control of `externalPublicKey` (recorded, along with `keyType`) at `verifiedAt`. This is **not** a claim that the key is the one the external system currently recognizes as authoritative for `value` — that live cross-registry resolution is out of scope (§10). A consumer **SHOULD** read it as "proved control of this key at link time" and **MAY** re-check the key against the external system itself.
+- **`unverified_claim`** — the link is an INAM-signed assertion only, with no external proof. This is `a2a_endpoint` (a service URL, not a key-derived identity).
+
+A registry **MUST** populate `linkedProof` for every entry in `linked`. A consumer **SHOULD NOT** treat an `unverified_claim` link, or the *identity string* of a `key_possession` link, as a proven identity binding.
 
 `isAuthorizedVerifier` (v0.10) is `false` for every agent at registration and stays `false` until the registry's configured **operator** identity explicitly grants it via `POST /agents/:id/verifier-status` (§12.3, §12.6) — there is no self-service path to becoming eligible to submit a Verification (§12). This is deliberate: independence as an assurance signal only means something if verifier status isn't something any freshly-registered identity can claim for itself.
 
@@ -95,7 +111,7 @@ Before a registry stores an `agentpass_id` / `aitp_id` / `passport_id` claim, th
 
 This wire format is chosen to align with [ATTP](https://datatracker.ietf.org/doc/draft-sharif-attp/) (`draft-sharif-attp-00`, the trust-transport protocol AgentPass is built on), which mandates P-256 as its primary curve and specifies this exact challenge/signature shape. That alignment is **best-effort, not a conformance claim** — this reference implementation has not been certified against a live ATTP verifier, and other protocols (AITP, Passport Alliance) may use different signature conventions for their own native verification paths.
 
-**What this does and does not prove.** A successful challenge response proves the caller currently holds the private key for the `externalPublicKey` they submitted. It does **not** call out to AgentPass/AITP/Passport Alliance's own registry to confirm that key is the one each system currently recognizes as authoritative for the claimed identity (e.g. it doesn't catch a key that was valid but has since been rotated or revoked on the external side) — that live cross-registry resolution is explicitly **out of scope** for this reference implementation (§10) and is the next real increment beyond proof-of-possession. A consuming client **SHOULD** treat a challenge-verified `linked` entry as "proven control of this key at link time," not as an ongoing guarantee that the external registry still agrees.
+**What this does and does not prove.** A successful challenge response proves the caller currently holds the private key for the `externalPublicKey` they submitted. It does **not** call out to AgentPass/AITP/Passport Alliance's own registry to confirm that key is the one each system currently recognizes as authoritative for the claimed identity (e.g. it doesn't catch a key that was valid but has since been rotated or revoked on the external side), nor does it establish any binding between that key and the `value` string being linked — that live cross-registry resolution is explicitly **out of scope** for this reference implementation (§10) and is the next real increment beyond proof-of-possession. This limit is now explicit in the API: the link is recorded as `linkedProof[protocol] = { method: "key_possession", verifiedAt, keyType, externalPublicKey }` (§2), so a consuming client can see it is "proven control of this key at link time" — not an ongoing guarantee that the external registry still agrees, and not a proven binding of the key to the identity string.
 
 New error codes: `UNSUPPORTED_KEY_TYPE`, `CHALLENGE_NOT_FOUND`, `CHALLENGE_EXPIRED`, `CHALLENGE_ALREADY_USED`, `CHALLENGE_MISMATCH` (challenge was issued for a different agent/protocol pair), `CHALLENGE_REQUIRED` (a key-derived protocol was submitted to `POST /agents/:id/link` without a prior challenge), `PROOF_INVALID`.
 
@@ -250,7 +266,7 @@ Base path `/v1`. A `(signed)` endpoint **MUST** reject a request missing a valid
 |---|---|
 | `POST /agents` *(signed)* | Register the calling INAM ID with a capability list and free-form metadata. |
 | `GET /agents/:id` | Fetch an agent's public profile. |
-| `GET /agents/:id/protocols` | Fetch an agent's linked external identities. |
+| `GET /agents/:id/protocols` | Fetch an agent's linked external identities (`linked`) and their per-link assurance metadata (`linkedProof`, §2). |
 | `GET /agents/:id/reputation` | Compute and return the reputation result (§5.3). No auth required — reputation is public by design. |
 | `GET /agents/:id/receipts` | List an agent's receipts (draft, finalized, and disputed). |
 | `GET /agents/search?capability=&min_reputation=&supports=` | Discover agents by capability, minimum trust score, and/or which external protocol they support. |
@@ -333,7 +349,7 @@ Not deferred by accident — deferred because building them before the primitive
 - Payments/settlement enforcement (`settlement` and a job's `budget` are recorded, and their `amount`/`currency` are shape-validated (§4.1), but never verified against x402/AP2/on-chain state, and no exchange rate between currencies is defined — `components.volumeByCurrency` (§5.3) reports self-reported volume bucketed by currency, unconverted).
 - Stake posting/slashing endpoints.
 - TEE remote attestation for `verification.method: independent_validator`.
-- Live cross-registry resolution for linked external identities: §2.1's challenge proves the caller holds the claimed external key *today*, but a registry does not call out to AgentPass/AITP/Passport Alliance's own APIs to confirm that key is still the one each system currently recognizes as authoritative (e.g. it wouldn't catch a rotated or revoked external key).
+- Live cross-registry resolution for linked external identities: §2.1's challenge proves the caller holds the claimed external key *today*, but a registry does not call out to AgentPass/AITP/Passport Alliance's own APIs to confirm that key is still the one each system currently recognizes as authoritative (e.g. it wouldn't catch a rotated or revoked external key), nor that the key belongs to the `value` string being linked. `linkedProof` (§2) makes this assurance level explicit per link (`key_possession` vs `unverified_claim`) rather than closing the gap.
 - ATTP conformance certification — §2.1's wire format aligns with `draft-sharif-attp-00` by design, but this has not been tested against a live ATTP verifier.
 - Trust-score penalties for repeated failed challenge attempts (ATTP §4 recommends this; this reference implementation just lets the challenge expire normally after a failed attempt).
 - Full iterative EigenTrust solve and real graph-clustering-based collusion detection.

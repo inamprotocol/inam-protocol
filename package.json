@@ -1,6 +1,6 @@
 {
   "name": "inam-protocol-registry",
-  "version": "0.6.6",
+  "version": "0.6.7",
   "private": true,
   "description": "Inam Protocol Registry — minimal reference implementation of the agent identity / execution receipt / reputation API",
   "type": "module",

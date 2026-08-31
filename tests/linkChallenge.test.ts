@@ -93,4 +93,30 @@ describe("external identity link challenges", () => {
     registerAgent(agent.did, { capabilities: ["x"] });
     await expectApiError(() => requestLinkChallenge(agent.did, "agentpass_id", "aGVsbG8=", "rsa"), "UNSUPPORTED_KEY_TYPE");
   });
+
+  it("records the assurance level of each link in linkedProof (audit #9)", () => {
+    const agent = generateKeypair();
+    registerAgent(agent.did, { capabilities: ["x"] });
+    const external = generateP256Keypair();
+    const extKeyB64 = toBase64(external.publicKey);
+
+    // a2a_endpoint — no external proof, just the INAM signature.
+    let record = linkEndpoint(agent.did, "a2a_endpoint", "https://agent.example/a2a");
+    expect(record.linkedProof.a2a_endpoint).toMatchObject({ method: "unverified_claim" });
+    expect(record.linkedProof.a2a_endpoint?.externalPublicKey).toBeUndefined();
+    expect(record.linkedProof.a2a_endpoint?.verifiedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    // passport_id — challenge-verified: records method + the key that was proven.
+    const challenge = requestLinkChallenge(agent.did, "passport_id", extKeyB64, "p256");
+    const proof = toBase64(p256Sign(Buffer.from(challenge.challenge, "hex"), external.privateKey));
+    record = completeLink(agent.did, "passport_id", "passport:xyz", challenge.challengeId, proof);
+    expect(record.linkedProof.passport_id).toMatchObject({
+      method: "key_possession",
+      keyType: "p256",
+      externalPublicKey: extKeyB64,
+    });
+    // the two links coexist with their own distinct assurance levels
+    expect(record.linkedProof.a2a_endpoint?.method).toBe("unverified_claim");
+    expect(record.linkedProof.passport_id?.method).toBe("key_possession");
+  });
 });

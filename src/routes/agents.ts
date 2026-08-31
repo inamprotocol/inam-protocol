@@ -47,7 +47,7 @@ agentsRouter.get("/:id", (req, res) => {
 
 agentsRouter.get("/:id/protocols", (req, res) => {
   const agent = agentService.getAgent(req.params.id);
-  res.json({ linked: agent.linked });
+  res.json({ linked: agent.linked, linkedProof: agent.linkedProof });
 });
 
 agentsRouter.get("/:id/reputation", rateLimitReadByIp, (req, res) => {

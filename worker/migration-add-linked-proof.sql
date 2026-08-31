@@ -1,0 +1,22 @@
+-- One-time migration for the *existing* production D1 database. The `agents`
+-- table already exists there, so schema.sql's `CREATE TABLE IF NOT EXISTS`
+-- is a no-op against it -- this ALTER TABLE is the only thing that actually
+-- adds the new column. A fresh `db:init:local` / `db:init:remote` against a
+-- brand-new database does NOT need this file (schema.sql already has the
+-- column).
+--
+-- MUST run before deploying any code (worker/src/agentService.ts's
+-- linkEndpoint / completeLink, worker/src/db.ts's insertAgent /
+-- updateAgentLinks / rowToAgent) that reads or writes this column --
+-- deploying first would make every agent registration fail with a SQL error
+-- ("table agents has no column named linked_proof"). rowToAgent tolerates a
+-- missing value on read, but insertAgent's INSERT names the column and would
+-- fail outright.
+--
+-- Run once, manually, against the real production database:
+--   npx wrangler d1 execute inam-protocol-db --remote --file=./migration-add-linked-proof.sql
+--
+-- (For local dev: re-run `npm run db:init:local` against a fresh local D1 --
+-- schema.sql already has the column -- or run this file with --local.)
+
+ALTER TABLE agents ADD COLUMN linked_proof TEXT NOT NULL DEFAULT '{}';

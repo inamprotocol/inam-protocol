@@ -18,6 +18,30 @@ export interface LinkedIdentities {
  * the same primitive INAM's own did:key already uses. */
 export type ExternalKeyType = "ed25519" | "p256";
 
+/** How one `linked` entry was verified when it was recorded (SPEC.md §2.1).
+ * - `key_possession`: the caller proved control of `externalPublicKey` via a
+ *   signed challenge at `verifiedAt`. This does NOT confirm that key is the
+ *   one the external system currently recognizes as authoritative for the
+ *   identity — live cross-registry resolution is out of scope (SPEC.md §10).
+ * - `unverified_claim`: an INAM-signed assertion only, no external proof
+ *   (`a2a_endpoint`, a service URL rather than a key-derived identity). */
+export interface LinkProof {
+  method: "key_possession" | "unverified_claim";
+  verifiedAt: string;
+  keyType?: ExternalKeyType;
+  externalPublicKey?: string; // base64; present iff method === "key_possession"
+}
+
+/** Per-protocol assurance metadata for `linked`, same keys as
+ * `LinkedIdentities` (SPEC.md §2.1). A missing key means that identity isn't
+ * linked. */
+export interface LinkedIdentityProofs {
+  agentpass_id?: LinkProof;
+  aitp_id?: LinkProof;
+  passport_id?: LinkProof;
+  a2a_endpoint?: LinkProof;
+}
+
 /** Response shape from POST /agents/:id/link/challenge. */
 export interface LinkChallenge {
   challengeId: string;
@@ -30,6 +54,9 @@ export interface AgentRecord {
   capabilities: string[];
   metadata: Record<string, unknown>;
   linked: LinkedIdentities;
+  /** Per-protocol assurance metadata for `linked` (SPEC.md §2.1) — lets a
+   * consumer tell a challenge-verified link from an unverified claim. */
+  linkedProof: LinkedIdentityProofs;
   stakeUsd: number;
   createdAt: string;
   /** Whether the registry operator has authorized this agent as a verifier

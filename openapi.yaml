@@ -121,7 +121,9 @@ paths:
             application/json:
               schema:
                 type: object
-                properties: { linked: { $ref: "#/components/schemas/LinkedIdentities" } }
+                properties:
+                  linked: { $ref: "#/components/schemas/LinkedIdentities" }
+                  linkedProof: { $ref: "#/components/schemas/LinkedIdentityProofs" }
         "404": { $ref: "#/components/responses/Error" }
 
   /agents/{id}/reputation:
@@ -655,6 +657,30 @@ components:
         passport_id: { type: string }
         a2a_endpoint: { type: string }
 
+    LinkProof:
+      type: object
+      description: >-
+        How one `linked` entry was verified (SPEC.md §2.1). `key_possession`:
+        proved control of `externalPublicKey` at `verifiedAt` — NOT a claim the
+        key is authoritative for the identity externally (cross-registry
+        resolution is out of scope, §10). `unverified_claim`: INAM-signed
+        assertion only (`a2a_endpoint`).
+      properties:
+        method: { type: string, enum: [key_possession, unverified_claim] }
+        verifiedAt: { type: string, format: date-time }
+        keyType: { type: string, enum: [ed25519, p256], description: "present iff method is key_possession" }
+        externalPublicKey: { type: string, description: "base64; present iff method is key_possession" }
+      required: [method, verifiedAt]
+
+    LinkedIdentityProofs:
+      type: object
+      description: Per-protocol assurance metadata for `linked`, same keys.
+      properties:
+        agentpass_id: { $ref: "#/components/schemas/LinkProof" }
+        aitp_id: { $ref: "#/components/schemas/LinkProof" }
+        passport_id: { $ref: "#/components/schemas/LinkProof" }
+        a2a_endpoint: { $ref: "#/components/schemas/LinkProof" }
+
     LinkChallenge:
       type: object
       properties:
@@ -669,7 +695,9 @@ components:
         capabilities: { type: array, items: { type: string } }
         metadata: { type: object, additionalProperties: true }
         linked: { $ref: "#/components/schemas/LinkedIdentities" }
+        linkedProof: { $ref: "#/components/schemas/LinkedIdentityProofs" }
         stakeUsd: { type: number }
+        isAuthorizedVerifier: { type: boolean, description: "SPEC.md §12.3 — operator-granted; false at registration" }
         createdAt: { type: string, format: date-time }
 
     Reputation:
