@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { draftReceiptSchema, countersignSchema, disputeSchema } from "../../sdk-js/src/core/schemas.js";
+import { draftReceiptSchema, countersignSchema, disputeSchema, resolveDisputeSchema } from "../../sdk-js/src/core/schemas.js";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitWriteByAgent } from "../middleware/rateLimit.js";
@@ -36,4 +36,11 @@ receiptsRouter.post("/:id/dispute", requireSignedRequest, rateLimitWriteByAgent,
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const receipt = receiptService.openDispute(req.params.id, req.agentDid!, parsed.data.reason);
   res.json(receipt);
+});
+
+// The dispute's opener withdraws it (SPEC.md §4.3): disputed -> finalized.
+receiptsRouter.post("/:id/dispute/resolve", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
+  const parsed = resolveDisputeSchema.safeParse(req.body);
+  if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
+  res.json(receiptService.resolveDispute(req.params.id, req.agentDid!, parsed.data.note));
 });

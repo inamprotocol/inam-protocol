@@ -161,6 +161,15 @@ export class InamClient {
     });
   }
 
+  /** Withdraw a dispute this client opened (SPEC.md §4.3) — moves the receipt
+   * `disputed` -> `finalized` so it counts toward reputation again. Only the
+   * party that opened the dispute may call this, and only once. */
+  resolveDispute(receiptId: string, note?: string): Promise<ExecutionReceipt> {
+    return this.request("POST", `/v1/receipts/${encodeURIComponent(receiptId)}/dispute/resolve`, note ? { note } : {}, {
+      idempotencyKey: `dispute-resolve:${receiptId}`,
+    });
+  }
+
   // ---- Jobs (SPEC.md §3) — optional pre-work discovery/offer/accept ----
 
   postJob(input: { capability: string; specHash: string; budget?: { amount?: string; currency?: string }; expiresAt?: string }): Promise<JobRecord> {

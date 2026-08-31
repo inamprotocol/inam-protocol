@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 import { registerAgent } from "../src/services/agentService.js";
-import { buildSignableContent, createDraft, countersign, openDispute } from "../src/services/receiptService.js";
+import { buildSignableContent, createDraft, countersign, openDispute, resolveDispute } from "../src/services/receiptService.js";
 import { computeReputation } from "../src/services/reputationService.js";
 import { ApiError } from "../src/middleware/errors.js";
 import type { CreateDraftInput } from "../src/services/receiptService.js";
@@ -138,6 +138,37 @@ describe("execution receipt lifecycle", () => {
 
     const reputation = computeReputation(worker.did);
     expect(reputation.flags).toContain("in_dispute");
+  });
+
+  it("lets the dispute's opener resolve it (disputed -> finalized), one dispute per receipt lifetime (audit #11)", async () => {
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+
+    const input = freshInput("job_dispute_resolve");
+    const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
+    const draft = createDraft(worker.did, { ...input, agentAId: requester.did, signature });
+    const finalized = countersign(draft.receiptId, requester.did, signCountersign(draft, requester.privateKey));
+    const rid = finalized.receiptId;
+
+    openDispute(rid, requester.did, "output was wrong");
+    expect(computeReputation(worker.did).flags).toContain("in_dispute");
+
+    // the disputed-against party can't clear a dispute against itself
+    await expectApiError(() => resolveDispute(rid, worker.did, "please drop it"), "NOT_DISPUTE_OPENER");
+
+    // the opener withdraws it
+    const resolved = resolveDispute(rid, requester.did, "resolved off-band");
+    expect(resolved.status).toBe("finalized");
+    expect(resolved.dispute.status).toBe("resolved");
+    expect(resolved.dispute.resolvedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+    expect(computeReputation(worker.did).flags).not.toContain("in_dispute");
+
+    // one dispute per lifetime — can't re-dispute a resolved receipt
+    await expectApiError(() => openDispute(rid, requester.did, "changed my mind"), "DISPUTE_ALREADY_RESOLVED");
+    // and can't re-resolve
+    await expectApiError(() => resolveDispute(rid, requester.did), "NOT_DISPUTED");
   });
 
   it("rejects a future result.completedAt beyond clock-skew tolerance", async () => {

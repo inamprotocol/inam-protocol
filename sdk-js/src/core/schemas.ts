@@ -104,6 +104,8 @@ export const countersignSchema = z.object({ signature: z.string().min(1) });
 
 export const disputeSchema = z.object({ reason: z.string().min(1) });
 
+export const resolveDisputeSchema = z.object({ note: z.string().max(500).optional() });
+
 export const submitVerificationSchema = z.object({
   receiptId: z.string().min(1),
   verifier: z.string().min(1),

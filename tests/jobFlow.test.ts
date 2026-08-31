@@ -143,6 +143,47 @@ describe("job lifecycle", () => {
     await expectApiError(() => createDraft(worker.did, { ...input, agentAId: poster.did, signature }), "JOB_NOT_ACCEPTED");
   });
 
+  it("keeps a job cancelled even if a draft receipt finalizes afterward (no cancelled -> completed, audit #11)", () => {
+    const poster = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(poster.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["x"] });
+
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_cancel_race" });
+    jobService.submitOffer(job.jobId, worker.did);
+    jobService.acceptOffer(job.jobId, poster.did, worker.did);
+
+    const now = new Date().toISOString();
+    const input = {
+      jobId: job.jobId,
+      task: { capability: "x", specHash: "sha256:spec_cancel_race", createdAt: now },
+      result: { outputHash: "sha256:out_cr", completedAt: now },
+      verification: { method: "payer_confirmation" as const, outcome: "success" as const },
+    };
+    const signature = signDraft(poster.did, worker.privateKey, worker.did, input);
+    const draft = createDraft(worker.did, { ...input, agentAId: poster.did, signature });
+
+    // poster cancels the accepted job, THEN countersigns the pending draft
+    jobService.cancelJob(job.jobId, poster.did);
+    const finalized = countersign(draft.receiptId, poster.did, signCountersign(draft, poster.privateKey));
+    expect(finalized.status).toBe("finalized"); // the receipt is still a valid bilateral record
+
+    const jobAfter = jobService.getJob(job.jobId);
+    expect(jobAfter.status).toBe("cancelled"); // NOT "completed"
+    expect(jobAfter.receiptId).toBeUndefined();
+  });
+
+  it("rejects offers and acceptance on a job past its expiresAt (audit #11)", async () => {
+    const poster = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(poster.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["x"] });
+
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_exp", expiresAt: past });
+    await expectApiError(() => jobService.submitOffer(job.jobId, worker.did), "JOB_EXPIRED");
+  });
+
   it("finds an open job by capability search", () => {
     const poster = generateKeypair();
     registerAgent(poster.did, { capabilities: ["job.posting"] });

@@ -111,6 +111,7 @@ GET  /receipts/:id
 GET  /receipts/:id/verifications
 POST /receipts/:id/countersign    agent_a's signature (signed)
 POST /receipts/:id/dispute        (signed)
+POST /receipts/:id/dispute/resolve  the opener withdraws it: disputed -> finalized (signed)
 
 POST /verifications                independent attestation of a finalized receipt (signed)
 GET  /verifications/:id

@@ -963,6 +963,63 @@ describe("agent identity revocation (SPEC.md §2.2, audit #10)", () => {
   });
 });
 
+describe("dispute + job state machine (SPEC.md §3.2/§4.3, audit #11)", () => {
+  async function finalize(requester: Keypair, worker_: Keypair, jobId = `job_${Math.random().toString(36).slice(2)}`) {
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+    const input = job({ jobId });
+    const content = buildSignableContent(requester.did, worker_.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `r:${jobId}`, body: { ...input, agentAId: requester.did, signature: draftSig } });
+    const draft = draftRes.json as { receiptId: string };
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+    const fin = await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, { keypair: requester, idempotencyKey: `cs:${draft.receiptId}`, body: { signature: counterSig } });
+    return (fin.json as { receiptId: string }).receiptId;
+  }
+
+  it("resolves a dispute (disputed -> finalized) via the opener, once per lifetime", async () => {
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+    const rid = await finalize(requester, worker_);
+
+    await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute`, { keypair: requester, idempotencyKey: `d:${rid}`, body: { reason: "bad output" } });
+    expect(((await call("GET", `/v1/agents/${worker_.did}/reputation`)).json as { flags: string[] }).flags).toContain("in_dispute");
+
+    // disputed-against party can't resolve
+    const wrong = await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute/resolve`, { keypair: worker_, idempotencyKey: `dr-wrong:${rid}`, body: {} });
+    expect(wrong.status).toBe(403);
+    expect((wrong.json as { error: { code: string } }).error.code).toBe("NOT_DISPUTE_OPENER");
+
+    const resolved = await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute/resolve`, { keypair: requester, idempotencyKey: `dr:${rid}`, body: { note: "settled" } });
+    expect(resolved.status).toBe(200);
+    expect((resolved.json as { status: string; dispute: { status: string } }).status).toBe("finalized");
+    expect((resolved.json as { dispute: { status: string } }).dispute.status).toBe("resolved");
+    expect(((await call("GET", `/v1/agents/${worker_.did}/reputation`)).json as { flags: string[] }).flags).not.toContain("in_dispute");
+
+    // no re-dispute
+    const redispute = await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute`, { keypair: requester, idempotencyKey: `d2:${rid}`, body: { reason: "again" } });
+    expect(redispute.status).toBe(409);
+    expect((redispute.json as { error: { code: string } }).error.code).toBe("DISPUTE_ALREADY_RESOLVED");
+  });
+
+  it("rejects an offer on a job past its expiresAt", async () => {
+    const poster = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+
+    const past = new Date(Date.now() - 60_000).toISOString();
+    const jobRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `j:${Date.now()}`, body: { capability: "x", specHash: "sha256:s", expiresAt: past } });
+    const jobId = (jobRes.json as { jobId: string }).jobId;
+
+    const offer = await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: worker_, idempotencyKey: `o:${Date.now()}`, body: {} });
+    expect(offer.status).toBe(409);
+    expect((offer.json as { error: { code: string } }).error.code).toBe("JOB_EXPIRED");
+  });
+});
+
 describe("independent verification (SPEC.md §12)", () => {
   async function finalizeReceipt(requester: Keypair, provider: Keypair) {
     await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });

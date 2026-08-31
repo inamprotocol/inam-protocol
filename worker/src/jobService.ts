@@ -13,6 +13,15 @@ function generateJobId(): string {
   return `job_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** Lazy expiry (SPEC.md §3.2): a job past its `expiresAt` accepts no offers
+ *  and no acceptance. Status isn't auto-transitioned (no sweeper — §10),
+ *  it's just closed at the gates. */
+function assertNotExpired(job: JobRecord): void {
+  if (job.expiresAt && new Date(job.expiresAt).getTime() < Date.now()) {
+    throw conflict("JOB_EXPIRED", "This job's expiresAt has passed — it accepts no further offers or acceptances");
+  }
+}
+
 export async function postJob(env: Env, callerDid: string, input: PostJobInput): Promise<JobRecord> {
   if (!(await db.getAgent(env, callerDid))) throw notFound("AGENT_NOT_FOUND", "Job poster must be a registered agent");
   const job: JobRecord = {
@@ -43,6 +52,7 @@ export async function searchJobs(env: Env, query: db.JobSearchQuery): Promise<Jo
 export async function submitOffer(env: Env, jobId: string, callerDid: string, message?: string): Promise<JobRecord> {
   const job = await getJob(env, jobId);
   if (job.status !== "open") throw conflict("JOB_NOT_OPEN", "Offers can only be submitted on an open job");
+  assertNotExpired(job);
   if (job.postedBy === callerDid) throw badRequest("SELF_DEALING", "A job's poster cannot offer to work on their own job");
   if (!(await db.getAgent(env, callerDid))) throw notFound("AGENT_NOT_FOUND", "Offering agent must be registered");
   try {
@@ -64,6 +74,7 @@ export async function listOffers(env: Env, jobId: string) {
 export async function acceptOffer(env: Env, jobId: string, callerDid: string, agentId: string): Promise<JobRecord> {
   const job = await getJob(env, jobId);
   if (callerDid !== job.postedBy) throw forbidden("NOT_POSTER", "Only the job's poster may accept an offer");
+  assertNotExpired(job);
   if (!(await db.offerExists(env, jobId, agentId))) throw badRequest("OFFER_NOT_FOUND", "No such offer on this job");
   const applied = await db.acceptJobIfOpen(env, jobId, agentId);
   if (!applied) throw conflict("JOB_NOT_OPEN", "Only an open job can have an offer accepted");

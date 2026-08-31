@@ -117,6 +117,12 @@ export function openDispute(receiptId: string, callerDid: string, reason: string
   if (![receipt.agentA.id, receipt.agentB.id].includes(callerDid)) {
     throw forbidden("NOT_PARTICIPANT", "Only a party to the receipt may dispute it");
   }
+  // A receipt gets one dispute in its lifetime. Once resolved it's back to
+  // `finalized`, but re-disputing it would let a party toggle a receipt's
+  // reputation contribution on and off at will.
+  if (receipt.dispute.status === "resolved") {
+    throw conflict("DISPUTE_ALREADY_RESOLVED", "This receipt was already disputed and resolved — it cannot be disputed again");
+  }
   if (receipt.status !== "finalized") throw conflict("NOT_FINALIZED", "Only finalized receipts can be disputed");
   if (new Date(receipt.dispute.windowClosesAt).getTime() < Date.now()) {
     throw conflict("DISPUTE_WINDOW_CLOSED", "The dispute window for this receipt has closed");
@@ -124,8 +130,34 @@ export function openDispute(receiptId: string, callerDid: string, reason: string
   const disputed: ExecutionReceipt = {
     ...receipt,
     status: "disputed",
-    dispute: { ...receipt.dispute, status: "open", reason },
+    dispute: { ...receipt.dispute, status: "open", reason, openedBy: callerDid },
   };
   receipts.set(receiptId, disputed);
   return disputed;
+}
+
+/**
+ * The party that opened the dispute withdraws it (SPEC.md §4.3) — the
+ * `disputed` state's only exit. Moves the receipt back to `finalized`, so it
+ * counts toward reputation again and the `in_dispute` flag clears. One-way:
+ * a resolved receipt can't be re-disputed (openDispute rejects it). Only the
+ * opener may do this — the disputed-against party clearing a dispute against
+ * itself would defeat the point. This is not arbitration (no third party
+ * decides who was right); that stays out of scope (§10).
+ */
+export function resolveDispute(receiptId: string, callerDid: string, note?: string): ExecutionReceipt {
+  const receipt = getReceipt(receiptId);
+  if (receipt.status !== "disputed" || receipt.dispute.status !== "open") {
+    throw conflict("NOT_DISPUTED", "Only a receipt with an open dispute can be resolved");
+  }
+  if (receipt.dispute.openedBy !== callerDid) {
+    throw forbidden("NOT_DISPUTE_OPENER", "Only the party that opened the dispute may resolve it");
+  }
+  const resolved: ExecutionReceipt = {
+    ...receipt,
+    status: "finalized",
+    dispute: { ...receipt.dispute, status: "resolved", resolvedAt: new Date().toISOString(), resolution: note },
+  };
+  receipts.set(receiptId, resolved);
+  return resolved;
 }

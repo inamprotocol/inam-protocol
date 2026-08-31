@@ -137,6 +137,16 @@ export async function disputeReceiptIfFinalized(env: Env, receiptId: string, upd
   return (result.meta.changes ?? 0) > 0;
 }
 
+/** CAS for the dispute's opener withdrawing it: disputed -> finalized. */
+export async function resolveDisputeIfDisputed(env: Env, receiptId: string, updated: ExecutionReceipt): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `UPDATE receipts SET status = ?, data = ? WHERE receipt_id = ? AND status = 'disputed'`,
+  )
+    .bind(updated.status, JSON.stringify(updated), receiptId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
 export async function receiptsByAgent(env: Env, agentId: string): Promise<ExecutionReceipt[]> {
   const { results } = await env.DB.prepare("SELECT data FROM receipts WHERE agent_a_id = ? OR agent_b_id = ?")
     .bind(agentId, agentId)
