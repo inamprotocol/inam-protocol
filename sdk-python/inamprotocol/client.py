@@ -219,6 +219,18 @@ class InamClient:
             idempotency_key=f"dispute:{receipt_id}",
         )
 
+    def resolve_dispute(self, receipt_id: str, note: Optional[str] = None) -> Dict[str, Any]:
+        """Withdraw a dispute this client opened (SPEC.md section 4.3) -- moves
+        the receipt disputed -> finalized so it counts toward reputation
+        again. Only the party that opened the dispute may call this, once."""
+        encoded = urllib.parse.quote(receipt_id, safe="")
+        return self._request(
+            "POST",
+            f"/v1/receipts/{encoded}/dispute/resolve",
+            {"note": note} if note is not None else {},
+            idempotency_key=f"dispute-resolve:{receipt_id}",
+        )
+
     # ---- Jobs (SPEC.md section 3) -- optional pre-work discovery/offer/accept ----
 
     def post_job(

@@ -4,6 +4,13 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.15 (Draft) — 2026-08-31
+- **Completed the job & dispute state machines (audit #11).**
+- **Dispute `resolved` was declared but unreachable** — a `disputed` receipt was a permanent dead end, excluded from reputation forever. New §4.3 exit: `POST /receipts/:id/dispute/resolve` *(signed, dispute opener only)* → `disputed → finalized`, `dispute.status → "resolved"` (records `openedBy`, `resolvedAt`, optional `resolution`). Reputation-eligible again, `in_dispute` clears. One-way — a resolved receipt can't be re-disputed (`DISPUTE_ALREADY_RESOLVED`). Not arbitration; third-party resolution stays out of scope (§10).
+- **`cancelled → completed` was reachable in the Node reference** — cancelling an `accepted` job then countersigning the pending draft flipped the cancelled job to `completed` (the Worker's D1 CAS already guarded it — a parity bug). Both runtimes now only do `accepted → completed`; a cancelled job stays cancelled, the receipt still finalizes.
+- **`expiresAt` was never consulted** — a job past its `expiresAt` now rejects `submitOffer`/`acceptOffer` with `JOB_EXPIRED` (§3.2). Lazy enforcement at the gates; automatic status transition still deferred (§10).
+- New error codes `DISPUTE_ALREADY_RESOLVED`, `NOT_DISPUTED`, `NOT_DISPUTE_OPENER`, `JOB_EXPIRED`. Additive — `openedBy`/`resolvedAt`/`resolution` absent until used, no D1 migration (dispute lives in the receipt `data` blob). New `client.resolveDispute()` in both SDKs.
+
 ### v0.14 (Draft) — 2026-08-31
 - **Added a key-management primitive (audit #10)**: INAM had none. An INAM ID *is* its Ed25519 key, so a compromised/lost key left an identity permanently exposed or stranded with no protocol response.
 - New **§2.2** `POST /agents/:id/revoke` *(signed, self only)*, body `{ reason }` — a one-way self-signed tombstone. A revoked ID gets `revokedAt`/`revocationReason`, is rejected from every further signed op (`AGENT_REVOKED`, 403, enforced at the signature choke point), drops out of `GET /agents/search` (unless `?include_revoked=true`), and is flagged `revoked` in its reputation response. Finalized-receipt history is untouched.
@@ -88,6 +95,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.3.6 — 2026-08-31
+- Added `client.resolveDispute(receiptId, note?)` (SPEC.md v0.15, §4.3) — the dispute opener withdraws it, `disputed → finalized`. New `resolveDisputeSchema` exported from `sdk-js/src/core/schemas.ts`. `ExecutionReceipt.dispute` type gains optional `openedBy` / `resolvedAt` / `resolution`.
+
 ### 0.3.5 — 2026-08-31
 - Added `client.revoke(reason)` (SPEC.md v0.14, §2.2) — one-way retire of the client's own INAM ID. New `revokeAgentSchema` exported from `sdk-js/src/core/schemas.ts`. `AgentRecord` type gains optional `revokedAt` / `revocationReason`.
 
@@ -117,6 +127,13 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.9 — 2026-08-31 (external audit fixes, continued)
+- **Job & dispute state-machine completeness (SPEC.md v0.15, §3.2/§4.3, audit #11).**
+- New `POST /v1/receipts/:id/dispute/resolve` (signed, dispute opener). `disputed → finalized`, `dispute.status → resolved`. Worker: new CAS `resolveDisputeIfDisputed` (`UPDATE ... WHERE status = 'disputed'`). `openDispute` now records `dispute.openedBy` and rejects a resolved receipt (`DISPUTE_ALREADY_RESOLVED`).
+- **Node parity fix**: `markCompletedByReceipt` now guards `if (job.status !== "accepted") return` — matching `worker/src/db.ts`'s `completeJobIfAccepted` CAS. Closes a `cancelled → completed` transition reachable only on the Node reference.
+- `submitOffer` / `acceptOffer` (both runtimes) reject a job past `expiresAt` with `JOB_EXPIRED`.
+- New error codes `DISPUTE_ALREADY_RESOLVED`, `NOT_DISPUTED`, `NOT_DISPUTE_OPENER`, `JOB_EXPIRED`. No D1 migration. Live cross-language proof (Python SDK against Node): dispute→resolve round trip clears `in_dispute` and re-counts the receipt; re-dispute → 409; cancelled job stays cancelled after a late countersign; expired-job offer → `JOB_EXPIRED`. New regression tests (Node 79→82, Worker 56→58; Python 36 unchanged, 176 total).
 
 ### 0.6.8 — 2026-08-31 (external audit fixes, continued)
 - **Identity revocation (SPEC.md v0.14, §2.2, audit #10)**: `POST /v1/agents/:id/revoke` (signed, self). Sets `revokedAt`/`revocationReason`; the revoked-ID rejection is enforced inside `requireSignedRequest` (both runtimes) so it covers every signed route uniformly with `AGENT_REVOKED` (403) — one extra agent lookup per signed write. `searchAgents` excludes revoked agents (`include_revoked=true` query param opts in); `computeReputation` adds a `revoked` flag. `setVerifierStatus` now also refuses a revoked target.
@@ -202,6 +219,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.4.4 — 2026-08-31
+- Added `client.resolve_dispute(receipt_id, note=None)` (SPEC.md v0.15, §4.3). Mirrors the TypeScript SDK's `client.resolveDispute()`.
 
 ### 0.4.3 — 2026-08-31
 - Added `client.revoke(reason)` (SPEC.md v0.14, §2.2) — one-way retire of the client's own INAM ID. Mirrors the TypeScript SDK's `client.revoke()`.

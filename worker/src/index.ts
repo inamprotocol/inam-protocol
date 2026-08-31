@@ -23,6 +23,7 @@ import {
   draftReceiptSchema,
   countersignSchema,
   disputeSchema,
+  resolveDisputeSchema,
   submitVerificationSchema,
 } from "../../sdk-js/src/core/schemas.js";
 import type { AppEnv } from "./types.js";
@@ -244,6 +245,12 @@ app.post("/v1/receipts/:id/dispute", requireSignedRequest, rateLimitWriteByAgent
   const body = parseBody(disputeSchema, c.get("parsedBody"));
   const receipt = await receiptService.openDispute(c.env, c.req.param("id")!, c.get("agentDid")!, body.reason);
   return c.json(receipt);
+});
+
+// The dispute's opener withdraws it (SPEC.md §4.3): disputed -> finalized.
+app.post("/v1/receipts/:id/dispute/resolve", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  const body = parseBody(resolveDisputeSchema, c.get("parsedBody") ?? {});
+  return c.json(await receiptService.resolveDispute(c.env, c.req.param("id")!, c.get("agentDid")!, body.note));
 });
 
 // ---- Verifications (SPEC.md §12) ----

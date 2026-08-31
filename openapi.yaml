@@ -567,6 +567,37 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
 
+  /receipts/{id}/dispute/resolve:
+    post:
+      operationId: resolveDispute
+      summary: The dispute's opener withdraws it (disputed -> finalized, SPEC.md §4.3)
+      description: >-
+        Signed, and only by the party that opened the dispute. Moves the
+        receipt back to `finalized` and `dispute.status` to `resolved`; it
+        counts toward reputation again. One-way — a resolved receipt cannot be
+        disputed again (409 DISPUTE_ALREADY_RESOLVED).
+      tags: [receipts]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/ReceiptId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { note: { type: string, maxLength: 500 } }
+      responses:
+        "200":
+          description: Resolved (re-finalized) receipt
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Receipt" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
   /verifications:
     post:
       operationId: submitVerification
@@ -877,6 +908,9 @@ components:
             status: { type: string, enum: [none, open, resolved] }
             reason: { type: string }
             windowClosesAt: { type: string, format: date-time }
+            openedBy: { type: string, description: "INAM ID of the party that opened the dispute (SPEC.md §4.3); absent until disputed" }
+            resolvedAt: { type: string, format: date-time, description: "set when the opener withdrew the dispute" }
+            resolution: { type: string, description: "optional note the opener left on withdrawal" }
         signatures:
           type: object
           properties: { agentB: { type: string }, agentA: { type: string } }

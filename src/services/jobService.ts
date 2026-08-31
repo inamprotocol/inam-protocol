@@ -13,6 +13,16 @@ function generateJobId(): string {
   return `job_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** Lazy expiry: a job past its `expiresAt` accepts no offers and no
+ *  acceptance. Its `status` isn't auto-transitioned to a terminal state (no
+ *  background sweeper — SPEC.md §10), it's just treated as closed at the
+ *  gates. */
+function assertNotExpired(job: JobRecord): void {
+  if (job.expiresAt && new Date(job.expiresAt).getTime() < Date.now()) {
+    throw conflict("JOB_EXPIRED", "This job's expiresAt has passed — it accepts no further offers or acceptances");
+  }
+}
+
 export function postJob(callerDid: string, input: PostJobInput): JobRecord {
   if (!agents.has(callerDid)) throw notFound("AGENT_NOT_FOUND", "Job poster must be a registered agent");
   const job: JobRecord = {
@@ -56,6 +66,7 @@ export function listByPoster(agentId: string): JobRecord[] {
 export function submitOffer(jobId: string, callerDid: string, message?: string): JobRecord {
   const job = getJob(jobId);
   if (job.status !== "open") throw conflict("JOB_NOT_OPEN", "Offers can only be submitted on an open job");
+  assertNotExpired(job);
   if (job.postedBy === callerDid) throw badRequest("SELF_DEALING", "A job's poster cannot offer to work on their own job");
   if (!agents.has(callerDid)) throw notFound("AGENT_NOT_FOUND", "Offering agent must be registered");
   if (job.offers.some((o) => o.agentId === callerDid)) {
@@ -70,6 +81,7 @@ export function acceptOffer(jobId: string, callerDid: string, agentId: string): 
   const job = getJob(jobId);
   if (callerDid !== job.postedBy) throw forbidden("NOT_POSTER", "Only the job's poster may accept an offer");
   if (job.status !== "open") throw conflict("JOB_NOT_OPEN", "Only an open job can have an offer accepted");
+  assertNotExpired(job);
   if (!job.offers.some((o) => o.agentId === agentId)) throw badRequest("OFFER_NOT_FOUND", "No such offer on this job");
   const updated: JobRecord = { ...job, status: "accepted", acceptedAgentId: agentId };
   jobs.set(jobId, updated);
@@ -91,6 +103,12 @@ export function cancelJob(jobId: string, callerDid: string): JobRecord {
 export function markCompletedByReceipt(jobId: string, receiptId: string): void {
   const job = jobs.get(jobId);
   if (!job) return; // jobId with no backing Job resource — receipts work fine without one (see SPEC.md §3)
+  // Only accepted -> completed. If the poster cancelled the job between the
+  // draft and its finalization, the job stays cancelled — the receipt is
+  // still a valid bilateral record, the job resource just doesn't claim it.
+  // (worker/src/db.ts's completeJobIfAccepted already does exactly this CAS;
+  // this brings the Node reference to parity.)
+  if (job.status !== "accepted") return;
   jobs.set(jobId, { ...job, status: "completed", receiptId });
 }
 
