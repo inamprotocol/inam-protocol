@@ -14,7 +14,7 @@ import { testOperatorKeypair } from "./testOperator.js";
 // One statement per array entry (not exec() with a multi-line blob) — D1's
 // exec() splits on newlines and chokes on a CREATE TABLE spanning several.
 const SCHEMA_STATEMENTS = [
-  "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, linked_proof TEXT NOT NULL DEFAULT '{}', stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, is_authorized_verifier INTEGER NOT NULL DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, linked_proof TEXT NOT NULL DEFAULT '{}', stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, is_authorized_verifier INTEGER NOT NULL DEFAULT 0, revoked_at TEXT, revocation_reason TEXT)",
   "CREATE TABLE IF NOT EXISTS receipts (receipt_id TEXT PRIMARY KEY, agent_a_id TEXT NOT NULL REFERENCES agents(id), agent_b_id TEXT NOT NULL REFERENCES agents(id), status TEXT NOT NULL, completed_at TEXT NOT NULL, amount_usd REAL NOT NULL DEFAULT 0, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_a ON receipts(agent_a_id)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_b ON receipts(agent_b_id)",
@@ -917,6 +917,49 @@ describe("external identity link challenges", () => {
     const lp = (protoRes.json as { linkedProof: Record<string, { method: string }> }).linkedProof;
     expect(lp.a2a_endpoint.method).toBe("unverified_claim");
     expect(lp.agentpass_id.method).toBe("key_possession");
+  });
+});
+
+describe("agent identity revocation (SPEC.md §2.2, audit #10)", () => {
+  it("revokes a self-signed ID and then blocks every further signed op", async () => {
+    const kp = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: ["job.posting"] } });
+
+    const rev = await call("POST", `/v1/agents/${kp.did}/revoke`, { keypair: kp, idempotencyKey: `rev:${kp.did}`, body: { reason: "key compromised" } });
+    expect(rev.status).toBe(200);
+    expect((rev.json as { revokedAt: string }).revokedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+
+    const job = await call("POST", "/v1/jobs", { keypair: kp, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:s" } });
+    expect(job.status).toBe(403);
+    expect((job.json as { error: { code: string } }).error.code).toBe("AGENT_REVOKED");
+
+    const again = await call("POST", `/v1/agents/${kp.did}/revoke`, { keypair: kp, idempotencyKey: `rev2:${kp.did}`, body: { reason: "again" } });
+    expect(again.status).toBe(403);
+  });
+
+  it("excludes a revoked agent from search (unless include_revoked) and flags it in reputation", async () => {
+    const kp = generateKeypair();
+    const cap = `cap-${Math.random().toString(36).slice(2)}`;
+    await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: [cap] } });
+    await call("POST", `/v1/agents/${kp.did}/revoke`, { keypair: kp, idempotencyKey: `rev:${kp.did}`, body: { reason: "rotating off" } });
+
+    const plain = (await call("GET", `/v1/agents/search?capability=${cap}`)).json as { agents: { id: string }[] };
+    expect(plain.agents.some((a) => a.id === kp.did)).toBe(false);
+    const incl = (await call("GET", `/v1/agents/search?capability=${cap}&include_revoked=true`)).json as { agents: { id: string }[] };
+    expect(incl.agents.some((a) => a.id === kp.did)).toBe(true);
+
+    const rep = (await call("GET", `/v1/agents/${kp.did}/reputation`)).json as { flags: string[] };
+    expect(rep.flags).toContain("revoked");
+  });
+
+  it("rejects revoking someone else's ID", async () => {
+    const a = generateKeypair();
+    const b = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: a, idempotencyKey: `reg:${a.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: b, idempotencyKey: `reg:${b.did}`, body: { capabilities: ["x"] } });
+    const res = await call("POST", `/v1/agents/${b.did}/revoke`, { keypair: a, idempotencyKey: `rev-other:${Date.now()}`, body: { reason: "not mine" } });
+    expect(res.status).toBe(403);
+    expect((res.json as { error: { code: string } }).error.code).toBe("NOT_SUBJECT_AGENT");
   });
 });
 

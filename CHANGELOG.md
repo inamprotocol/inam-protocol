@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.14 (Draft) — 2026-08-31
+- **Added a key-management primitive (audit #10)**: INAM had none. An INAM ID *is* its Ed25519 key, so a compromised/lost key left an identity permanently exposed or stranded with no protocol response.
+- New **§2.2** `POST /agents/:id/revoke` *(signed, self only)*, body `{ reason }` — a one-way self-signed tombstone. A revoked ID gets `revokedAt`/`revocationReason`, is rejected from every further signed op (`AGENT_REVOKED`, 403, enforced at the signature choke point), drops out of `GET /agents/search` (unless `?include_revoked=true`), and is flagged `revoked` in its reputation response. Finalized-receipt history is untouched.
+- Explicitly NOT key rotation: no signed successor-chain, no reputation migration to a new key — deferred (§10). v0.14's revoke burns the ID, it doesn't move it.
+- New error code `AGENT_REVOKED`. New Worker D1 columns `revoked_at`/`revocation_reason` (migration `worker/migration-add-revocation.sql` — **must run before deploying** the v0.6.8 Worker). Additive; `revokedAt` absent for an active agent.
+
 ### v0.13 (Draft) — 2026-08-31
 - **Made external-identity link assurance explicit (audit #9)**: the `linked` map (§2) presented every external identity identically — a consumer couldn't tell an `a2a_endpoint` (a bare URL, INAM-signed only) from a challenge-verified `agentpass_id`/`aitp_id`/`passport_id`. The registry also didn't record which key a challenge proved, or when.
 - New `linkedProof` map on the agent record (§2), keyed by the same protocol names: `{ method, verifiedAt, keyType?, externalPublicKey? }`. `method` is `key_possession` (challenge-verified — proven key + type recorded) or `unverified_claim` (`a2a_endpoint`). `GET /agents/:id/protocols` returns it alongside `linked`.
@@ -82,6 +88,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.3.5 — 2026-08-31
+- Added `client.revoke(reason)` (SPEC.md v0.14, §2.2) — one-way retire of the client's own INAM ID. New `revokeAgentSchema` exported from `sdk-js/src/core/schemas.ts`. `AgentRecord` type gains optional `revokedAt` / `revocationReason`.
+
 ### 0.3.4 — 2026-08-31
 - `AgentRecord` type gains `linkedProof: LinkedIdentityProofs` (SPEC.md v0.13, §2). New exported types `LinkProof` / `LinkedIdentityProofs`. Additive; no client method change.
 
@@ -108,6 +117,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.8 — 2026-08-31 (external audit fixes, continued)
+- **Identity revocation (SPEC.md v0.14, §2.2, audit #10)**: `POST /v1/agents/:id/revoke` (signed, self). Sets `revokedAt`/`revocationReason`; the revoked-ID rejection is enforced inside `requireSignedRequest` (both runtimes) so it covers every signed route uniformly with `AGENT_REVOKED` (403) — one extra agent lookup per signed write. `searchAgents` excludes revoked agents (`include_revoked=true` query param opts in); `computeReputation` adds a `revoked` flag. `setVerifierStatus` now also refuses a revoked target.
+- New Worker D1 columns `agents.revoked_at` / `agents.revocation_reason` (`schema.sql` + `worker/migration-add-revocation.sql`). **Migration must run against production D1 before deploying** — `rowToAgent` tolerates the columns' absence on read, but `revokeAgentIfActive` (a CAS `UPDATE ... WHERE revoked_at IS NULL`) needs them.
+- Live cross-language proof: Python SDK registered, revoked, then confirmed a subsequent signed op → 403 `AGENT_REVOKED`, dropped from default search, present with `include_revoked`, reputation flags `revoked`, record still reads back. New regression tests (Node 76→79, Worker 53→56; Python 36 unchanged, 171 total).
 
 ### 0.6.7 — 2026-08-31 (external audit fixes, continued)
 - **`linkedProof` assurance metadata (SPEC.md v0.13, §2, audit #9)**: both runtimes now record, per linked external identity, how it was verified — `key_possession` (challenge-verified, with the proven `keyType` + `externalPublicKey`) or `unverified_claim` (`a2a_endpoint`). Returned on the agent record everywhere and explicitly by `GET /agents/:id/protocols`. `linked` unchanged.
@@ -188,6 +202,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.4.3 — 2026-08-31
+- Added `client.revoke(reason)` (SPEC.md v0.14, §2.2) — one-way retire of the client's own INAM ID. Mirrors the TypeScript SDK's `client.revoke()`.
 
 ### 0.4.2 — 2026-08-26
 - Added `set_verifier_status(target_agent_id, authorized)` (SPEC.md v0.10, §12.6) — mirrors the TypeScript SDK's `client.setVerifierStatus()`.

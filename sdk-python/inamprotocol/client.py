@@ -102,6 +102,19 @@ class InamClient:
     def get_agent(self, agent_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/v1/agents/{urllib.parse.quote(agent_id, safe='')}")
 
+    def revoke(self, reason: str) -> Dict[str, Any]:
+        """Retires this client's own INAM ID (SPEC.md Section 2.2). One-way --
+        a revoked ID performs no further signed operations and drops out of
+        search. The key-compromise / key-rotation-off tool: an INAM ID *is*
+        its Ed25519 key, so a leaked key can't be re-pointed, only burned.
+        Call this while you still control the key."""
+        return self._request(
+            "POST",
+            f"/v1/agents/{urllib.parse.quote(self.did, safe='')}/revoke",
+            {"reason": reason},
+            idempotency_key=f"revoke:{self.did}",
+        )
+
     def set_verifier_status(self, target_agent_id: str, authorized: bool) -> Dict[str, Any]:
         """Grants or revokes `target_agent_id`'s verifier status (SPEC.md
         Section 12.3). Only succeeds when this client's own keypair is the

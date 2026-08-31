@@ -1,7 +1,8 @@
 import type { NextFunction, Request, Response } from "express";
 import { config } from "../config.js";
 import { sha256Hex, verify, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
-import { unauthorized } from "./errors.js";
+import { agents } from "../storage/db.js";
+import { unauthorized, forbidden } from "./errors.js";
 
 declare global {
   // eslint-disable-next-line @typescript-eslint/no-namespace
@@ -58,6 +59,15 @@ export function requireSignedRequest(req: Request, _res: Response, next: NextFun
 
   if (!signatureOk) {
     throw unauthorized("INVALID_SIGNATURE", "Signature does not match the claimed agent DID for this request");
+  }
+
+  // A revoked INAM ID (SPEC.md §2.2) can perform no further signed
+  // operations — checked here, the one choke point every signed route
+  // already passes through. An unregistered DID (e.g. a fresh registration)
+  // isn't in the store yet, so this is a no-op for it.
+  const record = agents.get(agentDid);
+  if (record?.revokedAt) {
+    throw forbidden("AGENT_REVOKED", `This INAM ID was revoked at ${record.revokedAt} and can no longer perform signed operations`);
   }
 
   req.agentDid = agentDid;

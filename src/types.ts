@@ -68,6 +68,11 @@ export interface AgentRecord {
    * itself a verifier by self-registering; only the registry's configured
    * operator identity can grant this via POST /agents/:id/verifier-status. */
   isAuthorizedVerifier: boolean;
+  /** ISO timestamp the agent retired this INAM ID via POST /agents/:id/revoke
+   * (SPEC.md §2.2) — a one-way, self-signed tombstone for a compromised or
+   * rotated-off key. Absent for an active agent. */
+  revokedAt?: string;
+  revocationReason?: string;
 }
 
 export type VerificationMethod = "payer_confirmation" | "independent_validator" | "test_suite_pass";

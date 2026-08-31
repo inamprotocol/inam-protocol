@@ -14,6 +14,7 @@ import { badgeDataForReputation, badgeDataToJson, notFoundBadgeData, renderBadge
 import {
   registerAgentSchema,
   setVerifierStatusSchema,
+  revokeAgentSchema,
   linkChallengeSchema,
   linkSchema,
   postJobSchema,
@@ -104,8 +105,9 @@ app.get("/v1/agents/search", rateLimitReadByIp, async (c) => {
   const capability = c.req.query("capability");
   const supports = c.req.query("supports");
   const minReputation = c.req.query("min_reputation") ? Number(c.req.query("min_reputation")) : undefined;
+  const includeRevoked = c.req.query("include_revoked") === "true";
 
-  let results = await agentService.searchAgents(c.env, { capability, supports });
+  let results = await agentService.searchAgents(c.env, { capability, supports, includeRevoked });
   if (minReputation !== undefined) {
     const withReputation = await Promise.all(results.map(async (a) => ({ a, score: (await computeReputation(c.env, a.id)).trustScore })));
     results = withReputation.filter((x) => x.score >= minReputation).map((x) => x.a);
@@ -174,6 +176,15 @@ app.post("/v1/agents/:id/link", requireSignedRequest, rateLimitWriteByAgent, req
   }
   const record = await agentService.completeLink(c.env, c.get("agentDid")!, body.protocol, body.value, body.challengeId, body.proofSignature);
   return c.json(record);
+});
+
+// The agent retires its own INAM ID (SPEC.md §2.2) — one-way. requireSelf
+// gates it to the ID being revoked; requireSignedRequest already rejects a
+// call from an *already* revoked ID.
+app.post("/v1/agents/:id/revoke", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
+  const body = parseBody(revokeAgentSchema, c.get("parsedBody"));
+  return c.json(await agentService.revokeAgent(c.env, c.get("agentDid")!, body.reason));
 });
 
 // ---- Jobs ----

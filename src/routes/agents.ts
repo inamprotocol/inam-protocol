@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { registerAgentSchema, linkChallengeSchema, linkSchema, setVerifierStatusSchema } from "../../sdk-js/src/core/schemas.js";
+import { registerAgentSchema, linkChallengeSchema, linkSchema, setVerifierStatusSchema, revokeAgentSchema } from "../../sdk-js/src/core/schemas.js";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
@@ -33,8 +33,9 @@ agentsRouter.get("/search", rateLimitReadByIp, (req, res) => {
   const capability = typeof req.query.capability === "string" ? req.query.capability : undefined;
   const supports = typeof req.query.supports === "string" ? req.query.supports : undefined;
   const minReputation = req.query.min_reputation ? Number(req.query.min_reputation) : undefined;
+  const includeRevoked = req.query.include_revoked === "true";
 
-  let results = agentService.searchAgents({ capability, supports });
+  let results = agentService.searchAgents({ capability, supports, includeRevoked });
   if (minReputation !== undefined) {
     results = results.filter((a) => computeReputation(a.id).trustScore >= minReputation);
   }
@@ -106,6 +107,16 @@ agentsRouter.post("/:id/link", requireSignedRequest, rateLimitWriteByAgent, requ
     throw badRequest("CHALLENGE_REQUIRED", "challengeId and proofSignature are required for key-derived identities — call POST /agents/:id/link/challenge first");
   }
   res.json(agentService.completeLink(req.agentDid!, protocol, value, challengeId, proofSignature));
+});
+
+// The agent retires its own INAM ID (SPEC.md §2.2) — one-way. requireSelf
+// gates it to the ID being revoked; requireSignedRequest already rejects a
+// call from an *already* revoked ID before this handler runs.
+agentsRouter.post("/:id/revoke", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
+  agentService.requireSelf(req.agentDid, req.params.id);
+  const parsed = revokeAgentSchema.safeParse(req.body);
+  if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
+  res.json(agentService.revokeAgent(req.agentDid!, parsed.data.reason));
 });
 
 agentsRouter.get("/:id/receipts", (req, res) => {

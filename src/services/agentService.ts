@@ -50,8 +50,27 @@ export function setVerifierStatus(callerDid: string, targetAgentId: string, auth
     throw forbidden("NOT_OPERATOR", "Only the registry's configured operator identity may authorize or revoke a verifier");
   }
   const record = getAgent(targetAgentId);
+  if (record.revokedAt) throw conflict("AGENT_REVOKED", `Agent ${targetAgentId} was revoked at ${record.revokedAt}`);
   const updated: AgentRecord = { ...record, isAuthorizedVerifier: authorized };
   agents.set(targetAgentId, updated);
+  return updated;
+}
+
+/**
+ * The agent retires its own INAM ID (SPEC.md §2.2). One-way: a revoked ID
+ * stays revoked, performs no further signed operations (enforced in
+ * requireSignedRequest), and drops out of search. This is the
+ * key-compromise / key-rotation-off tool — an INAM ID *is* its Ed25519 key,
+ * so a leaked key can't be re-pointed, only burned. Reputation history on
+ * already-finalized receipts is left intact (it's a record of what
+ * happened); the reputation response flags the agent as `revoked` so a
+ * consumer stops trusting it going forward.
+ */
+export function revokeAgent(callerDid: string, reason: string): AgentRecord {
+  const record = getAgent(callerDid);
+  if (record.revokedAt) throw conflict("AGENT_REVOKED", `This INAM ID was already revoked at ${record.revokedAt}`);
+  const updated: AgentRecord = { ...record, revokedAt: new Date().toISOString(), revocationReason: reason };
+  agents.set(callerDid, updated);
   return updated;
 }
 
@@ -193,10 +212,12 @@ export interface SearchQuery {
   capability?: string;
   minReputation?: number;
   supports?: string;
+  includeRevoked?: boolean;
 }
 
 export function searchAgents(query: SearchQuery): AgentRecord[] {
   return agents.all().filter((a) => {
+    if (a.revokedAt && !query.includeRevoked) return false;
     if (query.capability && !a.capabilities.includes(query.capability)) return false;
     if (query.supports && !(query.supports in a.linked)) return false;
     return true;

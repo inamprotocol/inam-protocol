@@ -58,6 +58,18 @@ export async function updateAgentVerifierStatus(env: Env, id: string, authorized
   await env.DB.prepare("UPDATE agents SET is_authorized_verifier = ? WHERE id = ?").bind(authorized ? 1 : 0, id).run();
 }
 
+/** Compare-and-swap: only sets the tombstone if the agent isn't already
+ *  revoked, so a racing double revoke can't clobber the first reason/time.
+ *  Returns false if the row was already revoked. */
+export async function revokeAgentIfActive(env: Env, id: string, reason: string, at: string): Promise<boolean> {
+  const result = await env.DB.prepare(
+    "UPDATE agents SET revoked_at = ?, revocation_reason = ? WHERE id = ? AND revoked_at IS NULL",
+  )
+    .bind(at, reason, id)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
 export async function allAgents(env: Env): Promise<AgentRecord[]> {
   const { results } = await env.DB.prepare("SELECT * FROM agents").all();
   return results.map(rowToAgent);
@@ -372,5 +384,6 @@ function rowToAgent(row: Record<string, unknown>): AgentRecord {
     stakeUsd: row.stake_usd as number,
     createdAt: row.created_at as string,
     isAuthorizedVerifier: Boolean(row.is_authorized_verifier),
+    ...(row.revoked_at ? { revokedAt: row.revoked_at as string, revocationReason: (row.revocation_reason as string) ?? undefined } : {}),
   };
 }

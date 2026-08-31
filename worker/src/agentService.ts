@@ -53,9 +53,28 @@ export async function setVerifierStatus(env: Env, callerDid: string, targetAgent
   if (!env.OPERATOR_DID || callerDid !== env.OPERATOR_DID) {
     throw forbidden("NOT_OPERATOR", "Only the registry's configured operator identity may authorize or revoke a verifier");
   }
-  await getAgent(env, targetAgentId); // AGENT_NOT_FOUND if it doesn't exist
+  const target = await getAgent(env, targetAgentId); // AGENT_NOT_FOUND if it doesn't exist
+  if (target.revokedAt) throw conflict("AGENT_REVOKED", `Agent ${targetAgentId} was revoked at ${target.revokedAt}`);
   await db.updateAgentVerifierStatus(env, targetAgentId, authorized);
   return getAgent(env, targetAgentId);
+}
+
+/**
+ * The agent retires its own INAM ID (SPEC.md §2.2) — one-way. A revoked ID
+ * performs no further signed operations (enforced in requireSignedRequest)
+ * and drops out of search. An INAM ID *is* its Ed25519 key, so a leaked key
+ * can't be re-pointed, only burned; finalized-receipt reputation history is
+ * left intact but the reputation response flags the agent `revoked`.
+ */
+export async function revokeAgent(env: Env, callerDid: string, reason: string): Promise<AgentRecord> {
+  await getAgent(env, callerDid); // AGENT_NOT_FOUND if it doesn't exist
+  const at = new Date().toISOString();
+  const ok = await db.revokeAgentIfActive(env, callerDid, reason, at);
+  if (!ok) {
+    const current = await getAgent(env, callerDid);
+    throw conflict("AGENT_REVOKED", `This INAM ID was already revoked at ${current.revokedAt}`);
+  }
+  return getAgent(env, callerDid);
 }
 
 const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "a2a_endpoint"] as const;
@@ -182,11 +201,13 @@ export function requireSelf(callerDid: string | undefined, subjectId: string) {
 export interface SearchQuery {
   capability?: string;
   supports?: string;
+  includeRevoked?: boolean;
 }
 
 export async function searchAgents(env: Env, query: SearchQuery): Promise<AgentRecord[]> {
   const all = await db.allAgents(env);
   return all.filter((a) => {
+    if (a.revokedAt && !query.includeRevoked) return false;
     if (query.capability && !a.capabilities.includes(query.capability)) return false;
     if (query.supports && !(query.supports in a.linked)) return false;
     return true;
