@@ -4,6 +4,13 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.16 (Draft) — 2026-09-02
+- **Scoped out "no agent runtime" for verification (audit #12).** INAM already says it is not an agent runtime (§0), but §12 introduced `deterministic` / `agent_attestation` verification methods without ever stating where the check that produces a `verified` / `rejected` judgment runs — leaving it possible to read INAM as owing a hosted verification runtime. It does not.
+- §0's boundary now states a registry **MUST NOT** execute agent work *or verification logic* — on any submitted evidence it does exactly three things: validate a signature, check the operator's verifier grant (§12.3), check a hash matches.
+- New **§12.8** — verification compute runs in the verifier's own environment, at the verifier's cost, before it signs. Two legitimate shapes, both the verifier's own infrastructure: inline in the verifier's agent runtime, or a service the verifier deploys itself (its own edge worker, CI job, TEE). A registry can't tell them apart and doesn't try.
+- §10 gains "a hosted execution or verification runtime" to the out-of-scope list; §4.1's `verification.method` note points at §12.8.
+- **No code, wire, endpoint, error-code, field, or package-version change** — the reference implementations already conform (`verificationService` validates the signature, the operator grant, and the output-hash match; it runs no check of its own). New `examples/reference-verifier.ts` demonstrates the §12.8 shape-1 verifier.
+
 ### v0.15 (Draft) — 2026-08-31
 - **Completed the job & dispute state machines (audit #11).**
 - **Dispute `resolved` was declared but unreachable** — a `disputed` receipt was a permanent dead end, excluded from reputation forever. New §4.3 exit: `POST /receipts/:id/dispute/resolve` *(signed, dispute opener only)* → `disputed → finalized`, `dispute.status → "resolved"` (records `openedBy`, `resolvedAt`, optional `resolution`). Reputation-eligible again, `in_dispute` clears. One-way — a resolved receipt can't be re-disputed (`DISPUTE_ALREADY_RESOLVED`). Not arbitration; third-party resolution stays out of scope (§10).
