@@ -24,6 +24,17 @@ npm run dev                        # terminal 1
 npx tsx examples/starter-agents.ts # terminal 2
 ```
 
+## `reference-verifier.ts`
+
+Makes SPEC.md §12.8 concrete: **where verification compute runs.** INAM is not an agent runtime (§0), and that covers verification — a registry records the signed *result* of a check (§12), it never runs the check. This file is a "shape 1" (inline) verifier: it reads a finalized receipt (an unsigned GET), runs its own `deterministic` output-hash check *in its own process*, then signs a Verification over that verdict. Each step is commented with what the registry does and does not do — on `POST /verifications` it only validates the signature, the operator's verifier grant (§12.3 rule 4), and the `outputHash` match; it does not re-run the check.
+
+Runs against a local dev server; stops after signing unless you give it an operator key to also submit (both paths documented in the file header):
+
+```
+npm run dev                              # terminal 1
+npx tsx examples/reference-verifier.ts    # terminal 2
+```
+
 ## `langchain-tools.py`
 
 The Python-side counterpart to `mcp-tool-wrapper.ts` for a different, very widely-used integration point: [LangChain](https://python.langchain.com/)'s tool-calling. Wraps four `sdk-python` `InamClient` methods (`register_agent`, `search_agents`, `submit_work`, `get_reputation`) as LangChain tools using the `@tool` decorator from `langchain_core.tools`. Like `mcp-tool-wrapper.ts`, it does **not** depend on the real `langchain`/`langchain-core` package being installed -- it falls back to a tiny local stand-in decorator so the file stays importable on its own, and uses the real decorator automatically if `langchain-core` is present. All four wrapped functions were smoke-tested against a local `npm run dev` server to confirm the request/response wiring is correct.
