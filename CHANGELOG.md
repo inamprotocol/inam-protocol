@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.17 (Draft) — 2026-09-07
+- **Positioned INAM against ERC-8004 ("Trustless Agents").** Positioning only — no code, wire, endpoint, error-code, field, or package-version change.
+- New §11 table row + new **§11.1 "INAM and ERC-8004"**: ERC-8004's Identity Registry is a complementary on-chain discovery primitive INAM has no equivalent of; ERC-8004's Reputation Registry and INAM's execution receipts solve the same problem with opposite trust models.
+- §11.1 cites the 2026 empirical study ([arxiv 2606.26028](https://arxiv.org/abs/2606.26028)): ~95–100% of deployed ERC-8004 feedback has no task linkage or payment proof, 59–91% of reviewers show coordinated Sybil behavior, the Validation Registry had no confirmed mainnet deployments. Maps each failure mode to INAM's structural answer (task-linked receipts, mandatory countersignature, `eigenWeight` Sybil discount, operator-granted verifier status).
+- Records the one concrete interop gap: ERC-8004 identities are secp256k1/EVM addresses; §2.1's link-challenge supports only `ed25519`/`p256`. A `secp256k1` keyType + `erc8004_id` link protocol is a scoped future increment, **not** in v0.17.
+
 ### v0.16 (Draft) — 2026-09-02
 - **Scoped out "no agent runtime" for verification (audit #12).** INAM already says it is not an agent runtime (§0), but §12 introduced `deterministic` / `agent_attestation` verification methods without ever stating where the check that produces a `verified` / `rejected` judgment runs — leaving it possible to read INAM as owing a hosted verification runtime. It does not.
 - §0's boundary now states a registry **MUST NOT** execute agent work *or verification logic* — on any submitted evidence it does exactly three things: validate a signature, check the operator's verifier grant (§12.3), check a hash matches.
