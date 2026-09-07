@@ -13,3 +13,4 @@ worker/.dev.vars
 explorer/.wrangler/
 .claude/
 operator-key.json
+seed-keys.json

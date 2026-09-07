@@ -1,6 +1,6 @@
 # Status / Where We Left Off
 
-Last updated: 2026-08-23. This file exists so a new session (human or Claude) can pick up exactly where the last one stopped, without re-deriving it from chat history. It is a full audit, not just a pointer — read it before trusting any specific claim elsewhere, and re-verify anything time-sensitive (published package versions, live deployment state) rather than assuming this file is still current forever.
+Last updated: 2026-09-07. This file exists so a new session (human or Claude) can pick up exactly where the last one stopped, without re-deriving it from chat history. It is a full audit, not just a pointer — read it before trusting any specific claim elsewhere, and re-verify anything time-sensitive (published package versions, live deployment state) rather than assuming this file is still current forever.
 
 ## Phase overview
 
@@ -34,13 +34,11 @@ A single independent verifier's signed attestation that a finalized receipt's ou
 
 ## Current live state (verify independently before relying on this — it decays fast)
 
-- **GitHub**: `github.com/inamprotocol/inam-protocol`, public. **Branch protection on `main` is currently OFF** (2026-08-30 audit — `gh api .../branches/main/protection` returns 404 "Branch not protected"; it was configured earlier but is gone, most likely lost in the repo/machine migration). CI still runs on every push, it's just not *required* to merge. Re-enable with: `gh api -X PUT repos/inamprotocol/inam-protocol/branches/main/protection --input <json>` requiring the 4 checks ("Node test suite (root)", "Worker test suite", "Python SDK test suite", "TypeScript typecheck") with `strict: true` — see the CI/CD gaps section below.
-- **Deployments**: `https://api.inamprotocol.org` (registry API, now including `GET /agents/:id/badge.svg`/`.json`), `https://docs.inamprotocol.org` (spec + API reference), `https://inamprotocol.org` (landing page), **`https://explorer.inamprotocol.org`** (new, 2026-08-25 — read-only public browser + live stats dashboard) — all live Cloudflare Workers, all verified responding 2026-08-25.
+- **GitHub**: `github.com/inamprotocol/inam-protocol`, public. **Branch protection on `main` is ON** (re-enabled 2026-09-07) — requires the 4 CI checks ("Node test suite (root)", "Worker test suite", "Python SDK test suite", "TypeScript typecheck") + `strict: true`, `enforce_admins: false`. Verify: `gh api repos/inamprotocol/inam-protocol/branches/main/protection`.
+- **Deployments**: `https://api.inamprotocol.org` (registry API, Worker **v0.6.9 deployed 2026-09-07**, `Version ID: ab171298-4416-400f-b4e6-816d2fbcbadd` — first deploy carrying audit #9/#10/#11), `https://docs.inamprotocol.org` (spec + API reference), `https://inamprotocol.org` (landing page), **`https://explorer.inamprotocol.org`** (read-only public browser + live stats dashboard) — all live Cloudflare Workers. api verified 2026-09-07 (15/15 worker smoke checks green against prod, `linkedProof` in search response, `/revoke` + `/dispute/resolve` routes live).
 - **SPEC.md**: v0.16 (Draft).
-- **⚠ Two unapplied D1 migrations blocking the next Worker deploy** (run both against production D1 before deploying the v0.6.8 Worker, `npx wrangler d1 execute inam-protocol-db --remote --file=./worker/<file>`):
-  1. `worker/migration-add-linked-proof.sql` (audit #9, `agents.linked_proof`) — without it every `POST /v1/agents` fails ("no column named linked_proof").
-  2. `worker/migration-add-revocation.sql` (audit #10, `agents.revoked_at` + `agents.revocation_reason`) — without it `POST /v1/agents/:id/revoke` fails; reads degrade gracefully.
-  Same drill as the (already-applied) `migration-add-verifier-status.sql` from #3.
+- **Production registry reset 2026-09-07**: the 58 pre-launch smoke-test agents (+ their receipts/jobs/offers/verifications/challenges) were deleted and replaced with 3 canonical reference agents (`Reference Extractor` / `Reference Reviewer` / `Reference Translator`) + one real finalized receipt between the first two (trustScore 5.5 each). Reference-agent private keys saved outside the repo (ask the user; not committed). Seed is reproducible: `scripts/seed-reference-agents.ts`. **Permanent fix for the recurrence: never point `scripts/*smoke-test.ts` at prod** — they default to localhost; a throwaway staging Worker+D1 is the place for live smoke runs.
+- **All D1 migrations applied to production** (`migration-add-verifier-status.sql` #3, `migration-add-linked-proof.sql` #9, `migration-add-revocation.sql` #10 — all confirmed against the live `agents` table 2026-09-07). No pending migrations.
 - **Package versions in the repo** (committed, built, tested) vs. **actually published**:
   | Package | Repo version | Published version (checked 2026-08-25) | Gap |
   |---|---|---|---|
@@ -88,7 +86,7 @@ Full pass over `.github/`, branch protection, publish + deploy paths.
 - **Added `.github/dependabot.yml`** — weekly, grouped: github-actions, npm (all 6 package dirs), pip. Was absent entirely.
 
 **Still open — needs the maintainer (account/admin access this session doesn't have):**
-- **Branch protection on `main` is OFF** (see "Current live state" above). Re-enable requiring the 4 CI checks + `strict: true`. This is the highest-value open item — right now a red CI run does not block anything.
+- ~~**Branch protection on `main` is OFF**~~ **Done 2026-09-07** — re-enabled with the 4 CI checks + `strict: true` (see "Current live state").
 - **npm/PyPI Trusted Publishing account toggles** — the GitHub Actions side is done (OIDC, no token secrets); the one-time account-side config on npmjs.com and pypi.org is still pending (`docs-design/trusted-publishing-setup.md` has the exact fields). Until then a `workflow_dispatch` publish will fail at the OIDC exchange.
 
 **Reported, not changed (design decisions, not bugs):**
@@ -104,3 +102,21 @@ Full pass over `.github/`, branch protection, publish + deploy paths.
 Rough priority order from here:
 1. Review and merge whatever the two dispatched agents produced (CI+security track, quickstart+integration-example track).
 2. Whenever the user wants: Phase 5 scoping conversation (payment rail decision), Verification v0.2, npm/PyPI trusted-publishing toggle (needs the user's own account access), or an actual adoption push (posting the quickstart somewhere developers will see it).
+
+---
+
+### 2026-09-07 session: P0 credibility pass + adoption push started
+
+User directive: move fast, get to external users. Done this session:
+- **Branch protection ON** (was the "highest-value open item").
+- **Both pending D1 migrations applied to prod + Worker v0.6.9 deployed** — prod now matches the repo (audit #9/#10/#11 are live for the first time). 15/15 prod smoke checks green. This closed the single worst problem: the site advertised v0.16 while the live API was still pre-#9.
+- **Production registry reset** — 58 smoke-test agents → 3 canonical reference agents + 1 real finalized receipt. `scripts/seed-reference-agents.ts` is the reproducible seed; keys held by the user, not committed.
+
+Next, in order (adoption, not protocol surface):
+1. **`inam-mcp` package** — extract `examples/mcp-tool-wrapper.ts` into a standalone `npx inam-mcp` MCP server, publish to npm (user's account), list on the official MCP Registry. This is the one distribution channel that exists today.
+2. **ERC-8004 interop demo** + a one-pager "why not ERC-8004" (SPEC §11 → prose).
+3. **Self-host story to the front page** — `docker compose up` / "Deploy to Cloudflare" button; the SDK already takes a base URL.
+4. **Quickstart 205 → ~10 lines.**
+5. Hand-written integrations: pick ~10 open-source agent projects, open the PR that adds an INAM receipt yourself.
+
+Kill criterion agreed in principle (not yet dated by the user): if no receipt from a key that isn't the maintainer's appears within a set window, freeze the protocol as-is, archive, publish the spec, move on.
