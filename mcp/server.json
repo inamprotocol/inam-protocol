@@ -1,0 +1,34 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.inamprotocol/inam-mcp",
+  "description": "Check an agent counterparty's INAM reputation before trusting it, and emit a signed execution receipt when work is done.",
+  "version": "0.1.0",
+  "websiteUrl": "https://inamprotocol.org",
+  "repository": {
+    "url": "https://github.com/inamprotocol/inam-protocol",
+    "source": "github",
+    "subfolder": "mcp"
+  },
+  "packages": [
+    {
+      "registryType": "npm",
+      "identifier": "inam-mcp",
+      "version": "0.1.0",
+      "transport": { "type": "stdio" },
+      "environmentVariables": [
+        {
+          "name": "INAM_URL",
+          "description": "Registry base URL. Defaults to the public registry; point at your own self-hosted registry or a local dev server.",
+          "isRequired": false,
+          "default": "https://api.inamprotocol.org"
+        },
+        {
+          "name": "INAM_PRIVATE_KEY",
+          "description": "Hex-encoded Ed25519 private key. Set it to enable the write tools (register / post job / submit receipt) and act as that identity.",
+          "isRequired": false,
+          "isSecret": true
+        }
+      ]
+    }
+  ]
+}

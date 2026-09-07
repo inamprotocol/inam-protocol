@@ -1,6 +1,7 @@
 {
   "name": "inam-mcp",
   "version": "0.1.0",
+  "mcpName": "io.github.inamprotocol/inam-mcp",
   "description": "MCP server for the INAM Protocol — let an agent check a counterparty's reputation before trusting it, and emit a signed execution receipt when work is done",
   "type": "module",
   "bin": {
