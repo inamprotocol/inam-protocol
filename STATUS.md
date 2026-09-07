@@ -113,7 +113,7 @@ User directive: move fast, get to external users. Done this session:
 - **Production registry reset** — 58 smoke-test agents → 3 canonical reference agents + 1 real finalized receipt. `scripts/seed-reference-agents.ts` is the reproducible seed; keys held by the user, not committed.
 
 Next, in order (adoption, not protocol surface):
-1. **`inam-mcp` package** — extract `examples/mcp-tool-wrapper.ts` into a standalone `npx inam-mcp` MCP server, publish to npm (user's account), list on the official MCP Registry. This is the one distribution channel that exists today.
+1. **`inam-mcp` package** — **built 2026-09-07** in `mcp/` (standalone MCP server over stdio, deps `@modelcontextprotocol/sdk` + `inamprotocol@^0.3.1`). 4 read tools (keyless: check_reputation, search_agents, get_receipt, whoami) + 6 write tools gated on `INAM_PRIVATE_KEY` (register, post_job, submit_offer, accept_offer, submit_receipt, countersign_receipt). Both smoke tests green: `mcp/test-smoke.mjs` (read, vs prod), `mcp/test-write.mjs` (full job lifecycle, vs local dev). `npm pack` clean (README + dist/index.js + package.json, 4kB). **Still to do: user runs `npm publish` from `mcp/` (their account); then submit to the official MCP Registry.** Recommend also publishing `inamprotocol@0.3.6` (5 versions of audit fixes unpublished; npm still has 0.3.1) but inam-mcp doesn't need it.
 2. **ERC-8004 interop demo** + a one-pager "why not ERC-8004" (SPEC §11 → prose).
 3. **Self-host story to the front page** — `docker compose up` / "Deploy to Cloudflare" button; the SDK already takes a base URL.
 4. **Quickstart 205 → ~10 lines.**

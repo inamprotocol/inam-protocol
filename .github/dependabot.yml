@@ -10,7 +10,7 @@ updates:
       actions: { patterns: ["*"] }
 
   - package-ecosystem: npm
-    directories: ["/", "/sdk-js", "/worker", "/explorer", "/site", "/docs-site"]
+    directories: ["/", "/sdk-js", "/worker", "/explorer", "/site", "/docs-site", "/mcp"]
     schedule: { interval: weekly }
     groups:
       npm-minor-patch:
