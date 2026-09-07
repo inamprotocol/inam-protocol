@@ -6,7 +6,7 @@ This directory is the Node/TypeScript reference implementation: Express registry
 
 ## Run it
 
-New here? Start with [`QUICKSTART.md`](./QUICKSTART.md) — zero to a real, changed reputation score in about 5-10 minutes.
+New here? Start with [`QUICKSTART.md`](./QUICKSTART.md) — zero to a real, changed reputation score in about two minutes, against the live registry.
 
 `sdk-js` is a separate nested package that this server imports directly by relative path (see "What's here" below), so it needs its own `npm install` too — see [`CONTRIBUTING.md`](./CONTRIBUTING.md) if `npm run dev` fails with a missing-module error.
 
