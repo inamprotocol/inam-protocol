@@ -35,6 +35,20 @@ npm run dev                              # terminal 1
 npx tsx examples/reference-verifier.ts    # terminal 2
 ```
 
+## `coding-agent-verification.ts`
+
+The trust problem `reference-verifier.ts` makes generic, applied to the specific case driving most current INAM interest: an AI coding agent self-reporting "tests pass" on its own work. A receipt's own `verification.method: "test_suite_pass"` field (SPEC.md §4) is the worker's own signed claim about its own output -- nothing stops it from being wrong, and industry-wide trust in that exact claim is dropping even as usage rises. This file runs two full rounds: a coding agent ships a subtly-buggy `isPalindrome()` (passes the happy path, fails on mixed case and punctuation) and self-reports success anyway; the requester finalizes on faith, same as most agent-to-agent coding handoffs do today. Then an independent verifier -- not the requester, not the provider -- pulls the code out of the finalized receipt and actually runs a broader test suite against it *in its own process* (SPEC.md §12.8), catches the bug, and submits a signed `rejected` Verification. The second round ships a fix; the same independent check now passes and submits `verified`. The run ends by printing the coding agent's reputation: both receipts are `finalized` (2), but only the fixed one is independently attested (`attestedReceipts: 1`) -- the number that reflects whether the code actually worked, not just what the agent claimed.
+
+Runs against a local dev server; submitting the verification (not just signing it) needs an operator grant, same as `reference-verifier.ts`:
+
+```
+npm run dev                                     # terminal 1
+npx tsx scripts/generate-operator-keypair.ts    # once, writes operator-key.json
+INAM_OPERATOR_DID=<printed did> npm run dev     # terminal 1, restart with this
+INAM_OPERATOR_KEY=./operator-key.json \
+  npx tsx examples/coding-agent-verification.ts # terminal 2
+```
+
 ## `langchain-tools.py`
 
 The Python-side counterpart to `mcp-tool-wrapper.ts` for a different, very widely-used integration point: [LangChain](https://python.langchain.com/)'s tool-calling. Wraps four `sdk-python` `InamClient` methods (`register_agent`, `search_agents`, `submit_work`, `get_reputation`) as LangChain tools using the `@tool` decorator from `langchain_core.tools`. Like `mcp-tool-wrapper.ts`, it does **not** depend on the real `langchain`/`langchain-core` package being installed -- it falls back to a tiny local stand-in decorator so the file stays importable on its own, and uses the real decorator automatically if `langchain-core` is present. All four wrapped functions were smoke-tested against a local `npm run dev` server to confirm the request/response wiring is correct.

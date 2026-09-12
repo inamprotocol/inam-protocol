@@ -120,3 +120,9 @@ Next, in order (adoption, not protocol surface):
 5. Hand-written integrations: pick ~10 open-source agent projects, open the PR that adds an INAM receipt yourself.
 
 Kill criterion agreed in principle (not yet dated by the user): if no receipt from a key that isn't the maintainer's appears within a set window, freeze the protocol as-is, archive, publish the spec, move on.
+
+### 2026-09-12 session: coding-agent-verification example
+
+Built `examples/coding-agent-verification.ts` (+ README entry) as prep for item 5/2 above: uses the existing Job→Receipt→Verification flow (no new protocol surface) to demonstrate catching a self-reported "tests pass" that lied, using the current "developers don't trust AI coding output" pain point (84% use AI coding tools, only 29% trust the output) as the framing hook. Two rounds against a real local server: a subtly-buggy `isPalindrome()` self-reports success and gets finalized on faith, then an independent verifier actually runs a broader test suite and rejects it (`attestedReceipts` stays 0); a fixed version passes the same independent check and is verified (`attestedReceipts` → 1). Verified live both without an operator key (signs but doesn't submit, like `reference-verifier.ts`) and with one (full submit path) — reputation numbers behaved exactly as expected in both runs.
+
+Not yet done: picking the actual target repo(s) for a real integration PR (item 5) — this example is the pattern to adapt, not the PR itself. A real autonomous-coding-agent open-source project (not a generic agent framework) is the better fit for this specific angle than the general ~10-project list.
