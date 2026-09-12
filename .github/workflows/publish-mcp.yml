@@ -1,0 +1,53 @@
+# Publish inam-mcp's server.json to the official MCP Registry
+#
+# The registry validates namespace ownership on publish (see mcp-publisher's
+# own README): a personal `mcp-publisher login github` only ever proves
+# ownership of the *personal* io.github.<username>/* namespace, never an
+# organization's. server.json here declares `io.github.inamprotocol/inam-mcp`
+# (SPEC-adjacent: the org, not a maintainer's personal account, owns the
+# name), so publishing needs `mcp-publisher login github-oidc` running inside
+# a GitHub Actions job in a repo this org owns -- the same OIDC-trust pattern
+# publish-npm.yml/publish-pypi.yml already use for their registries, just
+# proving org-repo identity instead of a package registry identity.
+#
+# Manual dispatch only, matching this repo's general pattern (no GitHub
+# Releases exist yet -- see STATUS.md gap #10) -- run by hand after bumping
+# mcp/server.json's version to match mcp/package.json.
+
+name: Publish to MCP Registry
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish inam-mcp server.json
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for MCP Registry GitHub OIDC auth
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v5
+
+      # mcp-publisher ships as a Go binary release, not an npm package.
+      # Bump this URL's version tag when the registry cuts a new release.
+      - name: Install mcp-publisher
+        run: |
+          curl -sL -o mcp-publisher.tar.gz "https://github.com/modelcontextprotocol/registry/releases/download/v1.8.1/mcp-publisher_linux_amd64.tar.gz"
+          tar -xzf mcp-publisher.tar.gz mcp-publisher
+          chmod +x mcp-publisher
+
+      - name: Login via GitHub OIDC
+        run: ./mcp-publisher login github-oidc
+
+      - name: Validate server.json
+        run: ./mcp-publisher validate
+
+      - name: Publish to MCP Registry
+        run: ./mcp-publisher publish
