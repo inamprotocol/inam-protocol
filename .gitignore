@@ -11,6 +11,8 @@ worker/node_modules/
 worker/.wrangler/
 worker/.dev.vars
 explorer/.wrangler/
+site/.wrangler/
+.tools/
 .claude/
 operator-key.json
 seed-keys.json
