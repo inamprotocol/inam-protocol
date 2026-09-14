@@ -98,6 +98,8 @@ export const draftReceiptSchema = z.object({
     outcome: z.enum(["success", "partial", "failed"]),
   }),
   signature: z.string().min(1),
+  // SPEC.md §4.4 (v0.19) — optional, server defaults to "public" when absent.
+  visibility: z.enum(["public", "participants_only"]).optional(),
 });
 
 export const countersignSchema = z.object({ signature: z.string().min(1) });

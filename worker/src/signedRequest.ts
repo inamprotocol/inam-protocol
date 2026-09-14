@@ -68,3 +68,20 @@ export async function requireSignedRequest(c: Context<AppEnv>, next: Next) {
   }
   await next();
 }
+
+/**
+ * Same verification as requireSignedRequest, for read-only (GET) endpoints
+ * where a caller identity is only needed to decide whether it may see
+ * `participants_only` receipt content (SPEC.md §4.4) — never required. No
+ * signature headers at all -> anonymous (`agentDid` stays unset). Headers
+ * present but invalid still reject, same reasoning as the Node reference
+ * server's identical helper (src/middleware/signedRequest.ts). Both SDKs
+ * already sign every request unconditionally, so this is transparent to
+ * any SDK-based caller.
+ */
+export async function optionalSignedRequest(c: Context<AppEnv>, next: Next) {
+  if (!c.req.header("inam-agent") && !c.req.header("inam-timestamp") && !c.req.header("inam-signature")) {
+    return next();
+  }
+  return requireSignedRequest(c, next);
+}

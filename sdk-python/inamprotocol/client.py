@@ -189,17 +189,36 @@ class InamClient:
     def list_receipts(self, agent_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/v1/agents/{urllib.parse.quote(agent_id, safe='')}/receipts")
 
-    def submit_work(self, agent_a_id: str, input: Dict[str, Any]) -> Dict[str, Any]:
-        """Called by the worker (agent_b) once a job is complete, off-network."""
+    def submit_work(
+        self,
+        agent_a_id: str,
+        input: Dict[str, Any],
+        visibility: Optional[str] = None,
+    ) -> Dict[str, Any]:
+        """Called by the worker (agent_b) once a job is complete, off-network.
+
+        `visibility` (SPEC.md §4.4, v0.19) is "public" or "participants_only";
+        the server defaults to "public" if omitted. Not part of the signed
+        content, same as `dispute`/`status`.
+        """
         content = build_signable_content(agent_a_id, self.did, input)
         signing_bytes = canonicalize({**content, "dispute": None}).encode("utf-8")
         signature = to_base64(sign(signing_bytes, self.keypair.private_key))
         body = {**input, "agentAId": agent_a_id, "signature": signature}
+        # The server's schema treats `visibility` as optional (missing key),
+        # not nullable -- an explicit `"visibility": null` in the JSON body
+        # is a VALIDATION_ERROR, unlike a plain omitted key. json.dumps
+        # doesn't drop None values on its own, so this has to be explicit.
+        if visibility is not None:
+            body["visibility"] = visibility
         return self._request("POST", "/v1/receipts", body, idempotency_key=f"receipt:{input['jobId']}")
 
     def accept_work(self, receipt: Dict[str, Any]) -> Dict[str, Any]:
         """Called by the requester (agent_a) to accept the worker's submitted result."""
-        content = {**receipt, "signatures": None, "status": None, "dispute": None}
+        # `visibility` (v0.19) is operational metadata, excluded from the
+        # signed content the same way `dispute`/`status` already are — the
+        # server's countersign verification excludes it identically.
+        content = {**receipt, "signatures": None, "status": None, "dispute": None, "visibility": None}
         signing_bytes = canonicalize(content).encode("utf-8")
         signature = to_base64(sign(signing_bytes, self.keypair.private_key))
         receipt_id = urllib.parse.quote(receipt["receiptId"], safe="")

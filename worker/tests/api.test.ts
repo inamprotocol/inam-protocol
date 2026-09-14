@@ -1580,6 +1580,135 @@ describe("independent verification (SPEC.md §12)", () => {
   });
 });
 
+describe("receipt visibility (SPEC.md §4.4, audit #13)", () => {
+  async function finalizeReceipt(requester: Keypair, provider: Keypair, jobId?: string, visibility?: "public" | "participants_only") {
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    const input = job({ ...(jobId ? { jobId } : {}), visibility });
+    const content = buildSignableContent(requester.did, provider.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), provider.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", {
+      keypair: provider,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    const draft = draftRes.json as { receiptId: string; result: { outputHash: string } };
+
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+    const finalizedRes = await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, {
+      keypair: requester,
+      idempotencyKey: `countersign:${draft.receiptId}`,
+      body: { signature: counterSig },
+    });
+    return finalizedRes.json as { receiptId: string; jobId: string; visibility?: string; result: { outputHash: string } };
+  }
+
+  it("gates GET /receipts/:id and /receipts/:id/verifications to participants and attesting verifiers, 403s everyone else, and leaves public receipts unrestricted", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    const stranger = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["y"] } });
+    await authorizeVerifier(verifier);
+
+    const restricted = await finalizeReceipt(requester, provider, `job_vis_${Math.random().toString(36).slice(2)}`, "participants_only");
+    expect(restricted.visibility).toBe("participants_only");
+    const publicReceipt = await finalizeReceipt(requester, provider, `job_vis_pub_${Math.random().toString(36).slice(2)}`, "public");
+    const defaultReceipt = await finalizeReceipt(requester, provider, `job_vis_default_${Math.random().toString(36).slice(2)}`); // no visibility passed -> defaults to public
+
+    const path = `/v1/receipts/${encodeURIComponent(restricted.receiptId)}`;
+
+    for (const party of [requester, provider]) {
+      const res = await call("GET", path, { keypair: party });
+      expect(res.status).toBe(200);
+    }
+
+    const strangerRes = await call("GET", path, { keypair: stranger });
+    expect(strangerRes.status).toBe(403);
+    expect((strangerRes.json as { error: { code: string } }).error.code).toBe("RECEIPT_NOT_VISIBLE");
+
+    const anonRes = await call("GET", path);
+    expect(anonRes.status).toBe(403);
+    expect((anonRes.json as { error: { code: string } }).error.code).toBe("RECEIPT_NOT_VISIBLE");
+
+    const verifierBeforeRes = await call("GET", path, { keypair: verifier });
+    expect(verifierBeforeRes.status).toBe(403);
+
+    const { buildSignableVerificationContent } = await import("../../sdk-js/src/core/verificationContent.js");
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const vInput = { receiptId: restricted.receiptId, jobId: restricted.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: restricted.result.outputHash, result: "verified" };
+    const vSignature = toBase64(sign(new TextEncoder().encode(canonicalize(buildSignableVerificationContent(vInput as never))), verifier.privateKey));
+    const submitRes = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: vInput.receiptId, verifier: verifier.did, method: vInput.method, outputHash: vInput.outputHash, result: vInput.result, signature: vSignature },
+    });
+    expect(submitRes.status).toBe(201);
+
+    const verifierAfterRes = await call("GET", path, { keypair: verifier });
+    expect(verifierAfterRes.status).toBe(200);
+
+    const verificationsPath = `${path}/verifications`;
+    const strangerVerificationsRes = await call("GET", verificationsPath, { keypair: stranger });
+    expect(strangerVerificationsRes.status).toBe(403);
+    const partyVerificationsRes = await call("GET", verificationsPath, { keypair: requester });
+    expect(partyVerificationsRes.status).toBe(200);
+    expect((partyVerificationsRes.json as { verifications: unknown[] }).verifications).toHaveLength(1);
+
+    for (const r of [publicReceipt, defaultReceipt]) {
+      const publicPath = `/v1/receipts/${encodeURIComponent(r.receiptId)}`;
+      const res = await call("GET", publicPath);
+      expect(res.status).toBe(200);
+    }
+  });
+
+  it("omits a participants_only receipt from a non-participant's GET /agents/:id/receipts listing but keeps it in each participant's own", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const stranger = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["y"] } });
+
+    const restricted = await finalizeReceipt(requester, provider, `job_vis_list_${Math.random().toString(36).slice(2)}`, "participants_only");
+
+    const listPath = `/v1/agents/${encodeURIComponent(provider.did)}/receipts`;
+
+    const strangerListRes = await call("GET", listPath, { keypair: stranger });
+    expect(strangerListRes.status).toBe(200);
+    const strangerReceipts = (strangerListRes.json as { receipts: { receiptId: string }[] }).receipts;
+    expect(strangerReceipts.some((r) => r.receiptId === restricted.receiptId)).toBe(false);
+
+    const anonListRes = await call("GET", listPath);
+    const anonReceipts = (anonListRes.json as { receipts: { receiptId: string }[] }).receipts;
+    expect(anonReceipts.some((r) => r.receiptId === restricted.receiptId)).toBe(false);
+
+    for (const party of [requester, provider]) {
+      const res = await call("GET", listPath, { keypair: party });
+      const receipts = (res.json as { receipts: { receiptId: string }[] }).receipts;
+      expect(receipts.some((r) => r.receiptId === restricted.receiptId)).toBe(true);
+    }
+  });
+
+  it("does not exclude a participants_only receipt from reputation math -- visibility gates reading, not scoring", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
+
+    const before = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { rawReceipts: number; verifiedReceipts: number } };
+    await finalizeReceipt(requester, provider, `job_vis_rep_${Math.random().toString(36).slice(2)}`, "participants_only");
+    const after = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { rawReceipts: number; verifiedReceipts: number } };
+
+    expect(after.components.rawReceipts).toBe(before.components.rawReceipts + 1);
+    expect(after.components.verifiedReceipts).toBe(before.components.verifiedReceipts + 1);
+  });
+});
+
 describe("reputation badge (GET /agents/:id/badge.svg, /badge.json)", () => {
   async function finalizeReceipt(requester: Keypair, provider: Keypair) {
     await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });

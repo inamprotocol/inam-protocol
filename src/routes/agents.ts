@@ -1,12 +1,13 @@
 import { Router } from "express";
 import { registerAgentSchema, linkChallengeSchema, linkSchema, setVerifierStatusSchema, revokeAgentSchema } from "../../sdk-js/src/core/schemas.js";
-import { requireSignedRequest } from "../middleware/signedRequest.js";
+import { requireSignedRequest, optionalSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
 import { badRequest, ApiError } from "../middleware/errors.js";
 import * as agentService from "../services/agentService.js";
 import { computeReputation } from "../services/reputationService.js";
-import { listByAgent } from "../services/receiptService.js";
+import { listByAgent, isReceiptVisible } from "../services/receiptService.js";
+import * as verificationService from "../services/verificationService.js";
 import { badgeDataForReputation, badgeDataToJson, notFoundBadgeData, renderBadgeSvg } from "../services/badgeService.js";
 
 export const agentsRouter = Router();
@@ -119,6 +120,16 @@ agentsRouter.post("/:id/revoke", requireSignedRequest, rateLimitWriteByAgent, re
   res.json(agentService.revokeAgent(req.agentDid!, parsed.data.reason));
 });
 
-agentsRouter.get("/:id/receipts", (req, res) => {
-  res.json({ receipts: listByAgent(req.params.id) });
+// SPEC.md §4.4 (v0.19): a `participants_only` receipt is silently omitted
+// for a caller that isn't a party to it or a verifier who's attested it —
+// filtering, not an error, same as an existing list endpoint. The agent
+// whose :id this is always sees its own full list (it's a party to every
+// receipt where it's :id, so isReceiptVisible always passes for it).
+agentsRouter.get("/:id/receipts", optionalSignedRequest, (req, res) => {
+  const all = listByAgent(req.params.id);
+  const visible = all.filter((r) => {
+    const isVerifier = r.visibility === "participants_only" && !!req.agentDid && verificationService.listByReceipt(r.receiptId).some((v) => v.verifier === req.agentDid);
+    return isReceiptVisible(r, req.agentDid, isVerifier);
+  });
+  res.json({ receipts: visible });
 });

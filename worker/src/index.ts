@@ -1,7 +1,7 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import type { ZodType } from "zod";
-import { requireSignedRequest } from "./signedRequest.js";
+import { requireSignedRequest, optionalSignedRequest } from "./signedRequest.js";
 import { requireIdempotencyKey } from "./idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "./rateLimit.js";
 import { ApiError, badRequest } from "./errors.js";
@@ -157,7 +157,21 @@ app.get("/v1/agents/:id/badge.json", rateLimitReadByIp, async (c) => {
   return c.json(badgeDataToJson(data));
 });
 
-app.get("/v1/agents/:id/receipts", async (c) => c.json({ receipts: await receiptService.listByAgent(c.env, c.req.param("id")!) }));
+// SPEC.md §4.4 (v0.19): a `participants_only` receipt is silently omitted
+// for a caller that isn't a party to it or a verifier who's attested it —
+// filtering, not an error, same reasoning as the Node reference server's
+// identical route (src/routes/agents.ts).
+app.get("/v1/agents/:id/receipts", optionalSignedRequest, async (c) => {
+  const callerDid = c.get("agentDid");
+  const all = await receiptService.listByAgent(c.env, c.req.param("id")!);
+  const visible = await Promise.all(
+    all.map(async (r) => {
+      const isVerifier = r.visibility === "participants_only" && !!callerDid && (await verificationService.listByReceipt(c.env, r.receiptId)).some((v) => v.verifier === callerDid);
+      return receiptService.isReceiptVisible(r, callerDid, isVerifier) ? r : null;
+    }),
+  );
+  return c.json({ receipts: visible.filter((r): r is NonNullable<typeof r> => r !== null) });
+});
 
 app.post("/v1/agents/:id/link/challenge", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
@@ -231,9 +245,27 @@ app.post("/v1/receipts", requireSignedRequest, rateLimitWriteByAgent, requireIde
   return c.json(receipt, 201);
 });
 
-app.get("/v1/receipts/:id", async (c) => c.json(await receiptService.getReceipt(c.env, c.req.param("id")!)));
+// SPEC.md §4.4 (v0.19), same reasoning as the Node reference server's
+// identical route (src/routes/receipts.ts).
+async function callerIsVerifierOf(c: Context<AppEnv>, receiptId: string, callerDid: string | undefined): Promise<boolean> {
+  if (!callerDid) return false;
+  return (await verificationService.listByReceipt(c.env, receiptId)).some((v) => v.verifier === callerDid);
+}
 
-app.get("/v1/receipts/:id/verifications", async (c) => c.json({ verifications: await verificationService.listByReceipt(c.env, c.req.param("id")!) }));
+app.get("/v1/receipts/:id", optionalSignedRequest, async (c) => {
+  const receipt = await receiptService.getReceipt(c.env, c.req.param("id")!);
+  receiptService.assertReceiptVisible(receipt, c.get("agentDid"), await callerIsVerifierOf(c, receipt.receiptId, c.get("agentDid")));
+  return c.json(receipt);
+});
+
+app.get("/v1/receipts/:id/verifications", optionalSignedRequest, async (c) => {
+  const receipt = await receiptService.getReceipt(c.env, c.req.param("id")!);
+  const records = await verificationService.listByReceipt(c.env, c.req.param("id")!);
+  const callerDid = c.get("agentDid");
+  const isVerifier = callerDid ? records.some((v) => v.verifier === callerDid) : false;
+  receiptService.assertReceiptVisible(receipt, callerDid, isVerifier);
+  return c.json({ verifications: records });
+});
 
 app.post("/v1/receipts/:id/countersign", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   const body = parseBody(countersignSchema, c.get("parsedBody"));

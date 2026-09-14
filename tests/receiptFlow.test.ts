@@ -14,7 +14,7 @@ function signDraft(agentAId: string, agentBPrivateKey: Uint8Array, agentBId: str
 }
 
 function signCountersign(receipt: ReturnType<typeof createDraft>, agentAPrivateKey: Uint8Array) {
-  const content = { ...receipt, signatures: undefined, status: undefined, dispute: undefined };
+  const content = { ...receipt, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined };
   const bytes = new TextEncoder().encode(canonicalize(content));
   return toBase64(sign(bytes, agentAPrivateKey));
 }
