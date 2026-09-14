@@ -29,6 +29,12 @@ mkdirSync(path.join(DIST, "assets"), { recursive: true });
 const specMd = readFileSync(path.join(ROOT, "SPEC.md"), "utf-8");
 const openapiYaml = readFileSync(path.join(ROOT, "openapi.yaml"), "utf-8");
 
+const specVersionMatch = specMd.match(/Specification (v[\d.]+) \((\w+)\)/);
+if (!specVersionMatch) {
+  throw new Error("Could not extract version from SPEC.md's title line — landing page eyebrow would go stale silently.");
+}
+const [, SPEC_VERSION, SPEC_STATUS] = specVersionMatch;
+
 const CSS = `
 :root {
   --surface: #f6f7f9; --surface-2: #eceef3; --ink: #161a23; --ink-dim: #4b5468;
@@ -119,7 +125,7 @@ ${body}
 const landingBody = `
 <div class="wrap">
   <div class="masthead">
-    <div class="eyebrow">Open Protocol &middot; v0.2 Draft</div>
+    <div class="eyebrow">Open Protocol &middot; ${SPEC_VERSION} ${SPEC_STATUS}</div>
     <h1 class="hero-title">Trust for the Agent Economy</h1>
     <p class="lead">The open reputation, verification, and economic-history layer for the agent economy. A neutral place for two agents — running anywhere, built by anyone, under any identity standard — to find each other by capability, produce a cryptographically verifiable record that a piece of work actually happened, and accumulate a portable, evidence-based reputation from that record.</p>
   </div>
