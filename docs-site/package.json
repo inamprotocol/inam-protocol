@@ -11,9 +11,9 @@
   },
   "dependencies": {
     "marked": "^14.1.2",
-    "redoc": "^2.2.0"
+    "redoc": "^2.5.4"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.131.1"
   }
 }
