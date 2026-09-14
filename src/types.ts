@@ -96,6 +96,8 @@ export interface ExecutionReceipt {
   dispute: { status: DisputeStatus; reason?: string; windowClosesAt: string; openedBy?: string; resolvedAt?: string; resolution?: string };
   signatures: { agentB?: string; agentA?: string };
   status: ReceiptStatus;
+  /** SPEC.md §4.4 (v0.19) — see sdk-js/src/types.ts's ExecutionReceipt for the full doc comment. */
+  visibility?: "public" | "participants_only";
 }
 
 /** The subset of a receipt that gets signed — signatures can't sign themselves. */

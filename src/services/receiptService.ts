@@ -4,6 +4,7 @@ import { verify } from "../../sdk-js/src/crypto/keys.js";
 import { config } from "../config.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
 import { buildSignableContent, type ReceiptContentInput } from "../../sdk-js/src/core/receiptContent.js";
+import { isReceiptRestricted, isReceiptParticipant } from "../../sdk-js/src/core/receiptVisibility.js";
 import * as jobService from "./jobService.js";
 import type { ExecutionReceipt } from "../types.js";
 
@@ -13,6 +14,7 @@ export { computeReceiptId, buildSignableContent } from "../../sdk-js/src/core/re
 export interface CreateDraftInput extends ReceiptContentInput {
   agentAId: string;
   signature: string; // base64 signature by agent_b over the canonical signable content
+  visibility?: "public" | "participants_only"; // SPEC.md §4.4 (v0.19)
 }
 
 // Same tolerance as request-signature clock skew (src/middleware/signedRequest.ts)
@@ -68,6 +70,7 @@ export function createDraft(callerDid: string, input: CreateDraftInput): Executi
     dispute: { status: "none", windowClosesAt: "" },
     signatures: { agentB: input.signature },
     status: "draft",
+    visibility: input.visibility ?? "public",
   };
   receipts.set(receiptId, receipt);
   return receipt;
@@ -77,6 +80,23 @@ export function getReceipt(id: string): ExecutionReceipt {
   const r = receipts.get(id);
   if (!r) throw notFound("RECEIPT_NOT_FOUND", `No receipt with id ${id}`);
   return r;
+}
+
+/**
+ * SPEC.md §4.4 (v0.19): a `participants_only` receipt is visible in full
+ * only to its two parties or a verifier who has attested it. `isVerifier`
+ * is supplied by the caller (route layer) rather than looked up here —
+ * verificationService already imports this module, so importing it back
+ * would be circular; the route layer already has both services in scope.
+ */
+export function isReceiptVisible(receipt: ExecutionReceipt, callerDid: string | undefined, isVerifier: boolean): boolean {
+  return !isReceiptRestricted(receipt) || isReceiptParticipant(receipt, callerDid) || isVerifier;
+}
+
+export function assertReceiptVisible(receipt: ExecutionReceipt, callerDid: string | undefined, isVerifier: boolean): void {
+  if (!isReceiptVisible(receipt, callerDid, isVerifier)) {
+    throw forbidden("RECEIPT_NOT_VISIBLE", "This receipt is participants_only; the caller is not a party to it or a verifier who has attested it");
+  }
 }
 
 /**
@@ -90,7 +110,7 @@ export function countersign(receiptId: string, callerDid: string, signature: str
   if (receipt.status !== "draft") throw conflict("NOT_DRAFT", "Only draft receipts can be countersigned");
   if (callerDid !== receipt.agentA.id) throw forbidden("NOT_REQUESTER", "Only agent_a may countersign this receipt");
 
-  const content = { ...receipt, signatures: undefined, status: undefined, dispute: undefined };
+  const content = { ...receipt, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined };
   const signingBytes = new TextEncoder().encode(canonicalize(content));
   if (!verify(Buffer.from(signature, "base64"), signingBytes, callerDid)) {
     throw badRequest("INVALID_RECEIPT_SIGNATURE", "agent_a signature does not match the receipt content");

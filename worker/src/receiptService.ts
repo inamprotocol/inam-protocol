@@ -2,6 +2,7 @@ import * as db from "./db.js";
 import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
 import { verify } from "../../sdk-js/src/crypto/keys.js";
 import { buildSignableContent, type ReceiptContentInput } from "../../sdk-js/src/core/receiptContent.js";
+import { isReceiptRestricted, isReceiptParticipant } from "../../sdk-js/src/core/receiptVisibility.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import * as jobService from "./jobService.js";
 import type { Env, ExecutionReceipt } from "./types.js";
@@ -11,6 +12,7 @@ export type { ReceiptContentInput };
 export interface CreateDraftInput extends ReceiptContentInput {
   agentAId: string;
   signature: string;
+  visibility?: "public" | "participants_only"; // SPEC.md §4.4 (v0.19)
 }
 
 const DISPUTE_WINDOW_HOURS = 72;
@@ -58,6 +60,7 @@ export async function createDraft(env: Env, callerDid: string, input: CreateDraf
     dispute: { status: "none", windowClosesAt: "" },
     signatures: { agentB: input.signature },
     status: "draft",
+    visibility: input.visibility ?? "public",
   };
   try {
     await db.insertDraftReceipt(env, receipt);
@@ -76,12 +79,28 @@ export async function getReceipt(env: Env, id: string): Promise<ExecutionReceipt
   return r;
 }
 
+/**
+ * SPEC.md §4.4 (v0.19), same reasoning as the Node reference server's
+ * identical helper (src/services/receiptService.ts) — kept here rather
+ * than imported to avoid a receiptService <-> verificationService import
+ * cycle, since `isVerifier` needs a lookup this module can't do itself.
+ */
+export function isReceiptVisible(receipt: ExecutionReceipt, callerDid: string | undefined, isVerifier: boolean): boolean {
+  return !isReceiptRestricted(receipt) || isReceiptParticipant(receipt, callerDid) || isVerifier;
+}
+
+export function assertReceiptVisible(receipt: ExecutionReceipt, callerDid: string | undefined, isVerifier: boolean): void {
+  if (!isReceiptVisible(receipt, callerDid, isVerifier)) {
+    throw forbidden("RECEIPT_NOT_VISIBLE", "This receipt is participants_only; the caller is not a party to it or a verifier who has attested it");
+  }
+}
+
 export async function countersign(env: Env, receiptId: string, callerDid: string, signature: string): Promise<ExecutionReceipt> {
   const receipt = await getReceipt(env, receiptId);
   if (receipt.status !== "draft") throw conflict("NOT_DRAFT", "Only draft receipts can be countersigned");
   if (callerDid !== receipt.agentA.id) throw forbidden("NOT_REQUESTER", "Only agent_a may countersign this receipt");
 
-  const content = { ...receipt, signatures: undefined, status: undefined, dispute: undefined };
+  const content = { ...receipt, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined };
   const signingBytes = new TextEncoder().encode(canonicalize(content));
   if (!verify(Buffer.from(signature, "base64"), signingBytes, callerDid)) {
     throw badRequest("INVALID_RECEIPT_SIGNATURE", "agent_a signature does not match the receipt content");

@@ -32,7 +32,7 @@ function finalizeReceipt(requester: ReturnType<typeof generateKeypair>, provider
   const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), provider.privateKey));
   const draft = createDraft(provider.did, { ...input, agentAId: requester.did, signature: draftSig });
 
-  const counterContent = { ...draft, signatures: undefined, status: undefined, dispute: undefined };
+  const counterContent = { ...draft, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined };
   const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize(counterContent)), requester.privateKey));
   return countersign(draft.receiptId, requester.did, counterSig);
 }

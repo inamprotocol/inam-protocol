@@ -134,20 +134,30 @@ export class InamClient {
     return this.request("GET", `/v1/agents/${encodeURIComponent(agentId)}/receipts`);
   }
 
-  /** Called by the worker (agent_b) once a job is complete, off-network. */
-  async submitWork(agentAId: string, input: ReceiptContentInput): Promise<ExecutionReceipt> {
+  /** Called by the worker (agent_b) once a job is complete, off-network.
+   * `visibility` (SPEC.md §4.4, v0.19) defaults server-side to "public" if
+   * omitted; not part of the signed content, same as `dispute`/`status`. */
+  async submitWork(
+    agentAId: string,
+    input: ReceiptContentInput,
+    opts?: { visibility?: "public" | "participants_only" },
+  ): Promise<ExecutionReceipt> {
     // receiptId is content-addressed (hash of everything below), so the
     // client computes the exact same id the server will, and signs a payload
     // that already includes it — no round-trip needed before signing.
     const content = buildSignableContent(agentAId, this.did, input);
     const signingBytes = new TextEncoder().encode(canonicalize({ ...content, dispute: undefined }));
     const signature = toBase64(sign(signingBytes, this.keypair.privateKey));
-    return this.request("POST", "/v1/receipts", { ...input, agentAId, signature }, { idempotencyKey: `receipt:${input.jobId}` });
+    return this.request("POST", "/v1/receipts", { ...input, agentAId, signature, visibility: opts?.visibility }, { idempotencyKey: `receipt:${input.jobId}` });
   }
 
   /** Called by the requester (agent_a) to accept the worker's submitted result. */
   async acceptWork(receipt: ExecutionReceipt): Promise<ExecutionReceipt> {
-    const content = { ...receipt, signatures: undefined, status: undefined, dispute: undefined };
+    // `visibility` (v0.19) is operational metadata, excluded from the
+    // signed content the same way `dispute`/`status` already are — the
+    // server's countersign verification excludes it identically
+    // (src/services/receiptService.ts / worker/src/receiptService.ts).
+    const content = { ...receipt, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined };
     const signingBytes = new TextEncoder().encode(canonicalize(content));
     const signature = toBase64(sign(signingBytes, this.keypair.privateKey));
     return this.request("POST", `/v1/receipts/${encodeURIComponent(receipt.receiptId)}/countersign`, { signature }, {

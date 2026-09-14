@@ -73,3 +73,22 @@ export function requireSignedRequest(req: Request, _res: Response, next: NextFun
   req.agentDid = agentDid;
   next();
 }
+
+/**
+ * Same verification as requireSignedRequest, for read-only (GET) endpoints
+ * where a caller identity is only needed to decide whether it may see
+ * `participants_only` receipt content (SPEC.md §4.4) — never required.
+ * No signature headers at all -> anonymous (req.agentDid stays undefined,
+ * the caller just gets the public-only view). Headers present but invalid
+ * still reject: a caller that bothers to sign a GET and gets it wrong is
+ * worth surfacing, not silently downgrading to "anonymous". Both SDKs
+ * already sign every request unconditionally (see sdk-js/src/client.ts's
+ * `request()`), so this is transparent to any SDK-based caller and only
+ * matters for a raw-HTTP/curl caller, which stays anonymous as before.
+ */
+export function optionalSignedRequest(req: Request, res: Response, next: NextFunction) {
+  if (!req.header("inam-agent") && !req.header("inam-timestamp") && !req.header("inam-signature")) {
+    return next();
+  }
+  requireSignedRequest(req, res, next);
+}

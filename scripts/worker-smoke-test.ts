@@ -92,7 +92,7 @@ async function main() {
   );
 
   // Wrong agent tries to countersign.
-  const contentForWrongSigner = { ...draft, signatures: undefined, status: undefined, dispute: undefined };
+  const contentForWrongSigner = { ...draft, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined };
   const wrongSig = await (async () => {
     const { canonicalize } = await import("../sdk-js/src/crypto/canonical.js");
     const { sign, toBase64 } = await import("../sdk-js/src/crypto/keys.js");

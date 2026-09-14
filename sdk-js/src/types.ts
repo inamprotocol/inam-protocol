@@ -93,6 +93,12 @@ export interface ExecutionReceipt {
   dispute: { status: DisputeStatus; reason?: string; windowClosesAt: string; openedBy?: string; resolvedAt?: string; resolution?: string };
   signatures: { agentB?: string; agentA?: string };
   status: ReceiptStatus;
+  /** SPEC.md §4.4 (v0.19). Absent or "public" = today's unrestricted
+   * behavior; "participants_only" gates full content to the two parties
+   * and any verifier who has attested it. Not part of the signed content
+   * or the receiptId hash — same operational-metadata treatment as
+   * `dispute`/`status`, set once at draft time, immutable after. */
+  visibility?: "public" | "participants_only";
 }
 
 /** The subset of a receipt that gets signed — signatures can't sign themselves. */
