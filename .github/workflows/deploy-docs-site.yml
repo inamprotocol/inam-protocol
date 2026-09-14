@@ -1,0 +1,54 @@
+# Deploy docs.inamprotocol.org automatically on every push to main that
+# could change what it shows — SPEC.md, openapi.yaml, or docs-site/ itself.
+#
+# This closes the exact bug that prompted it: docs-site/scripts/build.mjs
+# derives its "vX.Y Draft" badge from SPEC.md's own title line (fixed in
+# commit 540c550), but that fix only helps if a build+deploy actually runs
+# after SPEC.md changes. Before this workflow, every deploy was a manual
+# `npm run build && npx wrangler deploy` — easy to forget, which is how the
+# badge drifted to "v0.2" while SPEC.md moved on to v0.17.
+#
+# Requires a `CLOUDFLARE_API_TOKEN` repository secret (Workers Scripts:Edit
+# permission is enough) — this is the one thing that can't be done from
+# here; see the PR/commit message this workflow shipped with for the exact
+# steps. wrangler reads CLOUDFLARE_API_TOKEN from the environment natively,
+# no extra Cloudflare-maintained Action needed.
+
+name: Deploy docs-site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "SPEC.md"
+      - "openapi.yaml"
+      - "docs-site/**"
+      - ".github/workflows/deploy-docs-site.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: docs-site
+        run: npm ci
+
+      - name: Build
+        working-directory: docs-site
+        run: npm run build
+
+      - name: Deploy
+        working-directory: docs-site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
