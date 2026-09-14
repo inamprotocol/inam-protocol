@@ -9,14 +9,16 @@ export interface LinkedIdentities {
   agentpass_id?: string;
   aitp_id?: string;
   passport_id?: string;
+  erc8004_id?: string;
   a2a_endpoint?: string;
 }
 
 /** Key type used to prove control of an external identity's public key
  * before linking it (SPEC.md's external-identity linking section). P-256
  * matches ATTP (the protocol AgentPass is built on); Ed25519 is offered as
- * the same primitive INAM's own did:key already uses. */
-export type ExternalKeyType = "ed25519" | "p256";
+ * the same primitive INAM's own did:key already uses; secp256k1 is the curve
+ * ERC-8004 (EVM) identities use. */
+export type ExternalKeyType = "ed25519" | "p256" | "secp256k1";
 
 /** How one `linked` entry was verified when it was recorded (SPEC.md §2.1).
  * - `key_possession`: the caller proved control of `externalPublicKey` via a
@@ -39,6 +41,7 @@ export interface LinkedIdentityProofs {
   agentpass_id?: LinkProof;
   aitp_id?: LinkProof;
   passport_id?: LinkProof;
+  erc8004_id?: LinkProof;
   a2a_endpoint?: LinkProof;
 }
 

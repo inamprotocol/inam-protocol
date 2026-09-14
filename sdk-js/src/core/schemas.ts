@@ -30,13 +30,13 @@ export const registerAgentSchema = z.object({
 });
 
 export const linkChallengeSchema = z.object({
-  protocol: z.enum(["agentpass_id", "aitp_id", "passport_id"]),
+  protocol: z.enum(["agentpass_id", "aitp_id", "passport_id", "erc8004_id"]),
   externalPublicKey: z.string().min(1),
-  keyType: z.enum(["ed25519", "p256"]),
+  keyType: z.enum(["ed25519", "p256", "secp256k1"]),
 });
 
 export const linkSchema = z.object({
-  protocol: z.enum(["agentpass_id", "aitp_id", "passport_id", "a2a_endpoint"]),
+  protocol: z.enum(["agentpass_id", "aitp_id", "passport_id", "erc8004_id", "a2a_endpoint"]),
   value: z.string().min(1),
   challengeId: z.string().min(1).optional(),
   proofSignature: z.string().min(1).optional(),

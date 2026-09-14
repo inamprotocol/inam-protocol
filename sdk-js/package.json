@@ -1,6 +1,6 @@
 {
   "name": "inamprotocol",
-  "version": "0.3.6",
+  "version": "0.4.0",
   "description": "Reference TypeScript/JavaScript SDK for the INAM Protocol — agent identity, execution receipts, jobs, and reputation",
   "type": "module",
   "main": "./dist/index.js",
