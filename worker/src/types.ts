@@ -2,10 +2,11 @@ export interface LinkedIdentities {
   agentpass_id?: string;
   aitp_id?: string;
   passport_id?: string;
+  erc8004_id?: string;
   a2a_endpoint?: string;
 }
 
-export type ExternalKeyType = "ed25519" | "p256";
+export type ExternalKeyType = "ed25519" | "p256" | "secp256k1";
 
 /** How one `linked` entry was verified when it was recorded (SPEC.md §2.1).
  * `key_possession` proves control of `externalPublicKey` at `verifiedAt` — not
@@ -23,6 +24,7 @@ export interface LinkedIdentityProofs {
   agentpass_id?: LinkProof;
   aitp_id?: LinkProof;
   passport_id?: LinkProof;
+  erc8004_id?: LinkProof;
   a2a_endpoint?: LinkProof;
 }
 

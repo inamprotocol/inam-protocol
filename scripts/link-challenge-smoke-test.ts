@@ -1,5 +1,6 @@
 import { generateKeypair, sha256Hex, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { generateP256Keypair, p256Sign } from "../sdk-js/src/crypto/p256.js";
+import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPublicKey } from "../sdk-js/src/crypto/secp256k1.js";
 import type { Keypair } from "../sdk-js/src/crypto/keys.js";
 
 /** Exercises the external-identity link challenge/response flow over real
@@ -107,6 +108,40 @@ async function main() {
     body: { protocol: "agentpass_id", value: "agentpass:shortcut" },
   });
   check("key-derived protocol without a challenge -> 400 CHALLENGE_REQUIRED", shortcutRes.status === 400 && (shortcutRes.json as { error: { code: string } }).error.code === "CHALLENGE_REQUIRED");
+
+  // --- secp256k1 / erc8004_id (SPEC.md v0.18) ---
+  const externalSecp = generateSecp256k1Keypair();
+  const erc8004Address = ethAddressFromUncompressedPublicKey(externalSecp.publicKey);
+  const chRes4 = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+    keypair: agent,
+    idempotencyKey: `ch4:${Date.now()}`,
+    body: { protocol: "erc8004_id", externalPublicKey: toBase64(externalSecp.publicKey), keyType: "secp256k1" },
+  });
+  const { challengeId: challengeId4, challenge: challenge4 } = chRes4.json as { challengeId: string; challenge: string };
+  const proof4 = toBase64(secp256k1Sign(Buffer.from(challenge4, "hex"), externalSecp.privateKey));
+  const linkRes4 = await call("POST", `/v1/agents/${agent.did}/link`, {
+    keypair: agent,
+    idempotencyKey: `link4:${challengeId4}`,
+    body: { protocol: "erc8004_id", value: erc8004Address, challengeId: challengeId4, proofSignature: proof4 },
+  });
+  check("link completes with valid secp256k1 proof and matching address", linkRes4.status === 200 && (linkRes4.json as { linked: { erc8004_id?: string } }).linked.erc8004_id === erc8004Address);
+
+  const mismatchRes = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+    keypair: agent,
+    idempotencyKey: `ch5:${Date.now()}`,
+    body: { protocol: "erc8004_id", externalPublicKey: toBase64(externalSecp.publicKey), keyType: "secp256k1" },
+  });
+  const { challengeId: challengeId5, challenge: challenge5 } = mismatchRes.json as { challengeId: string; challenge: string };
+  const proof5 = toBase64(secp256k1Sign(Buffer.from(challenge5, "hex"), externalSecp.privateKey));
+  const mismatchLinkRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+    keypair: agent,
+    idempotencyKey: `link5:${challengeId5}`,
+    body: { protocol: "erc8004_id", value: "0x0000000000000000000000000000000000dEaD", challengeId: challengeId5, proofSignature: proof5 },
+  });
+  check(
+    "erc8004_id with a mismatched address -> 400 ERC8004_ID_MISMATCH",
+    mismatchLinkRes.status === 400 && (mismatchLinkRes.json as { error: { code: string } }).error.code === "ERC8004_ID_MISMATCH",
+  );
 
   console.log(failures === 0 ? "\nAll link-challenge HTTP smoke checks passed." : `\n${failures} check(s) FAILED.`);
   process.exitCode = failures === 0 ? 0 : 1;

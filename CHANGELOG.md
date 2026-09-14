@@ -4,6 +4,15 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.18 (Draft) — 2026-09-14
+- **Closed the interop gap v0.17 flagged**: `keyType: "secp256k1"` and a new linkable protocol `erc8004_id` for §2.1's external-identity challenge/response, so an ERC-8004 (EVM) identity can prove control of its key the same way `agentpass_id`/`aitp_id`/`passport_id` already do.
+- Wire format chosen for real-wallet compatibility, not a from-scratch scheme: `ECDSA-secp256k1(keccak256("\x19Ethereum Signed Message:\n32" + challenge), key)` — Ethereum's standard `personal_sign` prefix, so MetaMask/viem/ethers `signMessage` can produce a valid proof with zero custom code. Low-S canonical, 64-byte compact `r‖s`, no recovery byte. `externalPublicKey` for this keyType is the uncompressed SEC1 point (65 bytes).
+- `erc8004_id` **MUST** be requested with `keyType: "secp256k1"` (`UNSUPPORTED_KEY_TYPE` otherwise), and its `value` **MUST** equal the Ethereum address derived from the proven key (`"0x" + hex(keccak256(externalPublicKey[1:]))[-40:]`) — new error code `ERC8004_ID_MISMATCH` on a mismatch. Unlike the other three key-derived protocols, an ERC-8004 address is itself key-derived, so this binding check is required, not optional.
+- New `sdk-js/src/crypto/secp256k1.ts` / `sdk-python/inamprotocol/secp256k1.py`. `sdk-python` gains a new dependency, `pycryptodome`, for Keccak-256 (Ethereum's original Keccak, not NIST SHA3-256 — `cryptography` and the stdlib have neither).
+- **Caught during implementation, live, before shipping**: `@noble/curves`'s secp256k1 module defaults to `prehash: true` (SHA-256-hashes its input before signing/verifying) — passing an already-Keccak-256'd digest without `{ prehash: false }` silently double-hashes it. Self-consistent within one language (a same-language round-trip test can't catch it — sign and verify both apply the same extra hash), but produces a signature no other implementation agrees is valid. Found by an actual live cross-language proof (`scripts/secp256k1-cross-language-proof.ts` + `scripts/secp256k1_cross_language_proof.py`), the same discipline that caught the P-256 low-S bug in v0.2.
+- Not in scope: ERC-8004's own on-chain Identity Registry contract, live on-chain resolution of a linked address, EIP-712 typed-data signing, any change to INAM's own `did:key`.
+- Additive and backward compatible — no existing endpoint, field, or wire shape changes.
+
 ### v0.17 (Draft) — 2026-09-07
 - **Positioned INAM against ERC-8004 ("Trustless Agents").** Positioning only — no code, wire, endpoint, error-code, field, or package-version change.
 - New §11 table row + new **§11.1 "INAM and ERC-8004"**: ERC-8004's Identity Registry is a complementary on-chain discovery primitive INAM has no equivalent of; ERC-8004's Reputation Registry and INAM's execution receipts solve the same problem with opposite trust models.
@@ -108,6 +117,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.4.0 — 2026-09-14
+- New crypto module `sdk-js/src/crypto/secp256k1.ts` (SPEC.md v0.18, §2.1): `generateSecp256k1Keypair`, `secp256k1Sign`, `secp256k1Verify`, `ethPersonalSignDigest`, `ethAddressFromUncompressedPublicKey` — all exported from the package root. Signing digest is Ethereum's `personal_sign` convention (keccak256-prefixed), not a bespoke scheme, so a real EVM wallet can produce a compatible proof.
+- `linkChallengeSchema`/`linkSchema` (`sdk-js/src/core/schemas.ts`) gain `secp256k1` (keyType) and `erc8004_id` (protocol) enum members. Minor bump, not patch — new public API surface.
+
 ### 0.3.6 — 2026-08-31
 - Added `client.resolveDispute(receiptId, note?)` (SPEC.md v0.15, §4.3) — the dispute opener withdraws it, `disputed → finalized`. New `resolveDisputeSchema` exported from `sdk-js/src/core/schemas.ts`. `ExecutionReceipt.dispute` type gains optional `openedBy` / `resolvedAt` / `resolution`.
 
@@ -140,6 +153,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.6.10 — 2026-09-14
+- **secp256k1 / erc8004_id external-identity linking (SPEC.md v0.18, §2.1).** Both runtimes: `requestLinkChallenge` accepts `keyType: "secp256k1"`; `completeLink` verifies it via the new `secp256k1Verify` and, for `protocol === "erc8004_id"`, additionally checks `value` against the address derived from `externalPublicKey`, rejecting a mismatch with the new `ERC8004_ID_MISMATCH`. `erc8004_id` requested with any other `keyType` is rejected `UNSUPPORTED_KEY_TYPE`.
+- `LinkedIdentities`/`LinkedIdentityProofs`/`ExternalKeyType` (both `src/types.ts` and `worker/src/types.ts`) gain `erc8004_id`/`secp256k1`. No D1 migration — `linked`/`linked_proof` are generic JSON columns, unaffected by new enum members.
+- Live cross-language proof + new regression tests (Node 82→87, Worker 58→60; Python 36→42).
 
 ### 0.6.9 — 2026-08-31 (external audit fixes, continued)
 - **Job & dispute state-machine completeness (SPEC.md v0.15, §3.2/§4.3, audit #11).**
@@ -232,6 +250,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.5.0 — 2026-09-14
+- New module `inamprotocol/secp256k1.py` (SPEC.md v0.18, §2.1): `generate_secp256k1_keypair`, `secp256k1_sign`, `secp256k1_verify`, `eth_personal_sign_digest`, `eth_address_from_uncompressed_public_key` — mirrors `p256.py`'s structure (compact `r‖s`, low-S canonicalization via `cryptography`'s `SECP256K1` curve + `Prehashed`).
+- New dependency: `pycryptodome` (`Crypto.Hash.keccak`) — Ethereum's Keccak-256 isn't available in `cryptography` or the stdlib, and is a different digest than NIST SHA3-256 despite the similar name. Minor bump, not patch — new dependency + public API surface.
 
 ### 0.4.4 — 2026-08-31
 - Added `client.resolve_dispute(receipt_id, note=None)` (SPEC.md v0.15, §4.3). Mirrors the TypeScript SDK's `client.resolveDispute()`.

@@ -4,6 +4,7 @@ import { config } from "../config.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
 import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
+import { secp256k1Verify, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
 import type { AgentRecord, ExternalKeyType, LinkChallenge, LinkedIdentities, LinkedIdentityProofs, LinkProof } from "../types.js";
 
 export function registerAgent(callerDid: string, input: { capabilities: string[]; metadata?: Record<string, unknown> }): AgentRecord {
@@ -74,16 +75,16 @@ export function revokeAgent(callerDid: string, reason: string): AgentRecord {
   return updated;
 }
 
-const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "a2a_endpoint"] as const;
+const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "erc8004_id", "a2a_endpoint"] as const;
 type LinkableProtocol = (typeof LINKABLE_PROTOCOLS)[number];
 
 /** Key-identity protocols require cryptographic proof of control via the
  * challenge/response flow below. `a2a_endpoint` is just a service URL, not a
  * key-derived identity, so it stays a plain unchecked claim. */
-const CHALLENGEABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id"] as const;
+const CHALLENGEABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "erc8004_id"] as const;
 type ChallengeableProtocol = (typeof CHALLENGEABLE_PROTOCOLS)[number];
 
-const KEY_TYPES = ["ed25519", "p256"] as const;
+const KEY_TYPES = ["ed25519", "p256", "secp256k1"] as const;
 
 function assertLinkableProtocol(protocol: string): asserts protocol is LinkableProtocol {
   if (!LINKABLE_PROTOCOLS.includes(protocol as LinkableProtocol)) {
@@ -134,6 +135,12 @@ export function requestLinkChallenge(callerDid: string, protocol: string, extern
   if (!(KEY_TYPES as readonly string[]).includes(keyType)) {
     throw badRequest("UNSUPPORTED_KEY_TYPE", `keyType must be one of: ${KEY_TYPES.join(", ")}`);
   }
+  // erc8004_id is an Ethereum address, which only derives from a secp256k1
+  // key — pairing it with ed25519/p256 would make the address-binding check
+  // below impossible to satisfy.
+  if (protocol === "erc8004_id" && keyType !== "secp256k1") {
+    throw badRequest("UNSUPPORTED_KEY_TYPE", "erc8004_id requires keyType secp256k1");
+  }
   getAgent(callerDid); // 404s if the caller isn't a registered agent
   const challengeId = randomUUID();
   const now = Date.now();
@@ -172,9 +179,26 @@ export function completeLink(callerDid: string, protocol: string, value: string,
   const verified =
     record.keyType === "ed25519"
       ? verifyRawEd25519(signatureBytes, challengeBytes, publicKeyBytes)
-      : p256Verify(signatureBytes, challengeBytes, publicKeyBytes);
+      : record.keyType === "secp256k1"
+        ? secp256k1Verify(signatureBytes, challengeBytes, publicKeyBytes)
+        : p256Verify(signatureBytes, challengeBytes, publicKeyBytes);
   if (!verified) {
     throw badRequest("PROOF_INVALID", "Challenge signature does not verify against the claimed external public key");
+  }
+
+  // erc8004_id is an Ethereum address, not an arbitrary string — it MUST be
+  // the address derived from the key that was just proven, or a caller could
+  // claim any address next to a proof of an unrelated key (SPEC.md §2.1).
+  if (protocol === "erc8004_id") {
+    let derivedAddress: string;
+    try {
+      derivedAddress = ethAddressFromUncompressedPublicKey(publicKeyBytes);
+    } catch {
+      throw badRequest("PROOF_INVALID", "externalPublicKey is not a valid uncompressed secp256k1 public key");
+    }
+    if (value.toLowerCase() !== derivedAddress) {
+      throw badRequest("ERC8004_ID_MISMATCH", `erc8004_id ${value} does not match the address derived from externalPublicKey (${derivedAddress})`);
+    }
   }
 
   record.used = true;

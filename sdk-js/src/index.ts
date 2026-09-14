@@ -18,6 +18,15 @@ export {
 
 export { generateP256Keypair, p256Sign, p256Verify, type P256Keypair } from "./crypto/p256.js";
 
+export {
+  generateSecp256k1Keypair,
+  secp256k1Sign,
+  secp256k1Verify,
+  ethAddressFromUncompressedPublicKey,
+  ethPersonalSignDigest,
+  type Secp256k1Keypair,
+} from "./crypto/secp256k1.js";
+
 export { canonicalize } from "./crypto/canonical.js";
 
 export { computeReceiptId, buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";

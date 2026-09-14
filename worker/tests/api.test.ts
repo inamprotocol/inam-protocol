@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import worker from "../src/index.js";
 import { generateKeypair, sha256Hex, sign, toBase64 } from "../../sdk-js/src/crypto/keys.js";
 import { generateP256Keypair, p256Sign } from "../../sdk-js/src/crypto/p256.js";
+import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
 import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
 import { testOperatorKeypair } from "./testOperator.js";
 
@@ -820,6 +821,50 @@ describe("external identity link challenges", () => {
     });
     expect(linkRes.status).toBe(200);
     expect((linkRes.json as { linked: { passport_id?: string } }).linked.passport_id).toBe("passport:worker-test");
+  });
+
+  it("links erc8004_id after a valid secp256k1 challenge signature whose address matches the key (SPEC.md v0.18)", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["x"] } });
+    const external = generateSecp256k1Keypair();
+    const address = ethAddressFromUncompressedPublicKey(external.publicKey);
+
+    const chRes = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+      keypair: agent,
+      idempotencyKey: `ch:${Date.now()}`,
+      body: { protocol: "erc8004_id", externalPublicKey: toBase64(external.publicKey), keyType: "secp256k1" },
+    });
+    expect(chRes.status).toBe(201);
+    const { challengeId, challenge } = chRes.json as { challengeId: string; challenge: string };
+    const proof = toBase64(secp256k1Sign(new Uint8Array(Buffer.from(challenge, "hex")), external.privateKey));
+    const linkRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link:${challengeId}`,
+      body: { protocol: "erc8004_id", value: address, challengeId, proofSignature: proof },
+    });
+    expect(linkRes.status).toBe(200);
+    expect((linkRes.json as { linked: { erc8004_id?: string } }).linked.erc8004_id).toBe(address);
+  });
+
+  it("rejects erc8004_id when the claimed address doesn't match the proven key", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["x"] } });
+    const external = generateSecp256k1Keypair();
+
+    const chRes = await call("POST", `/v1/agents/${agent.did}/link/challenge`, {
+      keypair: agent,
+      idempotencyKey: `ch:${Date.now()}`,
+      body: { protocol: "erc8004_id", externalPublicKey: toBase64(external.publicKey), keyType: "secp256k1" },
+    });
+    const { challengeId, challenge } = chRes.json as { challengeId: string; challenge: string };
+    const proof = toBase64(secp256k1Sign(new Uint8Array(Buffer.from(challenge, "hex")), external.privateKey));
+    const linkRes = await call("POST", `/v1/agents/${agent.did}/link`, {
+      keypair: agent,
+      idempotencyKey: `link:${challengeId}`,
+      body: { protocol: "erc8004_id", value: "0x0000000000000000000000000000000000dEaD", challengeId, proofSignature: proof },
+    });
+    expect(linkRes.status).toBe(400);
+    expect((linkRes.json as { error: { code: string } }).error.code).toBe("ERC8004_ID_MISMATCH");
   });
 
   it("rejects a signature from the wrong external key", async () => {

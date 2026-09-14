@@ -80,7 +80,7 @@ paths:
           schema: { type: number }
         - name: supports
           in: query
-          description: One of agentpass_id, aitp_id, passport_id, a2a_endpoint
+          description: One of agentpass_id, aitp_id, passport_id, erc8004_id, a2a_endpoint
           schema: { type: string }
         - name: include_revoked
           in: query
@@ -255,9 +255,9 @@ paths:
               type: object
               required: [protocol, externalPublicKey, keyType]
               properties:
-                protocol: { type: string, enum: [agentpass_id, aitp_id, passport_id] }
-                externalPublicKey: { type: string, description: "Base64-encoded external public key" }
-                keyType: { type: string, enum: [ed25519, p256] }
+                protocol: { type: string, enum: [agentpass_id, aitp_id, passport_id, erc8004_id] }
+                externalPublicKey: { type: string, description: "Base64-encoded external public key (uncompressed SEC1 point for secp256k1)" }
+                keyType: { type: string, enum: [ed25519, p256, secp256k1] }
       responses:
         "201":
           description: Challenge issued
@@ -271,7 +271,7 @@ paths:
   /agents/{id}/link:
     post:
       operationId: linkIdentity
-      summary: Claim an external identity — agentpass_id/aitp_id/passport_id require a completed challenge (SPEC.md §2.1); a2a_endpoint does not, since it isn't a key-derived identity
+      summary: Claim an external identity — agentpass_id/aitp_id/passport_id/erc8004_id require a completed challenge (SPEC.md §2.1); a2a_endpoint does not, since it isn't a key-derived identity
       tags: [agents]
       security: [{ inamSignature: [] }]
       parameters:
@@ -285,9 +285,9 @@ paths:
               type: object
               required: [protocol, value]
               properties:
-                protocol: { type: string, enum: [agentpass_id, aitp_id, passport_id, a2a_endpoint] }
-                value: { type: string }
-                challengeId: { type: string, description: "Required for agentpass_id/aitp_id/passport_id — from a prior /link/challenge call" }
+                protocol: { type: string, enum: [agentpass_id, aitp_id, passport_id, erc8004_id, a2a_endpoint] }
+                value: { type: string, description: "For erc8004_id, MUST equal the Ethereum address derived from externalPublicKey (SPEC.md §2.1) — otherwise rejected as ERC8004_ID_MISMATCH" }
+                challengeId: { type: string, description: "Required for agentpass_id/aitp_id/passport_id/erc8004_id — from a prior /link/challenge call" }
                 proofSignature: { type: string, description: "Base64 signature over the challenge, from the external private key" }
       responses:
         "200":
@@ -721,6 +721,7 @@ components:
         agentpass_id: { type: string }
         aitp_id: { type: string }
         passport_id: { type: string }
+        erc8004_id: { type: string, description: "Ethereum address, 0x-prefixed lowercase hex (SPEC.md §2.1)" }
         a2a_endpoint: { type: string }
 
     LinkProof:
@@ -734,7 +735,7 @@ components:
       properties:
         method: { type: string, enum: [key_possession, unverified_claim] }
         verifiedAt: { type: string, format: date-time }
-        keyType: { type: string, enum: [ed25519, p256], description: "present iff method is key_possession" }
+        keyType: { type: string, enum: [ed25519, p256, secp256k1], description: "present iff method is key_possession" }
         externalPublicKey: { type: string, description: "base64; present iff method is key_possession" }
       required: [method, verifiedAt]
 
@@ -745,6 +746,7 @@ components:
         agentpass_id: { $ref: "#/components/schemas/LinkProof" }
         aitp_id: { $ref: "#/components/schemas/LinkProof" }
         passport_id: { $ref: "#/components/schemas/LinkProof" }
+        erc8004_id: { $ref: "#/components/schemas/LinkProof" }
         a2a_endpoint: { $ref: "#/components/schemas/LinkProof" }
 
     LinkChallenge:
