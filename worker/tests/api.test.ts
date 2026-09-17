@@ -16,6 +16,8 @@ import { testOperatorKeypair } from "./testOperator.js";
 // exec() splits on newlines and chokes on a CREATE TABLE spanning several.
 const SCHEMA_STATEMENTS = [
   "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, linked_proof TEXT NOT NULL DEFAULT '{}', stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, is_authorized_verifier INTEGER NOT NULL DEFAULT 0, revoked_at TEXT, revocation_reason TEXT)",
+  "CREATE TABLE IF NOT EXISTS agent_capabilities (agent_id TEXT NOT NULL REFERENCES agents(id), capability TEXT NOT NULL, PRIMARY KEY (agent_id, capability))",
+  "CREATE INDEX IF NOT EXISTS idx_agent_capabilities_capability ON agent_capabilities(capability)",
   "CREATE TABLE IF NOT EXISTS receipts (receipt_id TEXT PRIMARY KEY, agent_a_id TEXT NOT NULL REFERENCES agents(id), agent_b_id TEXT NOT NULL REFERENCES agents(id), status TEXT NOT NULL, completed_at TEXT NOT NULL, amount_usd REAL NOT NULL DEFAULT 0, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_a ON receipts(agent_a_id)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_b ON receipts(agent_b_id)",
@@ -1049,6 +1051,37 @@ describe("agent identity revocation (SPEC.md §2.2, audit #10)", () => {
     const res = await call("POST", `/v1/agents/${b.did}/revoke`, { keypair: a, idempotencyKey: `rev-other:${Date.now()}`, body: { reason: "not mine" } });
     expect(res.status).toBe(403);
     expect((res.json as { error: { code: string } }).error.code).toBe("NOT_SUBJECT_AGENT");
+  });
+});
+
+describe("agent capability search indexing (audit #14, Worker half)", () => {
+  it("searchAgents by capability returns only matching agents, via an indexed join not a full table scan", async () => {
+    const cap = `idx-cap-${Math.random().toString(36).slice(2)}`;
+    const other = `idx-other-${Math.random().toString(36).slice(2)}`;
+    const matching: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const kp = generateKeypair();
+      await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: [cap] } });
+      matching.push(kp.did);
+    }
+    for (let i = 0; i < 3; i++) {
+      const kp = generateKeypair();
+      await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: [other] } });
+    }
+
+    const res = (await call("GET", `/v1/agents/search?capability=${cap}`)).json as { agents: { id: string }[] };
+    expect(res.agents.map((a) => a.id).sort()).toEqual([...matching].sort());
+
+    const plan = (
+      await env.DB.prepare(
+        "EXPLAIN QUERY PLAN SELECT a.* FROM agents a JOIN agent_capabilities c ON c.agent_id = a.id WHERE c.capability = ? AND a.revoked_at IS NULL",
+      )
+        .bind(cap)
+        .all()
+    ).results as Array<{ detail: string }>;
+    const detail = plan.map((r) => r.detail).join("; ");
+    expect(detail).not.toMatch(/SCAN/);
+    expect(detail).toMatch(/USING INDEX/);
   });
 });
 

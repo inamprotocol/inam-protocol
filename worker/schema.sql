@@ -33,6 +33,19 @@ CREATE TABLE IF NOT EXISTS agents (
   revocation_reason TEXT
 );
 
+-- One row per (agent, capability), so `capability` search (agentService.ts's
+-- searchAgents, audit #14) can use an index instead of pulling every agent
+-- row and filtering `capabilities` (a JSON array column) in application
+-- code. Capabilities are set once at registration and never mutated
+-- afterward, so this table is written once per agent, never updated.
+CREATE TABLE IF NOT EXISTS agent_capabilities (
+  agent_id TEXT NOT NULL REFERENCES agents(id),
+  capability TEXT NOT NULL,
+  PRIMARY KEY (agent_id, capability)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_capabilities_capability ON agent_capabilities(capability);
+
 CREATE TABLE IF NOT EXISTS receipts (
   receipt_id TEXT PRIMARY KEY,
   agent_a_id TEXT NOT NULL REFERENCES agents(id),
