@@ -240,10 +240,5 @@ export interface SearchQuery {
 }
 
 export function searchAgents(query: SearchQuery): AgentRecord[] {
-  return agents.all().filter((a) => {
-    if (a.revokedAt && !query.includeRevoked) return false;
-    if (query.capability && !a.capabilities.includes(query.capability)) return false;
-    if (query.supports && !(query.supports in a.linked)) return false;
-    return true;
-  });
+  return agents.search(query);
 }

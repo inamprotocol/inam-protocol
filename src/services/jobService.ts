@@ -52,15 +52,7 @@ export interface JobSearchQuery {
 }
 
 export function searchJobs(query: JobSearchQuery): JobRecord[] {
-  return jobs.all().filter((j) => {
-    if (query.capability && j.capability !== query.capability) return false;
-    if (query.status && j.status !== query.status) return false;
-    return true;
-  });
-}
-
-export function listByPoster(agentId: string): JobRecord[] {
-  return jobs.all().filter((j) => j.postedBy === agentId || j.acceptedAgentId === agentId);
+  return jobs.search(query);
 }
 
 export function submitOffer(jobId: string, callerDid: string, message?: string): JobRecord {

@@ -93,7 +93,7 @@ export function submitVerification(callerDid: string, input: SubmitVerificationI
   // the same receipt (different content, so the identical-content check
   // above doesn't catch it), and both would stand as live records
   // simultaneously with no way to tell which is authoritative.
-  if (verifications.all().some((v) => v.receiptId === input.receiptId && v.verifier === callerDid)) {
+  if (verifications.hasDecisionBy(input.receiptId, callerDid)) {
     throw conflict("VERIFIER_ALREADY_DECIDED", "This verifier has already submitted a verification for this receipt");
   }
 
@@ -118,7 +118,7 @@ export function getVerification(id: string): VerificationRecord {
 }
 
 export function listByReceipt(receiptId: string): VerificationRecord[] {
-  return verifications.all().filter((v) => v.receiptId === receiptId);
+  return verifications.listByReceipt(receiptId);
 }
 
 /** Used by reputationService: does this receipt's independent-verification
