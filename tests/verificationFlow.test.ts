@@ -533,4 +533,39 @@ describe("independent verification (SPEC.md §12)", () => {
     const { signature } = signVerification(verifier, input);
     await expectApiError(() => submitVerification(verifier.did, { ...input, signature }), "VERIFIER_NOT_AUTHORIZED");
   });
+
+  it("stops a since-revoked verifier's past `verified` record from still boosting reputation (v0.22)", () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
+
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: verifier.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const { signature } = signVerification(verifier, input);
+    submitVerification(verifier.did, { ...input, signature });
+
+    const before = computeReputation(provider.did);
+    expect(before.components.attestedReceipts).toBe(1);
+
+    // The operator later decides this verifier shouldn't have been trusted
+    // and revokes it — the boost from its already-submitted attestation
+    // must not persist, since the whole point of operator authorization is
+    // that the operator can stop vouching for an identity's attestations.
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, false);
+
+    const after = computeReputation(provider.did);
+    expect(after.components.attestedReceipts).toBe(0);
+  });
 });

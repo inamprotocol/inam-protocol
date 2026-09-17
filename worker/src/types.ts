@@ -91,7 +91,17 @@ export interface ExecutionReceipt {
   result: { outputHash: string; outputUri?: string; completedAt: string };
   settlement?: { paymentRef?: string; amount?: string; currency?: string };
   verification: { method: VerificationMethod; verifier?: string; outcome: ReceiptOutcome };
-  dispute: { status: DisputeStatus; reason?: string; windowClosesAt: string; openedBy?: string; resolvedAt?: string; resolution?: string };
+  /** SPEC.md §4.3 (v0.22) — see sdk-js/src/types.ts's ExecutionReceipt for the full doc comment on resolutionDeadline/usedBy. */
+  dispute: {
+    status: DisputeStatus;
+    reason?: string;
+    windowClosesAt: string;
+    openedBy?: string;
+    resolvedAt?: string;
+    resolution?: string;
+    resolutionDeadline?: string;
+    usedBy?: string[];
+  };
   signatures: { agentB?: string; agentA?: string };
   status: ReceiptStatus;
   /** SPEC.md §4.4 (v0.19) — see sdk-js/src/types.ts's ExecutionReceipt for the full doc comment. */

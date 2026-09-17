@@ -1126,6 +1126,36 @@ describe("dispute + job state machine (SPEC.md §3.2/§4.3, audit #11)", () => {
     expect((redispute.json as { error: { code: string } }).error.code).toBe("DISPUTE_ALREADY_RESOLVED");
   });
 
+  it("lets the other party still dispute after one party disputes-and-resolves its own copy (closes a self-immunization exploit)", async () => {
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+    const rid = await finalize(requester, worker_);
+
+    // worker preemptively disputes its own receipt and immediately withdraws
+    // it, trying to burn the "already resolved" gate before the requester
+    // ever gets a chance to raise a real dispute.
+    await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute`, { keypair: worker_, idempotencyKey: `di:${rid}`, body: { reason: "self-check" } });
+    await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute/resolve`, { keypair: worker_, idempotencyKey: `dir:${rid}`, body: {} });
+
+    // requester's real dispute must still go through
+    const real = await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute`, { keypair: requester, idempotencyKey: `dr2:${rid}`, body: { reason: "output was actually wrong" } });
+    expect(real.status).toBe(200);
+    expect((real.json as { status: string }).status).toBe("disputed");
+
+    // requester, having now used its own right by resolving, can't re-dispute
+    await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute/resolve`, { keypair: requester, idempotencyKey: `dr2r:${rid}`, body: {} });
+    const redispute = await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute`, { keypair: requester, idempotencyKey: `dr3:${rid}`, body: { reason: "changed my mind again" } });
+    expect(redispute.status).toBe(409);
+    expect((redispute.json as { error: { code: string } }).error.code).toBe("DISPUTE_ALREADY_RESOLVED");
+
+    // and worker's right is spent too, from its own earlier dispute
+    const workerRetry = await call("POST", `/v1/receipts/${encodeURIComponent(rid)}/dispute`, { keypair: worker_, idempotencyKey: `dr4:${rid}`, body: { reason: "one more try" } });
+    expect(workerRetry.status).toBe(409);
+    expect((workerRetry.json as { error: { code: string } }).error.code).toBe("DISPUTE_ALREADY_RESOLVED");
+  });
+
   it("rejects an offer on a job past its expiresAt", async () => {
     const poster = generateKeypair();
     const worker_ = generateKeypair();
@@ -1654,6 +1684,37 @@ describe("independent verification (SPEC.md §12)", () => {
     });
     expect(res.status).toBe(403);
     expect((res.json as { error: { code: string } }).error.code).toBe("VERIFIER_NOT_AUTHORIZED");
+  });
+
+  it("stops a since-revoked verifier's past `verified` record from still boosting reputation (v0.22)", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
+
+    const receipt = await finalizeReceipt(requester, provider);
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const submitRes = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(submitRes.status).toBe(201);
+
+    const before = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { attestedReceipts: number } };
+    expect(before.components.attestedReceipts).toBe(1);
+
+    const revokeRes = await call("POST", `/v1/agents/${encodeURIComponent(verifier.did)}/verifier-status`, {
+      keypair: testOperatorKeypair,
+      idempotencyKey: `revoke2:${Date.now()}`,
+      body: { authorized: false },
+    });
+    expect(revokeRes.status).toBe(200);
+
+    const after = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { attestedReceipts: number } };
+    expect(after.components.attestedReceipts).toBe(0);
   });
 });
 

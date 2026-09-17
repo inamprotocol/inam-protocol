@@ -3,6 +3,7 @@ import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
 import { hasVerifiedAttestation } from "./verificationService.js";
 import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
+import { isDisputeActive, type DisputeCheckable } from "../../sdk-js/src/core/disputeLifecycle.js";
 import type { Env, ReputationResult } from "./types.js";
 
 const CONFIDENCE_SATURATION = 5;
@@ -17,11 +18,17 @@ function clamp(n: number, lo: number, hi: number): number {
   return Math.max(lo, Math.min(hi, n));
 }
 
+// A disputed receipt whose opener never resolves it would otherwise zero out
+// its reputation contribution forever at no cost — see disputeLifecycle.ts.
+function countsTowardReputation(r: DisputeCheckable): boolean {
+  return r.status === "finalized" || (r.status === "disputed" && !isDisputeActive(r));
+}
+
 async function baseTrust(env: Env, agentId: string): Promise<number> {
   const agent = await db.getAgent(env, agentId);
   if (!agent) return 0.05;
 
-  const finalized = (await listByAgent(env, agentId)).filter((r) => r.status === "finalized");
+  const finalized = (await listByAgent(env, agentId)).filter(countsTowardReputation);
   const successCount = finalized.filter((r) => r.verification.outcome === "success").length;
   const successRatio = finalized.length > 0 ? successCount / finalized.length : 0.5;
 
@@ -34,8 +41,8 @@ async function baseTrust(env: Env, agentId: string): Promise<number> {
 export async function computeReputation(env: Env, agentId: string): Promise<ReputationResult> {
   const record = await getAgent(env, agentId);
   const all = await listByAgent(env, agentId);
-  const finalized = all.filter((r) => r.status === "finalized");
-  const disputedCount = all.filter((r) => r.status === "disputed").length;
+  const finalized = all.filter(countsTowardReputation);
+  const disputedCount = all.filter((r) => isDisputeActive(r)).length;
 
   // Deterministic order for the wash-trading cap below: earliest-first, so a
   // counterparty's original receipts count toward trust and a later flood

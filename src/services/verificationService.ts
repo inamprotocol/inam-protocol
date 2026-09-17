@@ -143,8 +143,24 @@ export function listByReceipt(receiptId: string): VerificationRecord[] {
  * previous rule's asymmetry, where a minority `verified` unconditionally
  * won. The common case (exactly one verifier submits `verified`, zero
  * `rejected`) is unaffected: 1 > 0 is still true. */
+// v0.22 fix: also requires the verifier to be *currently* operator-authorized
+// (checked at submission time in submitVerification, but never re-checked
+// afterward). An audit found that revoking a verifier's authorization
+// (agentService.setVerifierStatus) didn't stop its past `verified` records
+// from still applying reputationService's 1.5x attestation boost forever.
+// There is no point-in-time authorization history (SPEC.md §12.3 doesn't
+// require one); this uses current status for both `verified` and `rejected`
+// records consistently, the same conservative-default philosophy the
+// protocol already applies elsewhere (a disputed receipt is excluded from
+// reputation regardless of who was at fault).
 export function hasVerifiedAttestation(receiptId: string): boolean {
-  const records = listByReceipt(receiptId);
+  const records = listByReceipt(receiptId).filter((v) => {
+    try {
+      return getAgent(v.verifier).isAuthorizedVerifier;
+    } catch {
+      return false; // verifier no longer registered (e.g. self-revoked)
+    }
+  });
   const verifiedCount = records.filter((v) => v.result === "verified").length;
   const rejectedCount = records.filter((v) => v.result === "rejected").length;
   return verifiedCount > rejectedCount;

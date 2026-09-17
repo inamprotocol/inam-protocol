@@ -154,9 +154,24 @@ export async function listByReceipt(env: Env, receiptId: string): Promise<Verifi
  * previous rule's asymmetry, where a minority `verified` unconditionally
  * won. The common case (exactly one verifier submits `verified`, zero
  * `rejected`) is unaffected: 1 > 0 is still true. */
+// v0.22 fix — see src/services/verificationService.ts's identical helper for
+// the full doc comment: also requires the verifier to be *currently*
+// operator-authorized, not just authorized at submission time, so revoking a
+// verifier stops its past `verified` records from still boosting reputation.
 export async function hasVerifiedAttestation(env: Env, receiptId: string): Promise<boolean> {
   const records = await listByReceipt(env, receiptId);
-  const verifiedCount = records.filter((v) => v.result === "verified").length;
-  const rejectedCount = records.filter((v) => v.result === "rejected").length;
+  const authorizedRecords: typeof records = [];
+  for (const v of records) {
+    try {
+      const agent = await getAgent(env, v.verifier);
+      if (agent.isAuthorizedVerifier) authorizedRecords.push(v);
+    } catch {
+      // verifier no longer registered — shouldn't happen (agents are only
+      // ever revoked, not deleted), but don't let a lookup failure crash
+      // reputation computation for every other receipt.
+    }
+  }
+  const verifiedCount = authorizedRecords.filter((v) => v.result === "verified").length;
+  const rejectedCount = authorizedRecords.filter((v) => v.result === "rejected").length;
   return verifiedCount > rejectedCount;
 }
