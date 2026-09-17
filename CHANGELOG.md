@@ -4,6 +4,14 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.23 (Draft) — 2026-09-17
+- **Verifier revocation now retroactively stops the attestation boost (§12.4/§12.5).** `hasVerifiedAttestation` only checked a Verification record's `result`, never re-checking whether its `verifier` is still operator-authorized — a revoked verifier's already-submitted `verified` record kept applying reputation's 1.5x boost forever, since authorization was only checked at submission time.
+- Fixed in both runtimes: a Verification record from a currently-unauthorized verifier no longer counts toward either side of the `verified`-vs-`rejected` majority. Uses current status, not a point-in-time authorization history (none is added). No wire/D1 change.
+
+### v0.22 (Draft) — 2026-09-17
+- **Dispute lifecycle fairness (§4.3).** Two fixes an external review reproduced locally: (1) per-party dispute right — `dispute.usedBy` (DID array) replaces the single shared `resolved` gate, so a party disputing-and-resolving its own receipt no longer permanently blocks the *other* party's real dispute (`resolveDispute` was already opener-only, so this needed no cooperation to pull off); (2) `dispute.resolutionDeadline` — an open dispute the opener never resolves now stops excluding the receipt from reputation once the same window-length deadline passes, instead of holding it hostage forever at zero cost.
+- Both fields additive/optional; no D1 migration (receipts store as an opaque blob in both runtimes). New shared `sdk-js/src/core/disputeLifecycle.ts` (`hasUsedDisputeRight`, `isDisputeActive`), mirrored in both `reputationService.ts`/`receiptService.ts`. New regression tests in both runtimes.
+
 ### v0.21 (Draft) — 2026-09-17
 - **Documentation-only: disambiguated the `verification.method` (§4.1) / `Verification.method` (§12) naming collision** an independent reviewer actually fell into — same field name, two unrelated enums, no relationship at the wire level. New cross-referencing "naming note" in both §4.1 and §12, matching JSDoc on `VerificationMethod`/`IndependentVerificationMethod` in all three TypeScript type files, new `description` fields on both `method` properties (plus a fleshed-out `Receipt.verification` schema, previously untyped) in `openapi.yaml`.
 - No rename: both are already distinctly named in code. A wire-level rename was considered and rejected — disproportionate to a documentation problem, especially for a field already live in two published SDK packages. No wire/endpoint/field/enum/package-version change.
@@ -134,6 +142,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.4.2 — 2026-09-17
+- `ExecutionReceipt.dispute` type gains optional `resolutionDeadline`/`usedBy` (SPEC.md v0.22, §4.3). New `sdk-js/src/core/disputeLifecycle.ts` (`hasUsedDisputeRight`, `isDisputeActive`) — the storage-free dispute-fairness logic shared by both server runtimes. Patch bump: types-only for the SDK's own public surface (client methods unchanged).
+
 ### 0.4.1 — 2026-09-14
 - `submitWork(agentAId, input, opts?)` gains an optional third-argument `opts.visibility` (SPEC.md v0.19, §4.4) — `"public"` (server default) or `"participants_only"`. Not part of the signed content; `acceptWork`'s content-reconstruction spread already excludes it the same way it excludes `dispute`/`status`.
 - New `sdk-js/src/core/receiptVisibility.ts` (`isReceiptRestricted`/`isReceiptParticipant`) — the storage-free half of the visibility check shared by both server runtimes.
@@ -175,6 +186,14 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.7.3 (Node) / 0.6.15 (Worker) — 2026-09-17
+- **Verifier revocation now retroactively stops the attestation boost (SPEC.md v0.23, §12.4/§12.5).** `hasVerifiedAttestation` (`src/services/verificationService.ts`/`worker/src/verificationService.ts`) now filters Verification records to only those from a *currently* `isAuthorizedVerifier` verifier before computing the `verified`-vs-`rejected` majority — previously it only checked `result`, so a verifier the operator later revoked kept boosting reputation off attestations it made while still authorized. New regression tests in both runtimes: submit a `verified` record while authorized (`attestedReceipts: 1`), revoke, confirm it drops to `0`. Node 95→96, Worker 66→67 (both +1). No wire/D1 change.
+
+### 0.7.2 (Node) / 0.6.14 (Worker) — 2026-09-17
+- **Dispute lifecycle fairness (SPEC.md v0.22, §4.3).** Closes a self-immunization exploit an external review reproduced locally: `openDispute` used to reject with `DISPUTE_ALREADY_RESOLVED` for *any* caller once *either* party had disputed-and-resolved the receipt — so a worker could preemptively dispute its own receipt, immediately withdraw it (`resolveDispute` is opener-only, no cooperation needed), and permanently block the requester's real dispute. Now tracked per-party via `dispute.usedBy`; only a party that has itself already used its dispute right is rejected.
+- **Dispute resolution deadline.** An open dispute previously excluded a receipt from reputation for as long as its opener chose never to resolve it, at no cost — a free hostage mechanism. New `dispute.resolutionDeadline` (set at open time, same duration as the dispute-opening window): past it, an unresolved `disputed`/`open` receipt rejoins the positive side of the reputation calculation and `in_dispute` clears, though it remains formally resolvable later. Storage-level status is unchanged — this only affects `reputationService.computeReputation`'s treatment.
+- Both changes additive/optional on `dispute`; no D1 migration. `src/services/receiptService.ts`+`reputationService.ts` and their Worker mirrors, new shared `sdk-js/src/core/disputeLifecycle.ts`. Node 93→95 (2 new), Worker 65→66 (1 new).
 
 ### 0.6.13 (Worker only — Node reference server unaffected, stays 0.7.1) — 2026-09-17
 - **D1 agent-capability search now indexed (audit #14, Worker half).** `searchAgents` (`worker/src/agentService.ts`) full-scanned every agent row (`allAgents` + an in-application `.filter()`) on every `GET /agents/search?capability=`. New `agent_capabilities(agent_id, capability)` junction table + index (`worker/schema.sql`), populated by `insertAgent` at registration (batched with the `agents` insert so they can't drift — capabilities are never mutated after registration, so this is write-once). New `db.searchAgentsByCapability` joins it instead of scanning.

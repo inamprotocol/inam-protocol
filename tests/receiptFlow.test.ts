@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 import { registerAgent } from "../src/services/agentService.js";
@@ -169,6 +169,63 @@ describe("execution receipt lifecycle", () => {
     await expectApiError(() => openDispute(rid, requester.did, "changed my mind"), "DISPUTE_ALREADY_RESOLVED");
     // and can't re-resolve
     await expectApiError(() => resolveDispute(rid, requester.did), "NOT_DISPUTED");
+  });
+
+  it("lets the other party still dispute after one party disputes-and-resolves its own copy (closes a self-immunization exploit)", async () => {
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+
+    const input = freshInput("job_dispute_immunize");
+    const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
+    const draft = createDraft(worker.did, { ...input, agentAId: requester.did, signature });
+    const finalized = countersign(draft.receiptId, requester.did, signCountersign(draft, requester.privateKey));
+    const rid = finalized.receiptId;
+
+    // worker (agent_b) preemptively disputes its own receipt and immediately
+    // withdraws it, trying to burn the receipt's one-shot "already resolved"
+    // gate before the requester ever gets a chance to raise a real dispute.
+    openDispute(rid, worker.did, "self-check");
+    resolveDispute(rid, worker.did);
+
+    // requester's real dispute must still go through — worker using its own
+    // dispute right must not consume requester's separate right.
+    const disputed = openDispute(rid, requester.did, "output was actually wrong");
+    expect(disputed.status).toBe("disputed");
+
+    // requester, having now used its own right by resolving, can't re-dispute
+    resolveDispute(rid, requester.did);
+    await expectApiError(() => openDispute(rid, requester.did, "changed my mind again"), "DISPUTE_ALREADY_RESOLVED");
+    // and worker's right is spent too, from its own earlier dispute
+    await expectApiError(() => openDispute(rid, worker.did, "one more try"), "DISPUTE_ALREADY_RESOLVED");
+  });
+
+  it("stops counting an unresolved dispute as active once its resolution deadline passes (no free-forever hostage)", async () => {
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+
+    const input = freshInput("job_dispute_expiry");
+    const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
+    const draft = createDraft(worker.did, { ...input, agentAId: requester.did, signature });
+    const finalized = countersign(draft.receiptId, requester.did, signCountersign(draft, requester.privateKey));
+    const rid = finalized.receiptId;
+
+    openDispute(rid, requester.did, "output was wrong");
+    expect(computeReputation(worker.did).flags).toContain("in_dispute");
+    expect(computeReputation(worker.did).components.verifiedReceipts).toBe(0);
+
+    try {
+      vi.useFakeTimers({ now: Date.now() });
+      vi.setSystemTime(Date.now() + 73 * 3600_000); // just past the 72h resolution deadline, still never resolved
+      const rep = computeReputation(worker.did);
+      expect(rep.flags).not.toContain("in_dispute");
+      expect(rep.components.verifiedReceipts).toBe(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("rejects a future result.completedAt beyond clock-skew tolerance", async () => {

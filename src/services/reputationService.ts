@@ -3,7 +3,16 @@ import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
 import { hasVerifiedAttestation } from "./verificationService.js";
 import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
+import { isDisputeActive, type DisputeCheckable } from "../../sdk-js/src/core/disputeLifecycle.js";
 import type { ReputationResult } from "../types.js";
+
+// A disputed receipt whose opener never resolves it would otherwise zero out
+// its reputation contribution forever at no cost — see disputeLifecycle.ts.
+// This treats a receipt as reputation-eligible once its open dispute is no
+// longer active (finalized outright, or disputed past resolutionDeadline).
+function countsTowardReputation(r: DisputeCheckable): boolean {
+  return r.status === "finalized" || (r.status === "disputed" && !isDisputeActive(r));
+}
 
 const CONFIDENCE_SATURATION = 5; // weight units at which confidence ~= 0.5
 const STAKE_NORMALIZATION_USD = 10_000; // stake at which the stake component saturates to 1.0
@@ -36,7 +45,7 @@ function baseTrust(agentId: string): number {
   })();
   if (!agent) return 0.05; // unregistered/unknown counterparty: minimal, not zero, trust
 
-  const finalized = listByAgent(agentId).filter((r) => r.status === "finalized");
+  const finalized = listByAgent(agentId).filter(countsTowardReputation);
   const successCount = finalized.filter((r) => r.verification.outcome === "success").length;
   const successRatio = finalized.length > 0 ? successCount / finalized.length : 0.5; // neutral prior for a brand-new agent
 
@@ -49,8 +58,8 @@ function baseTrust(agentId: string): number {
 export function computeReputation(agentId: string): ReputationResult {
   const record = getAgent(agentId);
   const all = listByAgent(agentId);
-  const finalized = all.filter((r) => r.status === "finalized");
-  const disputedCount = all.filter((r) => r.status === "disputed").length;
+  const finalized = all.filter(countsTowardReputation);
+  const disputedCount = all.filter((r) => isDisputeActive(r)).length;
 
   // Deterministic order for the wash-trading cap below: earliest-first, so a
   // counterparty's original receipts count toward trust and a later flood

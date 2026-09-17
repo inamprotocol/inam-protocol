@@ -3,6 +3,7 @@ import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
 import { verify } from "../../sdk-js/src/crypto/keys.js";
 import { buildSignableContent, type ReceiptContentInput } from "../../sdk-js/src/core/receiptContent.js";
 import { isReceiptRestricted, isReceiptParticipant } from "../../sdk-js/src/core/receiptVisibility.js";
+import { hasUsedDisputeRight } from "../../sdk-js/src/core/disputeLifecycle.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import * as jobService from "./jobService.js";
 import type { Env, ExecutionReceipt } from "./types.js";
@@ -130,19 +131,25 @@ export async function openDispute(env: Env, receiptId: string, callerDid: string
   if (![receipt.agentA.id, receipt.agentB.id].includes(callerDid)) {
     throw forbidden("NOT_PARTICIPANT", "Only a party to the receipt may dispute it");
   }
-  // One dispute per receipt lifetime (SPEC.md §4.3) — a resolved receipt is
-  // back to `finalized` but must not be re-disputable.
-  if (receipt.dispute.status === "resolved") {
-    throw conflict("DISPUTE_ALREADY_RESOLVED", "This receipt was already disputed and resolved — it cannot be disputed again");
+  // Each party gets one dispute right per receipt (SPEC.md §4.3), tracked
+  // separately in dispute.usedBy — not one shared "resolved" flag, which let
+  // a party immunize a receipt against the *other* party's real dispute by
+  // disputing itself and immediately withdrawing.
+  if (hasUsedDisputeRight(receipt, callerDid)) {
+    throw conflict("DISPUTE_ALREADY_RESOLVED", "You already disputed and resolved this receipt — you cannot dispute it again");
   }
   if (receipt.status !== "finalized") throw conflict("NOT_FINALIZED", "Only finalized receipts can be disputed");
   if (new Date(receipt.dispute.windowClosesAt).getTime() < Date.now()) {
     throw conflict("DISPUTE_WINDOW_CLOSED", "The dispute window for this receipt has closed");
   }
+  // Resolution deadline — see sdk-js/src/core/disputeLifecycle.ts's doc
+  // comment: past this point an unresolved dispute stops counting as active
+  // for reputation, so it can't be held open forever at no cost.
+  const resolutionDeadline = new Date(Date.now() + DISPUTE_WINDOW_HOURS * 3600_000).toISOString();
   const disputed: ExecutionReceipt = {
     ...receipt,
     status: "disputed",
-    dispute: { ...receipt.dispute, status: "open", reason, openedBy: callerDid },
+    dispute: { ...receipt.dispute, status: "open", reason, openedBy: callerDid, resolutionDeadline },
   };
   const applied = await db.disputeReceiptIfFinalized(env, receiptId, disputed);
   if (!applied) {
@@ -168,7 +175,13 @@ export async function resolveDispute(env: Env, receiptId: string, callerDid: str
   const resolved: ExecutionReceipt = {
     ...receipt,
     status: "finalized",
-    dispute: { ...receipt.dispute, status: "resolved", resolvedAt: new Date().toISOString(), resolution: note },
+    dispute: {
+      ...receipt.dispute,
+      status: "resolved",
+      resolvedAt: new Date().toISOString(),
+      resolution: note,
+      usedBy: [...(receipt.dispute.usedBy ?? []), callerDid],
+    },
   };
   const applied = await db.resolveDisputeIfDisputed(env, receiptId, resolved);
   if (!applied) {

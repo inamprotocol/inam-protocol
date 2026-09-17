@@ -96,7 +96,21 @@ export interface ExecutionReceipt {
   result: { outputHash: string; outputUri?: string; completedAt: string };
   settlement?: { paymentRef?: string; amount?: string; currency?: string };
   verification: { method: VerificationMethod; verifier?: string; outcome: ReceiptOutcome };
-  dispute: { status: DisputeStatus; reason?: string; windowClosesAt: string; openedBy?: string; resolvedAt?: string; resolution?: string };
+  dispute: {
+    status: DisputeStatus;
+    reason?: string;
+    windowClosesAt: string;
+    openedBy?: string;
+    resolvedAt?: string;
+    resolution?: string;
+    /** SPEC.md §4.3 (v0.22). Set when a dispute is opened; past this point
+     * an unresolved dispute stops counting as active for reputation. */
+    resolutionDeadline?: string;
+    /** SPEC.md §4.3 (v0.22). DIDs that have already disputed-and-resolved
+     * this receipt — each party gets one dispute right, tracked separately
+     * so one party's resolved dispute can't block the other party's real one. */
+    usedBy?: string[];
+  };
   signatures: { agentB?: string; agentA?: string };
   status: ReceiptStatus;
   /** SPEC.md §4.4 (v0.19). Absent or "public" = today's unrestricted
