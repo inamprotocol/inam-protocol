@@ -286,4 +286,53 @@ describe("execution receipt lifecycle", () => {
     // underlying receipts, not a second, disconnected data source.
     expect(qRep.components.asProvider.receipts + qRep.components.asRequester.receipts).toBe(qRep.components.verifiedReceipts);
   });
+
+  it("caps wash-trading: two fresh identities transacting only with each other never move trustScore", () => {
+    // An independent review found 15 finalized receipts between two fresh,
+    // otherwise-empty identities pushed trustScore 5.5 -> 21 with no
+    // ceiling; concentrated_counterparty set correctly but nothing acted on
+    // it. Both agents here only ever transact with each other -- their
+    // "otherReceipts" (finalized receipts with any *other* counterparty) is
+    // always 0, so every one of these receipts should be capped to zero
+    // weight once the flag is live (>=3 finalized), and trustScore should
+    // flatline rather than keep climbing.
+    const attackerA = generateKeypair();
+    const attackerB = generateKeypair();
+    registerAgent(attackerA.did, { capabilities: ["job.posting", "x"] });
+    registerAgent(attackerB.did, { capabilities: ["job.posting", "x"] });
+
+    function washTrade(jobId: string) {
+      const input = freshInput(jobId);
+      const signature = signDraft(attackerA.did, attackerB.privateKey, attackerB.did, input);
+      const draft = createDraft(attackerB.did, { ...input, agentAId: attackerA.did, signature });
+      countersign(draft.receiptId, attackerA.did, signCountersign(draft, attackerA.privateKey));
+    }
+
+    for (let i = 0; i < 2; i++) washTrade(`wash_${i}`);
+    const beforeFlag = computeReputation(attackerB.did);
+    expect(beforeFlag.flags).not.toContain(`concentrated_counterparty:${attackerA.did}`); // <3 finalized, not flagged yet
+
+    washTrade("wash_2"); // 3rd receipt: ratio 3/3 = 1.0 > 0.6, now flagged
+    const atFlag = computeReputation(attackerB.did);
+    expect(atFlag.flags).toContain(`concentrated_counterparty:${attackerA.did}`);
+    expect(atFlag.trustScore).toBe(0); // otherReceipts = 0 -> cap = 0 -> zero weight
+
+    for (let i = 3; i < 15; i++) washTrade(`wash_${i}`);
+    const after15 = computeReputation(attackerB.did);
+    expect(after15.components.rawReceipts).toBe(15); // receipts are still real, just unweighted
+    expect(after15.trustScore).toBe(0); // still flat, not climbing toward 21
+
+    // A legitimate, diversified counterparty gives the capped agent real
+    // headroom: one receipt with someone else raises otherReceipts to 1, so
+    // up to floor(1.5 * 1) = 1 of the wash-traded receipts can count again.
+    const honest = generateKeypair();
+    registerAgent(honest.did, { capabilities: ["job.posting"] });
+    const input = freshInput("honest_job");
+    const signature = signDraft(honest.did, attackerB.privateKey, attackerB.did, input);
+    const draft = createDraft(attackerB.did, { ...input, agentAId: honest.did, signature });
+    countersign(draft.receiptId, honest.did, signCountersign(draft, honest.privateKey));
+
+    const withHonestHistory = computeReputation(attackerB.did);
+    expect(withHonestHistory.trustScore).toBeGreaterThan(0);
+  });
 });

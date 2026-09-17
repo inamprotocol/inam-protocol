@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.20 (Draft) — 2026-09-17
+- **Wash-trading cap (reputation scoring fix).** `concentrated_counterparty` flagged correctly but nothing acted on it — 15 finalized receipts between two fresh, otherwise-empty identities pushed `trustScore` 5.5 → 21 with no ceiling. §5.2's sub-linear pair weighting (`log(pairCount)/pairCount`) only slowed that growth, never stopped it.
+- Fix: once an agent has ≥3 finalized receipts, each counterparty's receipts count toward `trustScore` only up to `floor(threshold/(1-threshold) * otherReceipts)` — `otherReceipts` being that agent's finalized-receipt count with every *other* counterparty. Two identities with no other history get a cap of `0`: wash-trading between just the two of them now contributes zero weight, no matter the volume. Evaluated earliest-first by `result.completedAt`, so real early history counts and a later flood is what's capped.
+- A first version of this fix capped a counterparty at a share of *its own* total (`floor(threshold * finalized.length)`) — caught before shipping that this doesn't actually stop growth, since an attacker's flood inflates that total right along with the cap.
+- Receipts beyond the cap still count toward `rawReceipts`/`verifiedReceipts`/`attestedReceipts` — only their weight in the trust computation is capped. Reference-implementation scoring fix, applied identically to both runtimes. No wire/endpoint/field change, no D1 migration.
+
 ### v0.19 (Draft) — 2026-09-14
 - **Privacy/access control (audit #13)**: every receipt was fully public until now. New **§4.4**: optional `visibility` field, `"public"` (default, unchanged behavior) or `"participants_only"` — full content gated to the receipt's two parties or an attesting verifier on `GET /receipts/:id`/`GET /receipts/:id/verifications` (`RECEIPT_NOT_VISIBLE`, 403) and silently filtered out of `GET /agents/:id/receipts`'s listing.
 - New `optionalSignedRequest` middleware (both runtimes) — verifies a signature when present (rejecting an invalid one as always), allows an unsigned `GET` through as anonymous. Caller identity for the visibility check is always cryptographically proven, never a claimed header.
@@ -165,6 +171,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.7.1 (Node) / 0.6.12 (Worker) — 2026-09-17
+- **Wash-trading cap (SPEC.md v0.20, §5.2).** `computeReputation` in both `src/services/reputationService.ts` and `worker/src/reputationService.ts`: once an agent has ≥3 finalized receipts, a counterparty's receipts beyond `floor(threshold/(1-threshold) * otherReceipts)` contribute zero weight (evaluated earliest-first by `result.completedAt`). Live-proven against a running server: 15 receipts between two fresh identities now flatlines `trustScore` at 0 from the 3rd receipt onward instead of climbing to 21. New regression tests: `tests/receiptFlow.test.ts` (Node), `worker/tests/api.test.ts` (Worker). No wire/D1 change.
 
 ### 0.7.0 (Node reference server only — Worker unchanged at 0.6.11) — 2026-09-17
 - **Storage engine: `node:sqlite` replaces the JSON-file `JsonStore` (audit #14, Node half).** `src/storage/jsonStore.ts` deleted; `src/storage/db.ts` now opens a `registry.db` (WAL mode) under `INAM_DATA_DIR` with indexed tables (`agents`+`agent_capabilities`, `receipts`, `jobs`, `verifications` — each a JSON blob column plus the columns services actually filter/join on).

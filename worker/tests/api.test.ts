@@ -407,6 +407,50 @@ describe("execution receipt lifecycle", () => {
     expect(qRep.components.asProvider.receipts + qRep.components.asRequester.receipts).toBe(qRep.components.verifiedReceipts);
   });
 
+  it("caps wash-trading: two fresh identities transacting only with each other never move trustScore", async () => {
+    // An independent review found 15 finalized receipts between two fresh,
+    // otherwise-empty identities pushed trustScore 5.5 -> 21 with no
+    // ceiling; concentrated_counterparty set correctly but nothing acted on
+    // it. Both agents here only ever transact with each other, so their
+    // "otherReceipts" (finalized receipts with any *other* counterparty) is
+    // always 0 -- every receipt should be capped to zero weight once the
+    // flag is live (>=3 finalized), and trustScore should flatline.
+    const attackerA = generateKeypair();
+    const attackerB = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: attackerA, idempotencyKey: `reg:${attackerA.did}`, body: { capabilities: ["job.posting", "x"] } });
+    await call("POST", "/v1/agents", { keypair: attackerB, idempotencyKey: `reg:${attackerB.did}`, body: { capabilities: ["job.posting", "x"] } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    async function finalize(requester: Keypair, worker_: Keypair, jobId: string) {
+      const input = job({ jobId });
+      const content = buildSignableContent(requester.did, worker_.did, input);
+      const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+      const draftRes = await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `receipt:${jobId}`, body: { ...input, agentAId: requester.did, signature: draftSig } });
+      const draft = draftRes.json as { receiptId: string };
+      const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+      await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, { keypair: requester, idempotencyKey: `countersign:${draft.receiptId}`, body: { signature: counterSig } });
+    }
+
+    for (let i = 0; i < 2; i++) await finalize(attackerA, attackerB, `wash_${i}`);
+    const beforeFlag = (await call("GET", `/v1/agents/${encodeURIComponent(attackerB.did)}/reputation`)).json as { flags: string[]; trustScore: number };
+    expect(beforeFlag.flags).not.toContain(`concentrated_counterparty:${attackerA.did}`); // <3 finalized, not flagged yet
+
+    await finalize(attackerA, attackerB, "wash_2"); // 3rd receipt: ratio 3/3 = 1.0 > 0.6, now flagged
+    const atFlag = (await call("GET", `/v1/agents/${encodeURIComponent(attackerB.did)}/reputation`)).json as { flags: string[]; trustScore: number };
+    expect(atFlag.flags).toContain(`concentrated_counterparty:${attackerA.did}`);
+    expect(atFlag.trustScore).toBe(0); // otherReceipts = 0 -> cap = 0 -> zero weight
+
+    for (let i = 3; i < 15; i++) await finalize(attackerA, attackerB, `wash_${i}`);
+    const after15 = (await call("GET", `/v1/agents/${encodeURIComponent(attackerB.did)}/reputation`)).json as {
+      trustScore: number;
+      components: { rawReceipts: number };
+    };
+    expect(after15.components.rawReceipts).toBe(15); // receipts are still real, just unweighted
+    expect(after15.trustScore).toBe(0); // still flat, not climbing toward 21
+  });
+
   it("buckets settlement volume by currency instead of summing every currency as USD", async () => {
     // An audit found `components.volumeUsd` summed `settlement.amount` across
     // every currency -- a 1000 TRY receipt added 1000 to a USD-labelled
