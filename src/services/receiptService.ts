@@ -129,7 +129,7 @@ export function countersign(receiptId: string, callerDid: string, signature: str
 }
 
 export function listByAgent(agentId: string): ExecutionReceipt[] {
-  return receipts.all().filter((r) => r.agentA.id === agentId || r.agentB.id === agentId);
+  return receipts.listByAgent(agentId);
 }
 
 export function openDispute(receiptId: string, callerDid: string, reason: string): ExecutionReceipt {

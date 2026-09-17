@@ -166,6 +166,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Node reference server & Cloudflare Worker
 
+### 0.7.0 (Node reference server only — Worker unchanged at 0.6.11) — 2026-09-17
+- **Storage engine: `node:sqlite` replaces the JSON-file `JsonStore` (audit #14, Node half).** `src/storage/jsonStore.ts` deleted; `src/storage/db.ts` now opens a `registry.db` (WAL mode) under `INAM_DATA_DIR` with indexed tables (`agents`+`agent_capabilities`, `receipts`, `jobs`, `verifications` — each a JSON blob column plus the columns services actually filter/join on).
+- Every `.all().filter()` linear scan (`searchAgents`, `searchJobs`, `receipts.listByAgent`, `verifications.listByReceipt`/decision-check) is now an indexed query; `EXPLAIN QUERY PLAN` asserted index-only in `tests/storageQueries.test.ts`. Dead code `jobService.listByPoster` (no caller) removed.
+- No wire/SPEC/D1 change — storage engine is non-normative (SPEC.md §33). CI's root Node job + `publish-npm.yml` bumped to Node 24 (`node:sqlite` needs no flag there; Worker/Python CI jobs unaffected, stay on Node 22/Python 3.11).
+- Node 92/92 (90 + 2 new), Worker 63/63 unchanged.
+
 ### 0.6.11 — 2026-09-14
 - **Receipt visibility (SPEC.md v0.19, §4.4, audit #13).** `POST /receipts` accepts an optional `visibility: "public" | "participants_only"` (defaults `"public"`). `GET /receipts/:id` and `GET /receipts/:id/verifications` reject a non-participant/non-attesting-verifier caller on a `participants_only` receipt with `RECEIPT_NOT_VISIBLE` (403); `GET /agents/:id/receipts` silently omits it from the list instead.
 - New `optionalSignedRequest` (`src/middleware/signedRequest.ts`, `worker/src/signedRequest.ts`) — same signature verification as `requireSignedRequest` when headers are present, but lets an unsigned `GET` through as anonymous rather than rejecting it. Used only by the three read endpoints above; every write endpoint is unchanged.
