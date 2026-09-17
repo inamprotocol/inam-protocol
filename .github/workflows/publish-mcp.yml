@@ -33,7 +33,7 @@ jobs:
       run:
         working-directory: mcp
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       # mcp-publisher ships as a Go binary release, not an npm package.
       # Bump this URL's version tag when the registry cuts a new release.
