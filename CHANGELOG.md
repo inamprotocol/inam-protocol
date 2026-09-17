@@ -4,6 +4,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.21 (Draft) — 2026-09-17
+- **Documentation-only: disambiguated the `verification.method` (§4.1) / `Verification.method` (§12) naming collision** an independent reviewer actually fell into — same field name, two unrelated enums, no relationship at the wire level. New cross-referencing "naming note" in both §4.1 and §12, matching JSDoc on `VerificationMethod`/`IndependentVerificationMethod` in all three TypeScript type files, new `description` fields on both `method` properties (plus a fleshed-out `Receipt.verification` schema, previously untyped) in `openapi.yaml`.
+- No rename: both are already distinctly named in code. A wire-level rename was considered and rejected — disproportionate to a documentation problem, especially for a field already live in two published SDK packages. No wire/endpoint/field/enum/package-version change.
+
 ### v0.20 (Draft) — 2026-09-17
 - **Wash-trading cap (reputation scoring fix).** `concentrated_counterparty` flagged correctly but nothing acted on it — 15 finalized receipts between two fresh, otherwise-empty identities pushed `trustScore` 5.5 → 21 with no ceiling. §5.2's sub-linear pair weighting (`log(pairCount)/pairCount`) only slowed that growth, never stopped it.
 - Fix: once an agent has ≥3 finalized receipts, each counterparty's receipts count toward `trustScore` only up to `floor(threshold/(1-threshold) * otherReceipts)` — `otherReceipts` being that agent's finalized-receipt count with every *other* counterparty. Two identities with no other history get a cap of `0`: wash-trading between just the two of them now contributes zero weight, no matter the volume. Evaluated earliest-first by `result.completedAt`, so real early history counts and a later flood is what's capped.
