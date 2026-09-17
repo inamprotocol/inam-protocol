@@ -37,11 +37,41 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   const finalized = all.filter((r) => r.status === "finalized");
   const disputedCount = all.filter((r) => r.status === "disputed").length;
 
+  // Deterministic order for the wash-trading cap below: earliest-first, so a
+  // counterparty's original receipts count toward trust and a later flood
+  // against the same counterparty is what gets capped — not whatever order
+  // the storage layer happens to return.
+  finalized.sort((a, b) => new Date(a.result.completedAt).getTime() - new Date(b.result.completedAt).getTime());
+
   const pairCounts = new Map<string, number>();
   for (const r of finalized) {
     const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
     pairCounts.set(counterparty, (pairCounts.get(counterparty) ?? 0) + 1);
   }
+
+  // Wash-trading cap: sub-linear pair weighting below only slows growth from
+  // a repeat counterparty, it never stops it — enough receipts between the
+  // same two agents still push trustScore up without bound. A cap expressed
+  // as a share of *this counterparty's own inflated total* (e.g.
+  // floor(threshold * finalized.length)) doesn't actually stop that: the
+  // attacker's flood grows finalized.length right along with it, so the cap
+  // grows too. Instead each counterparty's cap is sized off the agent's
+  // finalized receipts with *other* counterparties — the only volume an
+  // attacker controlling just one side of the wash trade can't inflate for
+  // themselves — at the same ratio (threshold / (1 - threshold)) that keeps
+  // them at or under the concentrated_counterparty threshold once capped.
+  // Two fresh identities with zero other history therefore get a cap of 0:
+  // wash-trading alone, with no independent counterparty ever vouching for
+  // either side, contributes nothing to trustScore.
+  const counterpartyWeightCap = new Map<string, number>();
+  if (finalized.length >= 3) {
+    const capRatio = CONCENTRATED_COUNTERPARTY_THRESHOLD / (1 - CONCENTRATED_COUNTERPARTY_THRESHOLD);
+    for (const [counterparty, count] of pairCounts.entries()) {
+      const otherCount = finalized.length - count;
+      counterpartyWeightCap.set(counterparty, Math.floor(capRatio * otherCount));
+    }
+  }
+  const counterpartyWeightedCount = new Map<string, number>();
 
   let weightedSuccessSum = 0;
   let weightSum = 0;
@@ -112,7 +142,15 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     if (isAttested) attestedCount++;
     const attestationBoost = isAttested ? ATTESTATION_BOOST : 1;
 
-    let weight = pairWeight * counterpartyTrust * decay * attestationBoost;
+    const countedSoFar = counterpartyWeightedCount.get(counterparty) ?? 0;
+    const cap = counterpartyWeightCap.get(counterparty) ?? Infinity;
+    let weight: number;
+    if (countedSoFar >= cap) {
+      weight = 0; // over the concentrated-counterparty cap — see comment above
+    } else {
+      weight = pairWeight * counterpartyTrust * decay * attestationBoost;
+      counterpartyWeightedCount.set(counterparty, countedSoFar + 1);
+    }
     // Defense in depth against any other source of a non-finite weight (a
     // malformed completedAt predating the INVALID_TIMESTAMP check above, a
     // future edge case) corrupting this agent's *entire* score: `weightSum
