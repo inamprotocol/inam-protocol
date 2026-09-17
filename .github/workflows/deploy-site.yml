@@ -1,0 +1,53 @@
+# Deploy inamprotocol.org automatically on every push to main that could
+# change what its landing page shows — SPEC.md's version, any of the three
+# package versions site/scripts/build.mjs derives its footer from, or
+# site/ itself.
+#
+# Same fix as .github/workflows/deploy-docs-site.yml, applied here: this
+# page hardcoded its own separate copies of the same version numbers
+# (audit #15, doc/version drift) and had no CD wired up at all, so a fixed
+# build script alone wouldn't have kept it live-accurate.
+#
+# Requires the same `CLOUDFLARE_API_TOKEN` repository secret as
+# deploy-docs-site.yml (Workers Scripts:Edit permission is enough).
+
+name: Deploy site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "SPEC.md"
+      - "worker/package.json"
+      - "sdk-js/package.json"
+      - "sdk-python/pyproject.toml"
+      - "site/**"
+      - ".github/workflows/deploy-site.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: site
+        run: npm ci
+
+      - name: Build
+        working-directory: site
+        run: npm run build
+
+      - name: Deploy
+        working-directory: site
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
