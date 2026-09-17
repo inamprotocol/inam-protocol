@@ -4,7 +4,7 @@
   "compatibility_date": "2025-01-01",
   "workers_dev": true,
   "assets": {
-    "directory": "./public"
+    "directory": "./dist"
   },
   "routes": [
     { "pattern": "inamprotocol.org", "custom_domain": true }
