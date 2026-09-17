@@ -70,6 +70,12 @@ export interface AgentRecord {
   revocationReason?: string;
 }
 
+/** SPEC.md §4.1 — the receipt's own self-declared claim of how its parties
+ *  say the work was checked, set by agent_b at draft time. **Not** the same
+ *  as `IndependentVerificationMethod` (§12) below: this is unenforced today
+ *  (only `payer_confirmation` carries real weight), while a Verification is
+ *  a separate, signed third-party attestation resource with its own
+ *  distinct `method` enum. */
 export type VerificationMethod = "payer_confirmation" | "independent_validator" | "test_suite_pass";
 export type ReceiptOutcome = "success" | "partial" | "failed";
 export type ReceiptStatus = "draft" | "finalized" | "disputed";
@@ -164,12 +170,16 @@ export interface JobRecord {
   expiresAt?: string;
 }
 
-/** SPEC.md §12: independent attestation that a finalized receipt's output
- * actually satisfies its job's requirements. Single verifier, no
- * draft/countersign step — complete and signed on submission. */
+/** SPEC.md §12 — how an independent Verification's signer actually checked
+ *  the work. **Not** the same as `VerificationMethod` (§4.1) above: that's
+ *  the receipt's own unenforced self-declared claim; this is a separate,
+ *  first-class attestation resource's method, with its own distinct enum. */
 export type IndependentVerificationMethod = "deterministic" | "agent_attestation";
 export type VerificationResult = "verified" | "rejected";
 
+/** SPEC.md §12: independent attestation that a finalized receipt's output
+ * actually satisfies its job's requirements. Single verifier, no
+ * draft/countersign step — complete and signed on submission. */
 export interface VerificationRecord {
   verificationVersion: "1.0";
   verificationId: string;

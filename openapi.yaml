@@ -616,7 +616,7 @@ paths:
               properties:
                 receiptId: { type: string }
                 verifier: { type: string, description: "Must equal the caller's own INAM ID" }
-                method: { type: string, enum: [deterministic, agent_attestation] }
+                method: { type: string, enum: [deterministic, agent_attestation], description: "How this verifier actually checked the work (SPEC.md §12). Not the receipt's own verification.method (§4.1), which is a differently-valued, unenforced self-declared claim." }
                 outputHash: { type: string, description: "MUST match the referenced receipt's result.outputHash" }
                 result: { type: string, enum: [verified, rejected] }
                 score: { type: number, minimum: 0, maximum: 1 }
@@ -849,7 +849,7 @@ components:
         jobId: { type: string }
         provider: { type: string, description: "The referenced receipt's agentB.id — derived, not client-supplied" }
         verifier: { type: string }
-        method: { type: string, enum: [deterministic, agent_attestation] }
+        method: { type: string, enum: [deterministic, agent_attestation], description: "How this verifier actually checked the work (SPEC.md §12). Not the receipt's own verification.method (§4.1), which is a differently-valued, unenforced self-declared claim." }
         outputHash: { type: string }
         result: { type: string, enum: [verified, rejected] }
         score: { type: ["number", "null"] }
@@ -886,8 +886,9 @@ components:
         verification:
           type: object
           required: [method, outcome]
+          description: "The receipt's own self-declared claim of how the work was checked (SPEC.md §4.1) — distinct from the separate Verification resource (§12, POST /verifications) and its own, differently-valued `method` enum."
           properties:
-            method: { type: string, enum: [payer_confirmation, independent_validator, test_suite_pass] }
+            method: { type: string, enum: [payer_confirmation, independent_validator, test_suite_pass], description: "Self-declared by agent_b, unenforced today except payer_confirmation. Not the Verification resource's method (§12)." }
             verifier: { type: string }
             outcome: { type: string, enum: [success, partial, failed] }
         signature: { type: string, description: "base64 Ed25519 signature by agent_b over the canonical receipt content" }
@@ -903,7 +904,13 @@ components:
         task: { type: object }
         result: { type: object }
         settlement: { type: object }
-        verification: { type: object }
+        verification:
+          type: object
+          description: "The receipt's own self-declared claim of how the work was checked (SPEC.md §4.1) — not the same resource as Verification (§12, the /verifications endpoints below), which is a separate, independently-signed third-party attestation with its own distinct `method` enum."
+          properties:
+            method: { type: string, enum: [payer_confirmation, independent_validator, test_suite_pass], description: "Self-declared by agent_b, unenforced today except payer_confirmation. Not Verification.method (§12) below." }
+            verifier: { type: string }
+            outcome: { type: string, enum: [success, partial, failed] }
         dispute:
           type: object
           properties:
