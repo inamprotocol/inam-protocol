@@ -229,11 +229,8 @@ export interface SearchQuery {
 }
 
 export async function searchAgents(env: Env, query: SearchQuery): Promise<AgentRecord[]> {
-  const all = await db.allAgents(env);
-  return all.filter((a) => {
-    if (a.revokedAt && !query.includeRevoked) return false;
-    if (query.capability && !a.capabilities.includes(query.capability)) return false;
-    if (query.supports && !(query.supports in a.linked)) return false;
-    return true;
-  });
+  const all = query.capability
+    ? await db.searchAgentsByCapability(env, query.capability, query.includeRevoked ?? false)
+    : (await db.allAgents(env)).filter((a) => query.includeRevoked || !a.revokedAt);
+  return query.supports ? all.filter((a) => query.supports! in a.linked) : all;
 }

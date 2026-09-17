@@ -21,10 +21,13 @@ export class AgentAlreadyExistsError extends Error {
  */
 export async function insertAgent(env: Env, agent: AgentRecord): Promise<void> {
   try {
-    await env.DB.prepare(
-      `INSERT INTO agents (id, capabilities, metadata, linked, linked_proof, stake_usd, created_at, is_authorized_verifier) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-    )
-      .bind(
+    // Batched with the agent_capabilities inserts (audit #14) so a
+    // registration can't leave the indexed junction table out of sync with
+    // the agents row it belongs to.
+    await env.DB.batch([
+      env.DB.prepare(
+        `INSERT INTO agents (id, capabilities, metadata, linked, linked_proof, stake_usd, created_at, is_authorized_verifier) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      ).bind(
         agent.id,
         JSON.stringify(agent.capabilities),
         JSON.stringify(agent.metadata),
@@ -33,8 +36,11 @@ export async function insertAgent(env: Env, agent: AgentRecord): Promise<void> {
         agent.stakeUsd,
         agent.createdAt,
         agent.isAuthorizedVerifier ? 1 : 0,
-      )
-      .run();
+      ),
+      ...agent.capabilities.map((capability) =>
+        env.DB.prepare("INSERT INTO agent_capabilities (agent_id, capability) VALUES (?, ?)").bind(agent.id, capability),
+      ),
+    ]);
   } catch (err) {
     if (err instanceof Error && err.message.includes(UNIQUE_VIOLATION)) {
       throw new AgentAlreadyExistsError(agent.id);
@@ -72,6 +78,21 @@ export async function revokeAgentIfActive(env: Env, id: string, reason: string, 
 
 export async function allAgents(env: Env): Promise<AgentRecord[]> {
   const { results } = await env.DB.prepare("SELECT * FROM agents").all();
+  return results.map(rowToAgent);
+}
+
+/** Indexed capability search (audit #14) — joins the agent_capabilities
+ *  junction table instead of `allAgents` + an in-application filter over
+ *  every row. `includeRevoked` is the only other condition pushed into SQL;
+ *  `supports` stays a JS post-filter in agentService.ts (rare, always
+ *  AND'd with a capability/revoked filter that's already cheap). */
+export async function searchAgentsByCapability(env: Env, capability: string, includeRevoked: boolean): Promise<AgentRecord[]> {
+  const { results } = await env.DB.prepare(
+    `SELECT a.* FROM agents a JOIN agent_capabilities c ON c.agent_id = a.id
+     WHERE c.capability = ? ${includeRevoked ? "" : "AND a.revoked_at IS NULL"}`,
+  )
+    .bind(capability)
+    .all();
   return results.map(rowToAgent);
 }
 

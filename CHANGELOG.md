@@ -176,6 +176,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Node reference server & Cloudflare Worker
 
+### 0.6.13 (Worker only — Node reference server unaffected, stays 0.7.1) — 2026-09-17
+- **D1 agent-capability search now indexed (audit #14, Worker half).** `searchAgents` (`worker/src/agentService.ts`) full-scanned every agent row (`allAgents` + an in-application `.filter()`) on every `GET /agents/search?capability=`. New `agent_capabilities(agent_id, capability)` junction table + index (`worker/schema.sql`), populated by `insertAgent` at registration (batched with the `agents` insert so they can't drift — capabilities are never mutated after registration, so this is write-once). New `db.searchAgentsByCapability` joins it instead of scanning.
+- **Requires a D1 migration before deploy**: `worker/migration-add-agent-capabilities.sql` creates the table on the existing production `agents` table and backfills one row per (agent, capability) via SQLite's `json_each`. Verified locally (`wrangler d1 execute --local`): backfill correctly emits zero rows for an agent with an empty `capabilities` array, and `EXPLAIN QUERY PLAN` on the new join shows `SEARCH ... USING INDEX` on both sides, not a table scan.
+- New regression test (`worker/tests/api.test.ts`) asserts both the filtered result set and the query plan. Worker 64→65. No SPEC change (storage engine is non-normative, SPEC.md §33) — mirrors the Node reference server's equivalent `node:sqlite` migration already shipped as server 0.7.0.
+
 ### 0.7.1 (Node) / 0.6.12 (Worker) — 2026-09-17
 - **Wash-trading cap (SPEC.md v0.20, §5.2).** `computeReputation` in both `src/services/reputationService.ts` and `worker/src/reputationService.ts`: once an agent has ≥3 finalized receipts, a counterparty's receipts beyond `floor(threshold/(1-threshold) * otherReceipts)` contribute zero weight (evaluated earliest-first by `result.completedAt`). Live-proven against a running server: 15 receipts between two fresh identities now flatlines `trustScore` at 0 from the 3rd receipt onward instead of climbing to 21. New regression tests: `tests/receiptFlow.test.ts` (Node), `worker/tests/api.test.ts` (Worker). No wire/D1 change.
 
