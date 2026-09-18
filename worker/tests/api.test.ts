@@ -2,7 +2,7 @@ import { env } from "cloudflare:workers";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import worker from "../src/index.js";
-import { generateKeypair, sha256Hex, sign, toBase64 } from "../../sdk-js/src/crypto/keys.js";
+import { generateKeypair, sha256Hex, sign, toBase64, fromBase64, publicKeyToDid, verify, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { generateP256Keypair, p256Sign } from "../../sdk-js/src/crypto/p256.js";
 import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
 import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
@@ -2062,5 +2062,175 @@ describe("reputation badge (GET /agents/:id/badge.svg, /badge.json)", () => {
     expect(badge.status).toBe(200);
     expect(badge.text).not.toContain("<script>");
     expect(badge.text).not.toContain("malicious");
+  });
+});
+
+// External review's batch of small hardening findings, fixed together
+// (STATUS.md item 5). Node reference server's mirrored tests live at
+// tests/hardening.test.ts.
+
+describe("small-order Ed25519 key rejection", () => {
+  // The order-2 point on Ed25519 (x=0, y=-1 mod p), a well-known low-order
+  // torsion point -- for it, the verification equation is satisfiable by
+  // arbitrary signature bytes with no private key at all.
+  const ORDER_2_POINT_HEX = "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f";
+
+  it("rejects a did:key built from a small-order point regardless of the signature bytes", () => {
+    const smallOrderKey = new Uint8Array(Buffer.from(ORDER_2_POINT_HEX, "hex"));
+    const did = publicKeyToDid(smallOrderKey);
+    const message = new TextEncoder().encode("anything");
+    const garbageSignature = new Uint8Array(Buffer.from("00".repeat(64), "hex"));
+    expect(verify(garbageSignature, message, did)).toBe(false);
+    expect(verifyRawEd25519(garbageSignature, message, smallOrderKey)).toBe(false);
+  });
+});
+
+const BASE64_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+// A 64-byte Ed25519 signature base64-encodes with one leftover byte in its
+// final group, whose low 4 bits are unused by the decoder — flipping them
+// yields a different STRING that decodes to the exact same bytes.
+function mutateBase64Tail(b64: string): string {
+  const chars = b64.split("");
+  let i = chars.length - 1;
+  while (chars[i] === "=") i--;
+  const val = BASE64_ALPHABET.indexOf(chars[i]);
+  chars[i] = BASE64_ALPHABET[val ^ 0x0f];
+  return chars.join("");
+}
+
+describe("replay guard: base64 non-canonical re-encoding", () => {
+  it("still catches a replay whose inam-signature header was re-encoded to a different string decoding to the same bytes", async () => {
+    const kp = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: ["x"] } });
+
+    const body = { capability: "x", specHash: "sha256:b64_replay_spec_worker" };
+    const rawBody = JSON.stringify(body);
+    const timestamp = Date.now().toString();
+    const signingString = `POST\n/v1/jobs\n${timestamp}\n${sha256Hex(rawBody)}`;
+    const signature = toBase64(sign(new TextEncoder().encode(signingString), kp.privateKey));
+    const mutatedSig = mutateBase64Tail(signature);
+    expect(mutatedSig).not.toBe(signature);
+    expect(fromBase64(mutatedSig)).toEqual(fromBase64(signature));
+
+    const headersFor = (sig: string, idempotencyKey: string) => ({
+      "content-type": "application/json",
+      "cf-connecting-ip": crypto.randomUUID(),
+      "inam-agent": kp.did,
+      "inam-timestamp": timestamp,
+      "inam-signature": sig,
+      "idempotency-key": idempotencyKey,
+    });
+
+    const ctx1 = createExecutionContext();
+    const first = await worker.fetch(new Request("http://worker.test/v1/jobs", { method: "POST", headers: headersFor(signature, "b64-key-A"), body: rawBody }), env, ctx1);
+    await waitOnExecutionContext(ctx1);
+    expect(first.status).toBe(201);
+
+    const ctx2 = createExecutionContext();
+    const replay = await worker.fetch(new Request("http://worker.test/v1/jobs", { method: "POST", headers: headersFor(mutatedSig, "b64-key-B"), body: rawBody }), env, ctx2);
+    await waitOnExecutionContext(ctx2);
+    expect(replay.status).toBe(409);
+    expect(((await replay.json()) as { error: { code: string } }).error.code).toBe("REPLAYED_REQUEST");
+  });
+});
+
+describe("draft receipts are restricted regardless of visibility, and excluded from rawReceipts", () => {
+  it("403s a stranger's GET on a public-visibility draft, and only counts it toward reputation once finalized", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const stranger = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["y"] } });
+
+    const before = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { rawReceipts: number } };
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+    const input = job({ jobId: `job_draft_worker_${Math.random().toString(36).slice(2)}`, visibility: "public" });
+    const content = buildSignableContent(requester.did, provider.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), provider.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", {
+      keypair: provider,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    expect(draftRes.status).toBe(201);
+    const draft = draftRes.json as { receiptId: string; status: string };
+    expect(draft.status).toBe("draft");
+
+    const path = `/v1/receipts/${encodeURIComponent(draft.receiptId)}`;
+    const strangerRes = await call("GET", path, { keypair: stranger });
+    expect(strangerRes.status).toBe(403);
+    expect((strangerRes.json as { error: { code: string } }).error.code).toBe("RECEIPT_NOT_VISIBLE");
+
+    const stillDraft = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { rawReceipts: number } };
+    expect(stillDraft.components.rawReceipts).toBe(before.components.rawReceipts);
+
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+    await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, {
+      keypair: requester,
+      idempotencyKey: `countersign:${draft.receiptId}`,
+      body: { signature: counterSig },
+    });
+    const after = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { rawReceipts: number } };
+    expect(after.components.rawReceipts).toBe(before.components.rawReceipts + 1);
+  });
+});
+
+describe("participants_only job record leak via GET /jobs", () => {
+  it("403s GET /jobs/:id and omits the job from /jobs/search for a non-participant once its receipt is participants_only", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const stranger = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: provider, idempotencyKey: `reg:${provider.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["y"] } });
+
+    const postRes = await call("POST", "/v1/jobs", {
+      keypair: requester,
+      idempotencyKey: `job:${Date.now()}`,
+      body: { capability: "x", specHash: "sha256:spec_leak" },
+    });
+    const jobId = (postRes.json as { jobId: string }).jobId;
+    await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: provider, idempotencyKey: `offer:${jobId}`, body: { message: "on it" } });
+    await call("POST", `/v1/jobs/${jobId}/accept`, { keypair: requester, idempotencyKey: `accept:${jobId}`, body: { agentId: provider.did } });
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+    const input = job({ jobId, visibility: "participants_only" });
+    const content = buildSignableContent(requester.did, provider.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), provider.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", {
+      keypair: provider,
+      idempotencyKey: `receipt:${jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    const draft = draftRes.json as { receiptId: string };
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+    await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, {
+      keypair: requester,
+      idempotencyKey: `countersign:${draft.receiptId}`,
+      body: { signature: counterSig },
+    });
+
+    const jobPath = `/v1/jobs/${jobId}`;
+    const strangerRes = await call("GET", jobPath, { keypair: stranger });
+    expect(strangerRes.status).toBe(403);
+    expect((strangerRes.json as { error: { code: string } }).error.code).toBe("JOB_NOT_VISIBLE");
+
+    for (const party of [requester, provider]) {
+      const res = await call("GET", jobPath, { keypair: party });
+      expect(res.status).toBe(200);
+    }
+
+    const strangerSearch = await call("GET", "/v1/jobs/search", { keypair: stranger });
+    const strangerJobs = (strangerSearch.json as { jobs: { jobId: string }[] }).jobs;
+    expect(strangerJobs.some((j) => j.jobId === jobId)).toBe(false);
+
+    const partySearch = await call("GET", "/v1/jobs/search", { keypair: requester });
+    const partyJobs = (partySearch.json as { jobs: { jobId: string }[] }).jobs;
+    expect(partyJobs.some((j) => j.jobId === jobId)).toBe(true);
   });
 });

@@ -299,7 +299,11 @@ export function computeReputation(agentId: string): ReputationResult {
     components: {
       eigenWeight: Math.round(confidence * 1000) / 1000,
       verifiedReceipts: finalized.length,
-      rawReceipts: all.length,
+      // Excludes `draft` receipts (v0.26): an unfinalized draft is a claim
+      // only agentB has made and agentA hasn't acted on — an external review
+      // found unbounded, uncontested drafts naming an unwilling agent as
+      // agentA inflated this count with no consent from that agent at all.
+      rawReceipts: all.filter((r) => r.status !== "draft").length,
       successRate: Math.round(successRate * 1000) / 1000,
       volumeUsd: aggVolume.USD ?? 0,
       volumeByCurrency: aggVolume,

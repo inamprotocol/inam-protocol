@@ -185,12 +185,19 @@ if (writeEnabled) {
 
   server.tool(
     "inam_countersign_receipt",
-    "Countersign a draft receipt (as the requester) to finalize it. A receipt only counts toward reputation once both parties have signed.",
-    { receiptId: z.string().describe("sha256:... id of the draft receipt to finalize") },
-    async ({ receiptId }) => {
+    "Countersign a draft receipt (as the requester) to finalize it. A receipt only counts toward reputation once both parties have signed. " +
+      "State what you expect to be approving BEFORE calling this — expectedJobId and expectedOutputHash must match the fetched draft, " +
+      "or the call is rejected. Do not derive these from the draft itself; use what you already know about the job you posted (from " +
+      "inam_post_job's result or your own conversation with the user) so a malicious or unexpected draft can't be blindly signed.",
+    {
+      receiptId: z.string().describe("sha256:... id of the draft receipt to finalize"),
+      expectedJobId: z.string().describe("The jobId this receipt should belong to, from your own knowledge of the job"),
+      expectedOutputHash: z.string().describe("The result.outputHash you expect this receipt to carry, from your own knowledge of the job"),
+    },
+    async ({ receiptId, expectedJobId, expectedOutputHash }) => {
       try {
         const draft = await inam.getReceipt(receiptId);
-        return ok(await inam.acceptWork(draft));
+        return ok(await inam.acceptWork(draft, { jobId: expectedJobId, outputHash: expectedOutputHash }));
       } catch (err) {
         return fail(err);
       }

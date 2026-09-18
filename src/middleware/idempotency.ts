@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { idempotencyCache, signatureReplayCache, readFresh, setWithSweep } from "../storage/db.js";
 import { config } from "../config.js";
-import { sha256Hex } from "../../sdk-js/src/crypto/keys.js";
+import { sha256Hex, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
 import { badRequest, conflict } from "./errors.js";
 
 const IDEMPOTENCY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -33,7 +33,15 @@ export function requireIdempotencyKey(req: Request, res: Response, next: NextFun
   // signing string doesn't cover the key, so the signature alone still
   // verifies). Bounded by the same clock-skew window that bounds how long a
   // signature is accepted at all.
-  const sigKey = sha256Hex(req.header("inam-signature") ?? "");
+  //
+  // Keyed off the *decoded* signature bytes, not the raw header string — an
+  // external review found Buffer's base64 decoding is lenient enough that
+  // multiple distinct strings decode to the same bytes (e.g. non-canonical
+  // padding), so hashing the string let a captured request be replayed
+  // indefinitely by just re-encoding the same signature differently each
+  // time (47 extra jobs from one captured request in the review's repro).
+  // Decoding first collapses every equivalent encoding to one cache key.
+  const sigKey = sha256Hex(fromBase64(req.header("inam-signature") ?? ""));
   const seen = readFresh(signatureReplayCache, sigKey);
   if (seen) {
     if (seen.idempotencyKey !== key) {

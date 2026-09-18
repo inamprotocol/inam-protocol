@@ -4,7 +4,7 @@ import type { ZodType } from "zod";
 import { requireSignedRequest, optionalSignedRequest } from "./signedRequest.js";
 import { requireIdempotencyKey } from "./idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "./rateLimit.js";
-import { ApiError, badRequest } from "./errors.js";
+import { ApiError, badRequest, forbidden } from "./errors.js";
 import * as agentService from "./agentService.js";
 import * as receiptService from "./receiptService.js";
 import * as jobService from "./jobService.js";
@@ -211,13 +211,42 @@ app.post("/v1/jobs", requireSignedRequest, rateLimitWriteByAgent, requireIdempot
   return c.json(job, 201);
 });
 
-app.get("/v1/jobs/search", rateLimitReadByIp, async (c) => {
+// An external review found GET /jobs/:id and /jobs/search exposed the full
+// job record (postedBy, acceptedAgentId, budget, ...) unconditionally, even
+// when the job's linked receipt is `participants_only` -- defeating that
+// receipt's own visibility setting entirely, since the same parties/amounts
+// are readable right off the job. Mirrors receiptService.isReceiptVisible
+// (same participants-or-verifier check) against the job's linked receipt;
+// same reasoning as the Node reference server's identical route
+// (src/routes/jobs.ts).
+async function isJobVisible(c: Context<AppEnv>, job: Awaited<ReturnType<typeof jobService.getJob>>, callerDid: string | undefined): Promise<boolean> {
+  if (!job.receiptId) return true;
+  let receipt;
+  try {
+    receipt = await receiptService.getReceipt(c.env, job.receiptId);
+  } catch {
+    return true;
+  }
+  const isVerifier = await callerIsVerifierOf(c, receipt.receiptId, callerDid);
+  return receiptService.isReceiptVisible(receipt, callerDid, isVerifier);
+}
+
+app.get("/v1/jobs/search", optionalSignedRequest, rateLimitReadByIp, async (c) => {
   const capability = c.req.query("capability");
   const status = c.req.query("status");
-  return c.json({ jobs: await jobService.searchJobs(c.env, { capability, status }) });
+  const callerDid = c.get("agentDid");
+  const all = await jobService.searchJobs(c.env, { capability, status });
+  const visible = await Promise.all(all.map(async (j) => ((await isJobVisible(c, j, callerDid)) ? j : null)));
+  return c.json({ jobs: visible.filter((j): j is NonNullable<typeof j> => j !== null) });
 });
 
-app.get("/v1/jobs/:id", async (c) => c.json(await jobService.getJob(c.env, c.req.param("id")!)));
+app.get("/v1/jobs/:id", optionalSignedRequest, async (c) => {
+  const job = await jobService.getJob(c.env, c.req.param("id")!);
+  if (!(await isJobVisible(c, job, c.get("agentDid")))) {
+    throw forbidden("JOB_NOT_VISIBLE", "This job's receipt is participants_only; the caller is not a party to it or a verifier who has attested it");
+  }
+  return c.json(job);
+});
 
 app.post("/v1/jobs/:id/offers", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   const body = parseBody(offerSchema, c.get("parsedBody") ?? {});

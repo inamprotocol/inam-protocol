@@ -274,7 +274,8 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     components: {
       eigenWeight: Math.round(confidence * 1000) / 1000,
       verifiedReceipts: finalized.length,
-      rawReceipts: all.length,
+      // Excludes `draft` receipts (v0.26) — see src/services/reputationService.ts's comment.
+      rawReceipts: all.filter((r) => r.status !== "draft").length,
       successRate: Math.round(successRate * 1000) / 1000,
       volumeUsd: aggVolume.USD ?? 0,
       volumeByCurrency: aggVolume,

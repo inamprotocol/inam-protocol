@@ -213,8 +213,39 @@ class InamClient:
             body["visibility"] = visibility
         return self._request("POST", "/v1/receipts", body, idempotency_key=f"receipt:{input['jobId']}")
 
-    def accept_work(self, receipt: Dict[str, Any]) -> Dict[str, Any]:
-        """Called by the requester (agent_a) to accept the worker's submitted result."""
+    def accept_work(
+        self,
+        receipt: Dict[str, Any],
+        expected: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """Called by the requester (agent_a) to accept the worker's submitted result.
+
+        `receipt` is normally whatever a caller just fetched with get_receipt()
+        -- an external review found blindly trusting it and signing without
+        checking anything let a caller be tricked (e.g. via prompt injection
+        reaching an LLM-driven agent through job/dispute free text) into
+        countersigning content it never actually reviewed. Two guards (v0.26,
+        matching sdk-js's `acceptWork`), both cheap and backward compatible:
+        always refuses to sign a receipt this client isn't the named
+        `agentA` on, and when `expected` (any of jobId/outputHash/amount/
+        currency, sourced from the caller's own knowledge, not from `receipt`
+        itself) is passed, a mismatch on any field raises before signing.
+        """
+        if receipt["agentA"]["id"] != self.did:
+            raise ValueError(f"accept_work: this client ({self.did}) is not the receipt's agentA ({receipt['agentA']['id']})")
+        if expected:
+            result = receipt.get("result", {})
+            settlement = receipt.get("settlement") or {}
+            checks = {
+                "jobId": receipt.get("jobId"),
+                "outputHash": result.get("outputHash"),
+                "amount": settlement.get("amount"),
+                "currency": settlement.get("currency"),
+            }
+            for field, expected_value in expected.items():
+                if expected_value is not None and expected_value != checks.get(field):
+                    raise ValueError(f"accept_work: expected {field} {expected_value!r}, receipt has {checks.get(field)!r}")
+
         # `visibility` (v0.19) is operational metadata, excluded from the
         # signed content the same way `dispute`/`status` already are — the
         # server's countersign verification excludes it identically.

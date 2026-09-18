@@ -15,12 +15,26 @@
 
 export interface VisibilityCheckable {
   visibility?: "public" | "participants_only";
+  status?: string;
   agentA: { id: string };
   agentB: { id: string };
 }
 
+/**
+ * A `draft` receipt is restricted regardless of its own `visibility` field —
+ * only agentB (the drafter) has consented to anything at draft time, so a
+ * `visibility: "public"` a drafter unilaterally chose isn't the requester's
+ * (agentA's) consent to expose it. An external review found this let anyone
+ * name any registered agent as agentA on an unbounded number of drafts, all
+ * publicly visible immediately with no involvement from the named agent
+ * (300 garbage "failed" drafts in one repro) — outcome/content freely chosen
+ * by whoever calls createDraft, landing in the named victim's public record
+ * before they've had any chance to react. Once countersigned (finalized) or
+ * disputed, both parties have acted on it and the chosen visibility applies
+ * as normal.
+ */
 export function isReceiptRestricted(receipt: VisibilityCheckable): boolean {
-  return receipt.visibility === "participants_only";
+  return receipt.visibility === "participants_only" || receipt.status === "draft";
 }
 
 export function isReceiptParticipant(receipt: VisibilityCheckable, callerDid: string | null | undefined): boolean {
