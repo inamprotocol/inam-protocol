@@ -27,6 +27,42 @@ function clamp(n: number, lo: number, hi: number): number {
 }
 
 /**
+ * v0.24 — does `counterparty` have any standing independent of `excludeIds`
+ * (the agent being scored, plus every counterparty *it* has ever
+ * transacted with)? Used only to flag a Sybil-ring pattern the per-pair
+ * wash-trading cap structurally can't catch: spreading volume across many
+ * sockpuppet counterparties instead of one means no single counterparty
+ * ever crosses the concentration threshold, even though none of them has
+ * any transaction history outside the very cluster being scored.
+ *
+ * Deliberately flag-only, not a weight cap: an agent's *first-ever*
+ * transaction with a brand-new, perfectly legitimate counterparty is
+ * locally indistinguishable from a ring member by this one-hop check alone
+ * (both have zero external history at that moment) — discounting weight on
+ * this signal was tried and reverted after it zeroed out ordinary
+ * few-receipt cold-start scores in testing, which is most of INAM's actual
+ * live registry today. Real disambiguation needs either a trust seed
+ * (stake, once staking ships) or multi-hop graph analysis over real
+ * volume — both explicitly deferred (SPEC.md §5.2). This flag surfaces the
+ * pattern to a consumer's own policy instead of guessing a threshold with
+ * no real data to calibrate against.
+ */
+function isAnchoredCounterparty(agentId: string, excludeIds: ReadonlySet<string>): boolean {
+  const agent = (() => {
+    try {
+      return getAgent(agentId);
+    } catch {
+      return undefined;
+    }
+  })();
+  if (!agent) return false;
+  if (agent.stakeUsd > 0) return true;
+  return listByAgent(agentId)
+    .filter(countsTowardReputation)
+    .some((r) => !excludeIds.has(r.agentA.id === agentId ? r.agentB.id : r.agentA.id));
+}
+
+/**
  * A cheap, non-recursive trust estimate used only as *another agent's*
  * counterparty weight when scoring someone else's receipts. Deliberately not
  * the full computeReputation() below, to avoid unbounded mutual recursion —
@@ -222,6 +258,23 @@ export function computeReputation(agentId: string): ReputationResult {
   }
   if (disputedCount > 0) flags.push("in_dispute");
   if (record.revokedAt) flags.push("revoked");
+
+  // v0.24: a Sybil ring spread across many counterparties bypasses the
+  // per-pair check above (no single one is concentrated) — flag when most
+  // of this agent's volume comes from counterparties that themselves have
+  // no transaction history outside this agent's own counterparty set. Same
+  // >=3 gate and threshold as the per-pair check; see isAnchoredCounterparty
+  // for why this is a flag, not a weight cap.
+  if (finalized.length >= 3) {
+    const excludeIds = new Set<string>([agentId, ...pairCounts.keys()]);
+    let unanchoredReceiptCount = 0;
+    for (const [counterparty, count] of pairCounts.entries()) {
+      if (!isAnchoredCounterparty(counterparty, excludeIds)) unanchoredReceiptCount += count;
+    }
+    if (unanchoredReceiptCount / finalized.length > config.concentratedCounterpartyThreshold) {
+      flags.push("unanchored_counterparty_volume");
+    }
+  }
 
   return {
     trustScore: Math.round(trustScore * 10) / 10,

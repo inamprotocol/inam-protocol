@@ -4,6 +4,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.24 (Draft) — 2026-09-18
+- **Sybil-ring flag (§5.2).** `concentrated_counterparty` only ever looked at a single counterparty's share of an agent's finalized receipts — a hub-spoke ring of many low-volume sockpuppet counterparties, none individually over the 60% threshold, stayed invisible to it. New `unanchored_counterparty_volume` flag: once an agent has ≥3 finalized receipts, fires when more than 60% of its finalized-receipt volume is with counterparties that have no stake and no finalized receipt with anyone outside this agent's own counterparty set.
+- Deliberately flag-only, not a weight cap — a brand-new legitimate counterparty's first transaction is locally indistinguishable from a ring member by this one-hop check alone; a weight-cap attempt was tried and reverted after it zeroed out ordinary cold-start scores. Applied identically to both runtimes. No wire/endpoint/field change, no D1 migration.
+
 ### v0.23 (Draft) — 2026-09-17
 - **Verifier revocation now retroactively stops the attestation boost (§12.4/§12.5).** `hasVerifiedAttestation` only checked a Verification record's `result`, never re-checking whether its `verifier` is still operator-authorized — a revoked verifier's already-submitted `verified` record kept applying reputation's 1.5x boost forever, since authorization was only checked at submission time.
 - Fixed in both runtimes: a Verification record from a currently-unauthorized verifier no longer counts toward either side of the `verified`-vs-`rejected` majority. Uses current status, not a point-in-time authorization history (none is added). No wire/D1 change.
@@ -186,6 +190,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.7.4 (Node) / 0.6.16 (Worker) — 2026-09-18
+- **Sybil-ring bypass of the wash-trading cap (SPEC.md v0.24, §5.2).** `computeReputation` in both `src/services/reputationService.ts` and `worker/src/reputationService.ts` gains `isAnchoredCounterparty`: once an agent has ≥3 finalized receipts, if more than 60% of its finalized-receipt volume is with counterparties that have no stake and no finalized receipt with anyone outside this agent's own counterparty set, pushes new flag `unanchored_counterparty_volume`. Live-proven: a 5-feeder × 3-receipts-each ring (each feeder individually at 20%, well under the 60% per-pair threshold) now flags where it previously slipped through silently.
+- Worker port needed a plain loop instead of `.some()`/`.filter()` since `getAgent`/`listByAgent` are async there — same gotcha as the v0.23 verifier-revoke fix. New regression tests in both runtimes. Node 96→97, Worker 67→68. No wire/D1 change; sdk-js/sdk-python untouched (flag is a plain string in an existing array, no schema change).
 
 ### 0.7.3 (Node) / 0.6.15 (Worker) — 2026-09-17
 - **Verifier revocation now retroactively stops the attestation boost (SPEC.md v0.23, §12.4/§12.5).** `hasVerifiedAttestation` (`src/services/verificationService.ts`/`worker/src/verificationService.ts`) now filters Verification records to only those from a *currently* `isAuthorizedVerifier` verifier before computing the `verified`-vs-`rejected` majority — previously it only checked `result`, so a verifier the operator later revoked kept boosting reputation off attestations it made while still authorized. New regression tests in both runtimes: submit a `verified` record while authorized (`attestedReceipts: 1`), revoke, confirm it drops to `0`. Node 95→96, Worker 66→67 (both +1). No wire/D1 change.

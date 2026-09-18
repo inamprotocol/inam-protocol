@@ -228,6 +228,45 @@ describe("execution receipt lifecycle", () => {
     }
   });
 
+  it("flags a Sybil ring spread across many counterparties that the per-pair concentration check can't catch (v0.24)", () => {
+    // An external review reproduced this against a local copy: a hub-spoke
+    // ring of many sockpuppet identities, each individually below the 60%
+    // per-pair concentration threshold, pushed a target's trustScore to a
+    // "green" level with zero warning flags. None of the feeders here has
+    // any transaction history outside the target's own counterparty set —
+    // that's the signal the per-pair check structurally can't see.
+    const target = generateKeypair();
+    registerAgent(target.did, { capabilities: ["x"] });
+
+    const feeders = Array.from({ length: 5 }, () => generateKeypair());
+    for (const feeder of feeders) registerAgent(feeder.did, { capabilities: ["job.posting"] });
+
+    for (const feeder of feeders) {
+      for (let i = 0; i < 3; i++) {
+        const jobId = `ring_${feeder.did.slice(-6)}_${i}`;
+        const input = freshInput(jobId);
+        const signature = signDraft(feeder.did, target.privateKey, target.did, input);
+        const draft = createDraft(target.did, { ...input, agentAId: feeder.did, signature });
+        countersign(draft.receiptId, feeder.did, signCountersign(draft, feeder.privateKey));
+      }
+    }
+
+    const reputation = computeReputation(target.did);
+    expect(reputation.components.rawReceipts).toBe(15);
+    // No single feeder is concentrated (3/15 = 20% << 60%) — the existing
+    // per-pair flag stays silent, exactly the gap the review found.
+    for (const feeder of feeders) {
+      expect(reputation.flags).not.toContain(`concentrated_counterparty:${feeder.did}`);
+    }
+    // The new group-level flag catches it: all 15 receipts are with
+    // counterparties that have no standing outside this ring.
+    expect(reputation.flags).toContain("unanchored_counterparty_volume");
+    // Deliberately flag-only — trustScore/weight are untouched by this
+    // check (see isAnchoredCounterparty's doc comment for why a weight cap
+    // was tried and reverted).
+    expect(reputation.trustScore).toBeGreaterThan(0);
+  });
+
   it("rejects a future result.completedAt beyond clock-skew tolerance", async () => {
     // An audit found reputationService.ts's decay formula treats a future
     // completedAt as *younger than brand new* (negative age -> decay > 1),

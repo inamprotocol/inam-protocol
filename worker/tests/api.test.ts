@@ -453,6 +453,60 @@ describe("execution receipt lifecycle", () => {
     expect(after15.trustScore).toBe(0); // still flat, not climbing toward 21
   });
 
+  it("flags a Sybil ring spread across many counterparties that the per-pair concentration check can't catch (v0.24)", async () => {
+    // An external review reproduced this against a local copy: a hub-spoke
+    // ring of many sockpuppet identities, each individually below the 60%
+    // per-pair concentration threshold, pushed a target's trustScore to a
+    // "green" level with zero warning flags. None of the feeders here has
+    // any transaction history outside the target's own counterparty set —
+    // that's the signal the per-pair check structurally can't see.
+    const target = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: target, idempotencyKey: `reg:${target.did}`, body: { capabilities: ["x"] } });
+
+    const feeders = Array.from({ length: 5 }, () => generateKeypair());
+    for (const feeder of feeders) {
+      await call("POST", "/v1/agents", { keypair: feeder, idempotencyKey: `reg:${feeder.did}`, body: { capabilities: ["job.posting"] } });
+    }
+
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    async function finalize(requester: Keypair, worker_: Keypair, jobId: string) {
+      const input = job({ jobId });
+      const content = buildSignableContent(requester.did, worker_.did, input);
+      const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+      const draftRes = await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `receipt:${jobId}`, body: { ...input, agentAId: requester.did, signature: draftSig } });
+      const draft = draftRes.json as { receiptId: string };
+      const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+      await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, { keypair: requester, idempotencyKey: `countersign:${draft.receiptId}`, body: { signature: counterSig } });
+    }
+
+    for (const feeder of feeders) {
+      for (let i = 0; i < 3; i++) {
+        await finalize(feeder, target, `ring_${feeder.did.slice(-6)}_${i}`);
+      }
+    }
+
+    const rep = (await call("GET", `/v1/agents/${encodeURIComponent(target.did)}/reputation`)).json as {
+      flags: string[];
+      trustScore: number;
+      components: { rawReceipts: number };
+    };
+    expect(rep.components.rawReceipts).toBe(15);
+    // No single feeder is concentrated (3/15 = 20% << 60%) — the existing
+    // per-pair flag stays silent, exactly the gap the review found.
+    for (const feeder of feeders) {
+      expect(rep.flags).not.toContain(`concentrated_counterparty:${feeder.did}`);
+    }
+    // The new group-level flag catches it: all 15 receipts are with
+    // counterparties that have no standing outside this ring.
+    expect(rep.flags).toContain("unanchored_counterparty_volume");
+    // Deliberately flag-only — trustScore/weight are untouched by this
+    // check (see isAnchoredCounterparty's doc comment for why a weight cap
+    // was tried and reverted).
+    expect(rep.trustScore).toBeGreaterThan(0);
+  });
+
   it("buckets settlement volume by currency instead of summing every currency as USD", async () => {
     // An audit found `components.volumeUsd` summed `settlement.amount` across
     // every currency -- a 1000 TRY receipt added 1000 to a USD-labelled
