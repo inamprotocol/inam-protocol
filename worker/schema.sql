@@ -72,15 +72,19 @@ CREATE TABLE IF NOT EXISTS jobs (
   spec_hash TEXT NOT NULL,
   budget_amount TEXT,
   budget_currency TEXT,
-  status TEXT NOT NULL,           -- open | accepted | completed | cancelled
+  status TEXT NOT NULL,           -- open | accepted | completed | cancelled | nonperformed
   accepted_agent_id TEXT,
+  accepted_at TEXT,
   receipt_id TEXT,
   created_at TEXT NOT NULL,
-  expires_at TEXT
+  expires_at TEXT,
+  nonperformance_reported_at TEXT,
+  nonperformance_reason TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_capability_status ON jobs(capability, status);
 CREATE INDEX IF NOT EXISTS idx_jobs_posted_by ON jobs(posted_by);
+CREATE INDEX IF NOT EXISTS idx_jobs_status_accepted_agent ON jobs(status, accepted_agent_id);
 
 CREATE TABLE IF NOT EXISTS job_offers (
   job_id TEXT NOT NULL REFERENCES jobs(job_id),

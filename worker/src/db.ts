@@ -276,16 +276,20 @@ export async function offerExists(env: Env, jobId: string, agentId: string): Pro
 }
 
 /** Compare-and-swap: only accepts if the job is still `open`. */
-export async function acceptJobIfOpen(env: Env, jobId: string, acceptedAgentId: string): Promise<boolean> {
-  const result = await env.DB.prepare(`UPDATE jobs SET status = 'accepted', accepted_agent_id = ? WHERE job_id = ? AND status = 'open'`)
-    .bind(acceptedAgentId, jobId)
+export async function acceptJobIfOpen(env: Env, jobId: string, acceptedAgentId: string, acceptedAt: string): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `UPDATE jobs SET status = 'accepted', accepted_agent_id = ?, accepted_at = ? WHERE job_id = ? AND status = 'open'`,
+  )
+    .bind(acceptedAgentId, acceptedAt, jobId)
     .run();
   return (result.meta.changes ?? 0) > 0;
 }
 
-/** Compare-and-swap: only cancels a job that isn't already completed/cancelled. */
+/** Compare-and-swap: only cancels a job that isn't already completed/cancelled/nonperformed. */
 export async function cancelJobIfCancellable(env: Env, jobId: string): Promise<boolean> {
-  const result = await env.DB.prepare(`UPDATE jobs SET status = 'cancelled' WHERE job_id = ? AND status NOT IN ('completed', 'cancelled')`)
+  const result = await env.DB.prepare(
+    `UPDATE jobs SET status = 'cancelled' WHERE job_id = ? AND status NOT IN ('completed', 'cancelled', 'nonperformed')`,
+  )
     .bind(jobId)
     .run();
   return (result.meta.changes ?? 0) > 0;
@@ -298,6 +302,32 @@ export async function completeJobIfAccepted(env: Env, jobId: string, receiptId: 
   await env.DB.prepare(`UPDATE jobs SET status = 'completed', receipt_id = ? WHERE job_id = ? AND status = 'accepted'`)
     .bind(receiptId, jobId)
     .run();
+}
+
+/** Compare-and-swap: only reports non-performance if the job is still
+ * `accepted` — the same discipline as acceptJobIfOpen/cancelJobIfCancellable,
+ * so this is naturally one-shot per job even under concurrent requests. The
+ * grace-window check (jobService.reportNonPerformance) runs before this. */
+export async function reportNonPerformanceIfAccepted(
+  env: Env,
+  jobId: string,
+  reportedAt: string,
+  reason: string | undefined,
+): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `UPDATE jobs SET status = 'nonperformed', nonperformance_reported_at = ?, nonperformance_reason = ? WHERE job_id = ? AND status = 'accepted'`,
+  )
+    .bind(reportedAt, reason ?? null, jobId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/** Every job the given agent was the accepted worker on and was later
+ * reported non-performed. Used only by reputationService — indexed on
+ * (status, accepted_agent_id), see schema.sql. */
+export async function nonPerformanceJobsForAgent(env: Env, agentId: string): Promise<JobRecord[]> {
+  const { results } = await env.DB.prepare(`SELECT * FROM jobs WHERE status = 'nonperformed' AND accepted_agent_id = ?`).bind(agentId).all();
+  return results.map((row) => rowToJob(row, []));
 }
 
 // ---- Link challenges ----
@@ -396,9 +426,13 @@ function rowToJob(row: Record<string, unknown>, offers: JobOffer[]): JobRecord {
     status: row.status as JobRecord["status"],
     offers,
     acceptedAgentId: (row.accepted_agent_id as string | null) ?? undefined,
+    acceptedAt: (row.accepted_at as string | null) ?? undefined,
     receiptId: (row.receipt_id as string | null) ?? undefined,
     createdAt: row.created_at as string,
     expiresAt: (row.expires_at as string | null) ?? undefined,
+    nonPerformance: row.nonperformance_reported_at
+      ? { reportedAt: row.nonperformance_reported_at as string, reason: (row.nonperformance_reason as string | null) ?? undefined }
+      : undefined,
   };
 }
 

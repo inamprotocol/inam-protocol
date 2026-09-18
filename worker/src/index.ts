@@ -20,6 +20,7 @@ import {
   postJobSchema,
   offerSchema,
   acceptOfferSchema,
+  reportNonPerformanceSchema,
   draftReceiptSchema,
   countersignSchema,
   disputeSchema,
@@ -234,6 +235,12 @@ app.post("/v1/jobs/:id/accept", requireSignedRequest, rateLimitWriteByAgent, req
 
 app.post("/v1/jobs/:id/cancel", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   const job = await jobService.cancelJob(c.env, c.req.param("id")!, c.get("agentDid")!);
+  return c.json(job);
+});
+
+app.post("/v1/jobs/:id/report-nonperformance", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  const body = parseBody(reportNonPerformanceSchema, c.get("parsedBody"));
+  const job = await jobService.reportNonPerformance(c.env, c.req.param("id")!, c.get("agentDid")!, body.reason);
   return c.json(job);
 });
 

@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 import { registerAgent } from "../src/services/agentService.js";
 import { buildSignableContent, createDraft, countersign } from "../src/services/receiptService.js";
+import { computeReputation } from "../src/services/reputationService.js";
 import * as jobService from "../src/services/jobService.js";
 import { ApiError } from "../src/middleware/errors.js";
 import type { CreateDraftInput } from "../src/services/receiptService.js";
@@ -182,6 +183,64 @@ describe("job lifecycle", () => {
     const past = new Date(Date.now() - 60_000).toISOString();
     const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_exp", expiresAt: past });
     await expectApiError(() => jobService.submitOffer(job.jobId, worker.did), "JOB_EXPIRED");
+  });
+
+  it("reports non-performance only for the poster, only on an accepted job, and only after the grace window (SPEC.md v0.25)", async () => {
+    const poster = generateKeypair();
+    const worker = generateKeypair();
+    const stranger = generateKeypair();
+    registerAgent(poster.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["x"] });
+    registerAgent(stranger.did, { capabilities: ["x"] });
+
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_np" });
+    await expectApiError(() => jobService.reportNonPerformance(job.jobId, poster.did), "JOB_NOT_REPORTABLE"); // still open
+
+    jobService.submitOffer(job.jobId, worker.did);
+    jobService.acceptOffer(job.jobId, poster.did, worker.did);
+
+    await expectApiError(() => jobService.reportNonPerformance(job.jobId, stranger.did), "NOT_POSTER");
+    await expectApiError(() => jobService.reportNonPerformance(job.jobId, poster.did), "TOO_EARLY_TO_REPORT");
+
+    try {
+      vi.useFakeTimers({ now: Date.now() });
+      vi.setSystemTime(Date.now() + 73 * 3600_000); // just past the 72h grace window
+      const reported = jobService.reportNonPerformance(job.jobId, poster.did, "never delivered");
+      expect(reported.status).toBe("nonperformed");
+      expect(reported.nonPerformance?.reason).toBe("never delivered");
+
+      await expectApiError(() => jobService.reportNonPerformance(job.jobId, poster.did), "JOB_NOT_REPORTABLE"); // one-shot
+      await expectApiError(() => jobService.cancelJob(job.jobId, poster.did), "JOB_NOT_CANCELLABLE"); // terminal
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("weights a non-performance report by the reporting poster's own trust, deduped per poster (SPEC.md v0.25)", () => {
+    // A worker who is ghosted has no receipt to point to at all -- this is
+    // the only negative-outcome signal that doesn't require one.
+    const poster = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(poster.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["x"] });
+
+    expect(computeReputation(worker.did).components.nonPerformanceReports).toBe(0);
+
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_np2" });
+    jobService.submitOffer(job.jobId, worker.did);
+    jobService.acceptOffer(job.jobId, poster.did, worker.did);
+
+    try {
+      vi.useFakeTimers({ now: Date.now() });
+      vi.setSystemTime(Date.now() + 73 * 3600_000);
+      jobService.reportNonPerformance(job.jobId, poster.did);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const rep = computeReputation(worker.did);
+    expect(rep.components.nonPerformanceReports).toBe(1);
+    expect(rep.flags).toContain("nonperformance_reported");
   });
 
   it("finds an open job by capability search", () => {

@@ -2,6 +2,13 @@ import * as db from "./db.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import type { Env, JobRecord } from "./types.js";
 
+// Same value as receiptService.ts's DISPUTE_WINDOW_HOURS (kept as separate
+// constants, not shared, to avoid a circular import — receiptService.ts
+// already imports jobService.ts). Reused here as the non-performance grace
+// window: the worker acted in good faith by accepting, so no reporting
+// before it's had at least as long to deliver as a dispute gets to resolve.
+const NON_PERFORMANCE_GRACE_HOURS = 72;
+
 export interface PostJobInput {
   capability: string;
   specHash: string;
@@ -76,7 +83,7 @@ export async function acceptOffer(env: Env, jobId: string, callerDid: string, ag
   if (callerDid !== job.postedBy) throw forbidden("NOT_POSTER", "Only the job's poster may accept an offer");
   assertNotExpired(job);
   if (!(await db.offerExists(env, jobId, agentId))) throw badRequest("OFFER_NOT_FOUND", "No such offer on this job");
-  const applied = await db.acceptJobIfOpen(env, jobId, agentId);
+  const applied = await db.acceptJobIfOpen(env, jobId, agentId, new Date().toISOString());
   if (!applied) throw conflict("JOB_NOT_OPEN", "Only an open job can have an offer accepted");
   return getJob(env, jobId);
 }
@@ -87,6 +94,30 @@ export async function cancelJob(env: Env, jobId: string, callerDid: string): Pro
   const applied = await db.cancelJobIfCancellable(env, jobId);
   if (!applied) throw conflict("JOB_NOT_CANCELLABLE", `A ${job.status} job cannot be cancelled`);
   return getJob(env, jobId);
+}
+
+/**
+ * A one-sided "the accepted worker never delivered" report (SPEC.md §3.3,
+ * v0.25). See src/services/jobService.ts's reportNonPerformance (Node
+ * reference) for the full rationale — this mirrors it.
+ */
+export async function reportNonPerformance(env: Env, jobId: string, callerDid: string, reason?: string): Promise<JobRecord> {
+  const job = await getJob(env, jobId);
+  if (callerDid !== job.postedBy) throw forbidden("NOT_POSTER", "Only the job's poster may report non-performance");
+  if (job.status !== "accepted") throw conflict("JOB_NOT_REPORTABLE", "Only an accepted job can be reported as non-performed");
+  const acceptedMs = new Date(job.acceptedAt!).getTime();
+  if (Date.now() - acceptedMs < NON_PERFORMANCE_GRACE_HOURS * 3600_000) {
+    throw conflict("TOO_EARLY_TO_REPORT", `Non-performance can only be reported ${NON_PERFORMANCE_GRACE_HOURS}h after acceptance`);
+  }
+  const applied = await db.reportNonPerformanceIfAccepted(env, jobId, new Date().toISOString(), reason);
+  if (!applied) throw conflict("JOB_NOT_REPORTABLE", "Only an accepted job can be reported as non-performed");
+  return getJob(env, jobId);
+}
+
+/** Every job the given agent was the accepted worker on and was later
+ *  reported as non-performed. Used only by reputationService. */
+export async function listNonPerformanceAgainst(env: Env, agentId: string): Promise<JobRecord[]> {
+  return db.nonPerformanceJobsForAgent(env, agentId);
 }
 
 /** Called by receiptService once a receipt referencing this job is finalized. */

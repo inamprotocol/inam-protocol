@@ -1,5 +1,6 @@
 import { jobs, agents } from "../storage/db.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
+import { config } from "../config.js";
 import type { JobRecord } from "../types.js";
 
 export interface PostJobInput {
@@ -75,7 +76,7 @@ export function acceptOffer(jobId: string, callerDid: string, agentId: string): 
   if (job.status !== "open") throw conflict("JOB_NOT_OPEN", "Only an open job can have an offer accepted");
   assertNotExpired(job);
   if (!job.offers.some((o) => o.agentId === agentId)) throw badRequest("OFFER_NOT_FOUND", "No such offer on this job");
-  const updated: JobRecord = { ...job, status: "accepted", acceptedAgentId: agentId };
+  const updated: JobRecord = { ...job, status: "accepted", acceptedAgentId: agentId, acceptedAt: new Date().toISOString() };
   jobs.set(jobId, updated);
   return updated;
 }
@@ -83,12 +84,46 @@ export function acceptOffer(jobId: string, callerDid: string, agentId: string): 
 export function cancelJob(jobId: string, callerDid: string): JobRecord {
   const job = getJob(jobId);
   if (callerDid !== job.postedBy) throw forbidden("NOT_POSTER", "Only the job's poster may cancel it");
-  if (job.status === "completed" || job.status === "cancelled") {
+  if (job.status === "completed" || job.status === "cancelled" || job.status === "nonperformed") {
     throw conflict("JOB_NOT_CANCELLABLE", `A ${job.status} job cannot be cancelled`);
   }
   const updated: JobRecord = { ...job, status: "cancelled" };
   jobs.set(jobId, updated);
   return updated;
+}
+
+/**
+ * A one-sided "the accepted worker never delivered" report (SPEC.md §3.3,
+ * v0.25). Exists because a Receipt is inherently bilateral — it needs the
+ * worker's own signature (receiptService.createDraft) — so a worker who
+ * simply ghosts an accepted job leaves the requester with no way to record
+ * anything at all; success rate was structurally ~100% since only completed
+ * work ever produces a receipt. Gated by the same window used for dispute
+ * resolution (config.disputeWindowHours) since the worker acted in good
+ * faith by accepting — no reporting before they've had a fair chance to
+ * deliver. computeReputation weights each report by the *reporter's own*
+ * trust and dedupes by counterparty so repeat reports from one poster don't
+ * compound (see reputationService.ts) — a malicious poster can't fabricate
+ * offers from an unwilling worker either way (submitOffer requires the
+ * worker's own signed request).
+ */
+export function reportNonPerformance(jobId: string, callerDid: string, reason?: string): JobRecord {
+  const job = getJob(jobId);
+  if (callerDid !== job.postedBy) throw forbidden("NOT_POSTER", "Only the job's poster may report non-performance");
+  if (job.status !== "accepted") throw conflict("JOB_NOT_REPORTABLE", "Only an accepted job can be reported as non-performed");
+  const acceptedMs = new Date(job.acceptedAt!).getTime();
+  if (Date.now() - acceptedMs < config.disputeWindowHours * 3600_000) {
+    throw conflict("TOO_EARLY_TO_REPORT", `Non-performance can only be reported ${config.disputeWindowHours}h after acceptance`);
+  }
+  const updated: JobRecord = { ...job, status: "nonperformed", nonPerformance: { reportedAt: new Date().toISOString(), reason } };
+  jobs.set(jobId, updated);
+  return updated;
+}
+
+/** Every job the given agent was the accepted worker on and was later
+ *  reported as non-performed. Used only by reputationService. */
+export function listNonPerformanceAgainst(agentId: string): JobRecord[] {
+  return jobs.search({ status: "nonperformed" }).filter((j) => j.acceptedAgentId === agentId);
 }
 
 /** Called by receiptService once a receipt referencing this job is finalized. */

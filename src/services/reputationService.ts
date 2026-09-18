@@ -1,6 +1,7 @@
 import { config } from "../config.js";
 import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
+import { listNonPerformanceAgainst } from "./jobService.js";
 import { hasVerifiedAttestation } from "./verificationService.js";
 import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
 import { isDisputeActive, type DisputeCheckable } from "../../sdk-js/src/core/disputeLifecycle.js";
@@ -237,6 +238,22 @@ export function computeReputation(agentId: string): ReputationResult {
     }
   }
 
+  // SPEC.md §3.3 (v0.25): fold in non-performance reports against this
+  // agent as the accepted worker. Each contributes outcomeScore 0, weighted
+  // by the *reporting poster's own* trust (same role a receipt
+  // counterparty's trust plays above) — a brand-new, low-trust poster's
+  // report barely moves the score. Deduped to one per poster so repeat
+  // reports from a single requester don't compound, the same class of bug
+  // the wash-trading cap (v0.20) closed on the positive side.
+  const nonPerformanceReports = listNonPerformanceAgainst(agentId);
+  const reportingPosters = new Set(nonPerformanceReports.map((j) => j.postedBy));
+  for (const posterId of reportingPosters) {
+    let weight = cachedBaseTrust(posterId);
+    if (!Number.isFinite(weight)) weight = 0;
+    weightSum += weight;
+    asProviderWeightSum += weight;
+  }
+
   const successRate = weightSum > 0 ? weightedSuccessSum / weightSum : 0;
   // "Confidence" — how much accumulated, trust-weighted history backs this
   // score. Saturates toward 1 as weight grows; a single lucky receipt with a
@@ -258,6 +275,7 @@ export function computeReputation(agentId: string): ReputationResult {
   }
   if (disputedCount > 0) flags.push("in_dispute");
   if (record.revokedAt) flags.push("revoked");
+  if (nonPerformanceReports.length > 0) flags.push("nonperformance_reported");
 
   // v0.24: a Sybil ring spread across many counterparties bypasses the
   // per-pair check above (no single one is concentrated) — flag when most
@@ -288,6 +306,7 @@ export function computeReputation(agentId: string): ReputationResult {
       stakeUsd: record.stakeUsd,
       decayHalfLifeDays: config.decayHalfLifeDays,
       attestedReceipts: attestedCount,
+      nonPerformanceReports: nonPerformanceReports.length,
       asProvider: {
         receipts: asProviderCount,
         successRate: asProviderWeightSum > 0 ? Math.round((asProviderWeightedSuccessSum / asProviderWeightSum) * 1000) / 1000 : 0,

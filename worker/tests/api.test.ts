@@ -21,9 +21,10 @@ const SCHEMA_STATEMENTS = [
   "CREATE TABLE IF NOT EXISTS receipts (receipt_id TEXT PRIMARY KEY, agent_a_id TEXT NOT NULL REFERENCES agents(id), agent_b_id TEXT NOT NULL REFERENCES agents(id), status TEXT NOT NULL, completed_at TEXT NOT NULL, amount_usd REAL NOT NULL DEFAULT 0, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_a ON receipts(agent_a_id)",
   "CREATE INDEX IF NOT EXISTS idx_receipts_agent_b ON receipts(agent_b_id)",
-  "CREATE TABLE IF NOT EXISTS jobs (job_id TEXT PRIMARY KEY, posted_by TEXT NOT NULL REFERENCES agents(id), capability TEXT NOT NULL, spec_hash TEXT NOT NULL, budget_amount TEXT, budget_currency TEXT, status TEXT NOT NULL, accepted_agent_id TEXT, receipt_id TEXT, created_at TEXT NOT NULL, expires_at TEXT)",
+  "CREATE TABLE IF NOT EXISTS jobs (job_id TEXT PRIMARY KEY, posted_by TEXT NOT NULL REFERENCES agents(id), capability TEXT NOT NULL, spec_hash TEXT NOT NULL, budget_amount TEXT, budget_currency TEXT, status TEXT NOT NULL, accepted_agent_id TEXT, accepted_at TEXT, receipt_id TEXT, created_at TEXT NOT NULL, expires_at TEXT, nonperformance_reported_at TEXT, nonperformance_reason TEXT)",
   "CREATE INDEX IF NOT EXISTS idx_jobs_capability_status ON jobs(capability, status)",
   "CREATE INDEX IF NOT EXISTS idx_jobs_posted_by ON jobs(posted_by)",
+  "CREATE INDEX IF NOT EXISTS idx_jobs_status_accepted_agent ON jobs(status, accepted_agent_id)",
   "CREATE TABLE IF NOT EXISTS job_offers (job_id TEXT NOT NULL REFERENCES jobs(job_id), agent_id TEXT NOT NULL, message TEXT, created_at TEXT NOT NULL, PRIMARY KEY (job_id, agent_id))",
   "CREATE TABLE IF NOT EXISTS link_challenges (challenge_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id), protocol TEXT NOT NULL, external_public_key TEXT NOT NULL, key_type TEXT NOT NULL, challenge TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS verifications (verification_id TEXT PRIMARY KEY, receipt_id TEXT NOT NULL REFERENCES receipts(receipt_id), provider TEXT NOT NULL, verifier TEXT NOT NULL, result TEXT NOT NULL, data TEXT NOT NULL)",
@@ -874,6 +875,72 @@ describe("job lifecycle", () => {
     ]);
     const statuses = [a.status, b.status].sort();
     expect(statuses).toEqual([200, 409]);
+  });
+
+  it("reports non-performance only for the poster, only on an accepted job, and only after the grace window (SPEC.md v0.25)", async () => {
+    const poster = generateKeypair();
+    const worker_ = generateKeypair();
+    const stranger = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["x"] } });
+
+    const postRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:spec_np" } });
+    const jobId = (postRes.json as { jobId: string }).jobId;
+
+    const tooEarlyOpen = await call("POST", `/v1/jobs/${jobId}/report-nonperformance`, { keypair: poster, idempotencyKey: `np:${Date.now()}`, body: {} });
+    expect((tooEarlyOpen.json as { error: { code: string } }).error.code).toBe("JOB_NOT_REPORTABLE"); // still open
+
+    await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: worker_, idempotencyKey: `o:${Date.now()}`, body: {} });
+    await call("POST", `/v1/jobs/${jobId}/accept`, { keypair: poster, idempotencyKey: `accept:${Date.now()}`, body: { agentId: worker_.did } });
+
+    const wrongCaller = await call("POST", `/v1/jobs/${jobId}/report-nonperformance`, { keypair: stranger, idempotencyKey: `np2:${Date.now()}`, body: {} });
+    expect((wrongCaller.json as { error: { code: string } }).error.code).toBe("NOT_POSTER");
+
+    const tooEarly = await call("POST", `/v1/jobs/${jobId}/report-nonperformance`, { keypair: poster, idempotencyKey: `np3:${Date.now()}`, body: {} });
+    expect((tooEarly.json as { error: { code: string } }).error.code).toBe("TOO_EARLY_TO_REPORT");
+
+    // Miniflare's isolate clock doesn't share Node's vi.useFakeTimers state
+    // (see the dispute-resolution-deadline test above), so the grace window
+    // is exercised by backdating accepted_at directly in D1 instead.
+    const past = new Date(Date.now() - 73 * 3600_000).toISOString();
+    await env.DB.prepare("UPDATE jobs SET accepted_at = ? WHERE job_id = ?").bind(past, jobId).run();
+
+    const reported = await call("POST", `/v1/jobs/${jobId}/report-nonperformance`, { keypair: poster, idempotencyKey: `np4:${Date.now()}`, body: { reason: "never delivered" } });
+    expect(reported.status).toBe(200);
+    expect((reported.json as { status: string }).status).toBe("nonperformed");
+
+    const again = await call("POST", `/v1/jobs/${jobId}/report-nonperformance`, { keypair: poster, idempotencyKey: `np5:${Date.now()}`, body: {} });
+    expect((again.json as { error: { code: string } }).error.code).toBe("JOB_NOT_REPORTABLE"); // one-shot
+
+    const cancelAttempt = await call("POST", `/v1/jobs/${jobId}/cancel`, { keypair: poster, idempotencyKey: `cancel:${Date.now()}`, body: {} });
+    expect((cancelAttempt.json as { error: { code: string } }).error.code).toBe("JOB_NOT_CANCELLABLE"); // terminal
+  });
+
+  it("weights a non-performance report by the reporting poster's own trust, deduped per poster (SPEC.md v0.25)", async () => {
+    const poster = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+
+    const before = (await call("GET", `/v1/agents/${encodeURIComponent(worker_.did)}/reputation`)).json as { components: { nonPerformanceReports: number } };
+    expect(before.components.nonPerformanceReports).toBe(0);
+
+    const postRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:spec_np2" } });
+    const jobId = (postRes.json as { jobId: string }).jobId;
+    await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: worker_, idempotencyKey: `o:${Date.now()}`, body: {} });
+    await call("POST", `/v1/jobs/${jobId}/accept`, { keypair: poster, idempotencyKey: `accept:${Date.now()}`, body: { agentId: worker_.did } });
+
+    const past = new Date(Date.now() - 73 * 3600_000).toISOString();
+    await env.DB.prepare("UPDATE jobs SET accepted_at = ? WHERE job_id = ?").bind(past, jobId).run();
+    await call("POST", `/v1/jobs/${jobId}/report-nonperformance`, { keypair: poster, idempotencyKey: `np:${Date.now()}`, body: {} });
+
+    const after = (await call("GET", `/v1/agents/${encodeURIComponent(worker_.did)}/reputation`)).json as {
+      components: { nonPerformanceReports: number };
+      flags: string[];
+    };
+    expect(after.components.nonPerformanceReports).toBe(1);
+    expect(after.flags).toContain("nonperformance_reported");
   });
 });
 
