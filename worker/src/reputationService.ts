@@ -24,6 +24,40 @@ function countsTowardReputation(r: DisputeCheckable): boolean {
   return r.status === "finalized" || (r.status === "disputed" && !isDisputeActive(r));
 }
 
+/**
+ * v0.24 — does `counterparty` have any standing independent of `excludeIds`
+ * (the agent being scored, plus every counterparty *it* has ever
+ * transacted with)? Used only to flag a Sybil-ring pattern the per-pair
+ * wash-trading cap structurally can't catch: spreading volume across many
+ * sockpuppet counterparties instead of one means no single counterparty
+ * ever crosses the concentration threshold, even though none of them has
+ * any transaction history outside the very cluster being scored.
+ *
+ * Deliberately flag-only, not a weight cap: an agent's *first-ever*
+ * transaction with a brand-new, perfectly legitimate counterparty is
+ * locally indistinguishable from a ring member by this one-hop check alone
+ * (both have zero external history at that moment) — discounting weight on
+ * this signal was tried and reverted after it zeroed out ordinary
+ * few-receipt cold-start scores in testing. Real disambiguation needs
+ * either a trust seed (stake, once staking ships) or multi-hop graph
+ * analysis over real volume — both explicitly deferred (SPEC.md §5.2).
+ *
+ * `getAgent`/`listByAgent` are async here (unlike the Node reference
+ * implementation) — an async predicate inside `.filter()`/`.some()`
+ * silently never filters, so this walks the list with a plain loop.
+ */
+async function isAnchoredCounterparty(env: Env, agentId: string, excludeIds: ReadonlySet<string>): Promise<boolean> {
+  const agent = await db.getAgent(env, agentId);
+  if (!agent) return false;
+  if (agent.stakeUsd > 0) return true;
+  const receipts = (await listByAgent(env, agentId)).filter(countsTowardReputation);
+  for (const r of receipts) {
+    const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
+    if (!excludeIds.has(counterparty)) return true;
+  }
+  return false;
+}
+
 async function baseTrust(env: Env, agentId: string): Promise<number> {
   const agent = await db.getAgent(env, agentId);
   if (!agent) return 0.05;
@@ -200,6 +234,23 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   }
   if (disputedCount > 0) flags.push("in_dispute");
   if (record.revokedAt) flags.push("revoked");
+
+  // v0.24: a Sybil ring spread across many counterparties bypasses the
+  // per-pair check above (no single one is concentrated) — flag when most
+  // of this agent's volume comes from counterparties that themselves have
+  // no transaction history outside this agent's own counterparty set. Same
+  // >=3 gate and threshold as the per-pair check; see isAnchoredCounterparty
+  // for why this is a flag, not a weight cap.
+  if (finalized.length >= 3) {
+    const excludeIds = new Set<string>([agentId, ...pairCounts.keys()]);
+    let unanchoredReceiptCount = 0;
+    for (const [counterparty, count] of pairCounts.entries()) {
+      if (!(await isAnchoredCounterparty(env, counterparty, excludeIds))) unanchoredReceiptCount += count;
+    }
+    if (unanchoredReceiptCount / finalized.length > CONCENTRATED_COUNTERPARTY_THRESHOLD) {
+      flags.push("unanchored_counterparty_volume");
+    }
+  }
 
   return {
     trustScore: Math.round(trustScore * 10) / 10,
