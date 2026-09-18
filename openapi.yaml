@@ -455,6 +455,39 @@ paths:
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
 
+  /jobs/{id}/report-nonperformance:
+    post:
+      operationId: reportNonPerformance
+      summary: >-
+        Report that this job's accepted worker never delivered (poster
+        only, v0.25). The only negative-outcome path that doesn't require
+        a Receipt — a Receipt needs the worker's own signature, so a
+        worker who simply ghosts an accepted job leaves no other way to
+        record it. Callable only once the same grace window used for
+        dispute resolution has passed since acceptance; weighted in
+        reputation by the reporting poster's own trust.
+      tags: [jobs]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - $ref: "#/components/parameters/JobId"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { reason: { type: string, maxLength: 500 } }
+      responses:
+        "200":
+          description: Job marked nonperformed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Job" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
   /receipts:
     post:
       operationId: createDraftReceipt
@@ -789,9 +822,10 @@ components:
             stakeUsd: { type: number }
             decayHalfLifeDays: { type: number }
             attestedReceipts: { type: integer, description: "Finalized receipts backed by at least one verified Verification (SPEC.md §12.5)" }
+            nonPerformanceReports: { type: integer, description: "Jobs where this agent was the accepted worker and the poster later reported non-performance (SPEC.md §3.3)" }
             asProvider: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
             asRequester: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
-        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>" }
+        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>, nonperformance_reported" }
 
     ReputationRoleBreakdown:
       type: object
@@ -832,12 +866,19 @@ components:
         budget:
           type: object
           properties: { amount: { type: string }, currency: { type: string } }
-        status: { type: string, enum: [open, accepted, completed, cancelled] }
+        status: { type: string, enum: [open, accepted, completed, cancelled, nonperformed] }
         offers: { type: array, items: { $ref: "#/components/schemas/JobOffer" } }
         acceptedAgentId: { type: ["string", "null"] }
+        acceptedAt: { type: ["string", "null"], format: date-time }
         receiptId: { type: ["string", "null"] }
         createdAt: { type: string, format: date-time }
         expiresAt: { type: ["string", "null"], format: date-time }
+        nonPerformance:
+          type: ["object", "null"]
+          description: "Set only when status is 'nonperformed' (SPEC.md §3.3, v0.25) — a one-sided report by the poster, no worker counterpart is possible by design."
+          properties:
+            reportedAt: { type: string, format: date-time }
+            reason: { type: ["string", "null"] }
 
     Verification:
       type: object

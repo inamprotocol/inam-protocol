@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { postJobSchema, offerSchema, acceptOfferSchema } from "../../sdk-js/src/core/schemas.js";
+import { postJobSchema, offerSchema, acceptOfferSchema, reportNonPerformanceSchema } from "../../sdk-js/src/core/schemas.js";
 import { requireSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
@@ -45,5 +45,12 @@ jobsRouter.post("/:id/accept", requireSignedRequest, rateLimitWriteByAgent, requ
 
 jobsRouter.post("/:id/cancel", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const job = jobService.cancelJob(req.params.id, req.agentDid!);
+  res.json(job);
+});
+
+jobsRouter.post("/:id/report-nonperformance", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
+  const parsed = reportNonPerformanceSchema.safeParse(req.body);
+  if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
+  const job = jobService.reportNonPerformance(req.params.id, req.agentDid!, parsed.data.reason);
   res.json(job);
 });

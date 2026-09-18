@@ -4,6 +4,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.25 (Draft) — 2026-09-18
+- **No negative-outcome path (§3.3).** An Execution Receipt requires the worker's own signature, so a worker who ghosts an accepted job left no record at all — success rate stayed structurally near 100%. New `POST /jobs/:id/report-nonperformance` (signed, poster only), callable once the dispute-resolution-length grace window (72h) has passed since acceptance with no receipt.
+- New job fields `acceptedAt` (set at acceptance) and `nonPerformance` (set on report), new terminal `JobStatus` value `nonperformed`. Reputation folds each report in as a zero-outcome contribution weighted by the *reporting poster's own* trust, deduped to one per poster so repeat reports don't compound (same discipline as the v0.20 wash-trading cap). New `components.nonPerformanceReports`, flag `nonperformance_reported`.
+- New `client.reportNonPerformance()`/`report_non_performance()` in both SDKs. Applied identically to both runtimes; Worker `jobs` table gains 3 columns + an index (migration required before deploy), Node needs none (blob storage).
+
 ### v0.24 (Draft) — 2026-09-18
 - **Sybil-ring flag (§5.2).** `concentrated_counterparty` only ever looked at a single counterparty's share of an agent's finalized receipts — a hub-spoke ring of many low-volume sockpuppet counterparties, none individually over the 60% threshold, stayed invisible to it. New `unanchored_counterparty_volume` flag: once an agent has ≥3 finalized receipts, fires when more than 60% of its finalized-receipt volume is with counterparties that have no stake and no finalized receipt with anyone outside this agent's own counterparty set.
 - Deliberately flag-only, not a weight cap — a brand-new legitimate counterparty's first transaction is locally indistinguishable from a ring member by this one-hop check alone; a weight-cap attempt was tried and reverted after it zeroed out ordinary cold-start scores. Applied identically to both runtimes. No wire/endpoint/field change, no D1 migration.
@@ -146,6 +151,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.5.0 — 2026-09-18
+- New `client.reportNonPerformance(jobId, reason?)` (SPEC.md v0.25, §3.3) — reports that an accepted job's worker never delivered. `JobRecord` gains `acceptedAt`/`nonPerformance`, `JobStatus` gains `"nonperformed"`, `ReputationComponents` gains `nonPerformanceReports`. New `reportNonPerformanceSchema` (`sdk-js/src/core/schemas.ts`, internal — used by both server runtimes, not re-exported from the package root, same as `resolveDisputeSchema`).
+- Minor bump: new public API surface (client method + type fields), not a patch.
+
 ### 0.4.2 — 2026-09-17
 - `ExecutionReceipt.dispute` type gains optional `resolutionDeadline`/`usedBy` (SPEC.md v0.22, §4.3). New `sdk-js/src/core/disputeLifecycle.ts` (`hasUsedDisputeRight`, `isDisputeActive`) — the storage-free dispute-fairness logic shared by both server runtimes. Patch bump: types-only for the SDK's own public surface (client methods unchanged).
 
@@ -190,6 +199,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.7.5 (Node) / 0.6.17 (Worker) — 2026-09-18
+- **No negative-outcome path (SPEC.md v0.25, §3.3).** New `POST /jobs/:id/report-nonperformance` (signed, poster only) — the only negative-outcome signal that doesn't require a Receipt, since a Receipt needs the worker's own signature and a ghosting worker will never provide one. Callable once the dispute-resolution-length grace window (72h) has passed since the job's `acceptedAt` with no finalized receipt; one-shot per job (moves `status` to terminal `nonperformed`).
+- `computeReputation` in both `src/services/reputationService.ts` and `worker/src/reputationService.ts` folds each report in as a zero-outcome contribution weighted by the *reporting poster's own* base trust, deduped to one per poster — repeat reports from a single requester against the same worker don't compound, closing the mirror-image of the wash-trading bug (v0.20) before it could ship. New `components.nonPerformanceReports`, flag `nonperformance_reported`.
+- Worker `jobs` table gains 3 columns (`accepted_at`, `nonperformance_reported_at`, `nonperformance_reason`) + an index on `(status, accepted_agent_id)` — **`worker/migration-add-nonperformance.sql` must run against production D1 before deploying this Worker version.** Node reference server needs no migration (jobs are stored as an opaque JSON blob).
+- New `client.reportNonPerformance()`/`report_non_performance()` in both SDKs (`sdk-js` 0.5.0, `sdk-python` 0.6.0). New regression tests in both runtimes: Node 99→103, Worker 68→70.
 
 ### 0.7.4 (Node) / 0.6.16 (Worker) — 2026-09-18
 - **Sybil-ring bypass of the wash-trading cap (SPEC.md v0.24, §5.2).** `computeReputation` in both `src/services/reputationService.ts` and `worker/src/reputationService.ts` gains `isAnchoredCounterparty`: once an agent has ≥3 finalized receipts, if more than 60% of its finalized-receipt volume is with counterparties that have no stake and no finalized receipt with anyone outside this agent's own counterparty set, pushes new flag `unanchored_counterparty_volume`. Live-proven: a 5-feeder × 3-receipts-each ring (each feeder individually at 20%, well under the 60% per-pair threshold) now flags where it previously slipped through silently.
@@ -319,6 +334,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.6.0 — 2026-09-18
+- New `client.report_non_performance(job_id, reason=None)` (SPEC.md v0.25, §3.3) — reports that an accepted job's worker never delivered. Untyped dict passthrough like the rest of the job methods, so no dataclass change. Optional `reason` omitted from the request body entirely when `None`, same fix as `submit_work`'s `visibility` (0.5.1) for the `json.dumps`-sends-explicit-`null` class of bug.
+- Minor bump: new public API surface, not a patch.
 
 ### 0.5.1 — 2026-09-14
 - `submit_work(agent_a_id, input, visibility=None)` gains an optional `visibility` keyword (SPEC.md v0.19, §4.4) — `"public"` or `"participants_only"`, server defaults to `"public"` if omitted.

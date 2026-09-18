@@ -157,6 +157,9 @@ export interface ReputationComponents {
    * (SPEC.md §12.5) — distinct from `verifiedReceipts` above, which really
    * means "two-party finalized," not independently attested. */
   attestedReceipts: number;
+  /** Count of jobs where this agent was the accepted worker and the
+   * poster later reported non-performance (SPEC.md §3.3). */
+  nonPerformanceReports: number;
   /** This agent's history specifically as agentB (the one who did the work)
    * on its finalized receipts (SPEC.md §5.3). */
   asProvider: ReputationRoleBreakdown;
@@ -171,7 +174,7 @@ export interface ReputationResult {
   flags: string[];
 }
 
-export type JobStatus = "open" | "accepted" | "completed" | "cancelled";
+export type JobStatus = "open" | "accepted" | "completed" | "cancelled" | "nonperformed";
 
 export interface JobOffer {
   agentId: string;
@@ -188,9 +191,15 @@ export interface JobRecord {
   status: JobStatus;
   offers: JobOffer[];
   acceptedAgentId?: string;
+  acceptedAt?: string;
   receiptId?: string;
   createdAt: string;
   expiresAt?: string;
+  // SPEC.md §3.3 (v0.25): a one-sided "the accepted worker never delivered"
+  // report by the poster — set only when status transitions to
+  // "nonperformed". No counterpart from the worker's side is possible by
+  // design (that's exactly the case this exists for).
+  nonPerformance?: { reportedAt: string; reason?: string };
 }
 
 /** SPEC.md §12 — how an independent Verification's signer actually checked

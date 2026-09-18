@@ -108,6 +108,10 @@ export const disputeSchema = z.object({ reason: z.string().min(1) });
 
 export const resolveDisputeSchema = z.object({ note: z.string().max(500).optional() });
 
+// SPEC.md §3.3 (v0.25) — reported by a job's poster once its accepted
+// worker never delivers.
+export const reportNonPerformanceSchema = z.object({ reason: z.string().max(500).optional() });
+
 export const submitVerificationSchema = z.object({
   receiptId: z.string().min(1),
   verifier: z.string().min(1),

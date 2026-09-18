@@ -307,6 +307,19 @@ class InamClient:
         encoded = urllib.parse.quote(job_id, safe="")
         return self._request("POST", f"/v1/jobs/{encoded}/cancel", None, idempotency_key=f"cancel:{job_id}")
 
+    def report_non_performance(self, job_id: str, reason: Optional[str] = None) -> Dict[str, Any]:
+        """SPEC.md section 3.3 (v0.25). Called by the job's poster once its
+        accepted worker never delivers -- the one negative-outcome path that
+        doesn't require a receipt at all. Only callable once the same grace
+        window used for dispute resolution has passed since acceptance."""
+        encoded = urllib.parse.quote(job_id, safe="")
+        return self._request(
+            "POST",
+            f"/v1/jobs/{encoded}/report-nonperformance",
+            {"reason": reason} if reason is not None else {},
+            idempotency_key=f"report-nonperformance:{job_id}",
+        )
+
     # ---- Verification (SPEC.md section 12) -- independent attestation of a finalized receipt ----
 
     def submit_verification(

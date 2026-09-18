@@ -221,6 +221,16 @@ export class InamClient {
     });
   }
 
+  /** SPEC.md §3.3 (v0.25). Called by the job's poster once its accepted
+   *  worker never delivers — the one negative-outcome path that doesn't
+   *  require a receipt at all. Only callable once the same grace window
+   *  used for dispute resolution has passed since acceptance. */
+  reportNonPerformance(jobId: string, reason?: string): Promise<JobRecord> {
+    return this.request("POST", `/v1/jobs/${encodeURIComponent(jobId)}/report-nonperformance`, reason ? { reason } : {}, {
+      idempotencyKey: `report-nonperformance:${jobId}`,
+    });
+  }
+
   // ---- Verification (SPEC.md §12) — independent attestation of a finalized receipt ----
 
   /** Called by the verifier (who must not be the receipt's own provider/agentB).
