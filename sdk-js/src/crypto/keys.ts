@@ -47,9 +47,29 @@ export function sign(message: Uint8Array, privateKey: Uint8Array): Uint8Array {
   return ed25519.sign(message, privateKey);
 }
 
+/**
+ * An external review found a small-order (low-order torsion) Ed25519 point
+ * registers as a valid did:key with no rejection anywhere -- and for such a
+ * point, the standard Ed25519 verification equation is satisfiable by
+ * arbitrary signature bytes, independent of the message, with no private key
+ * at all. Anyone could "sign" as that identity. Every raw-key verification
+ * in this codebase routes through verify()/verifyRawEd25519() below, so
+ * rejecting it here closes registration, receipt/verification signatures,
+ * and link-challenge proofs all at once, not just the registration path the
+ * review specifically reproduced.
+ */
+function isSmallOrderPublicKey(publicKey: Uint8Array): boolean {
+  try {
+    return ed25519.Point.fromHex(publicKey).isSmallOrder();
+  } catch {
+    return true; // not even a valid curve point -- reject alongside small-order
+  }
+}
+
 export function verify(signature: Uint8Array, message: Uint8Array, did: string): boolean {
   try {
     const publicKey = didToPublicKey(did);
+    if (isSmallOrderPublicKey(publicKey)) return false;
     return ed25519.verify(signature, message, publicKey);
   } catch {
     return false;
@@ -61,6 +81,7 @@ export function verify(signature: Uint8Array, message: Uint8Array, did: string):
  * necessarily encoded as an INAM did:key. */
 export function verifyRawEd25519(signature: Uint8Array, message: Uint8Array, publicKey: Uint8Array): boolean {
   try {
+    if (isSmallOrderPublicKey(publicKey)) return false;
     return ed25519.verify(signature, message, publicKey);
   } catch {
     return false;

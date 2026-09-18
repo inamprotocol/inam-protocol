@@ -20,7 +20,7 @@ def test_accept_work_countersign_content_ignores_visibility():
     base_receipt = {
         "receiptId": "r1",
         "jobId": "job1",
-        "agentA": {"id": "did:key:zA", "role": "requester"},
+        "agentA": {"id": kp.did, "role": "requester"},
         "agentB": {"id": "did:key:zB", "role": "worker"},
         "task": {"capability": "x", "specHash": "sha256:s", "createdAt": "2026-01-01T00:00:00.000Z"},
         "result": {"outputHash": "sha256:o", "completedAt": "2026-01-01T00:01:00.000Z"},

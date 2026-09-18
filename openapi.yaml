@@ -336,6 +336,9 @@ paths:
     get:
       operationId: searchJobs
       summary: Discover jobs by capability and/or status
+      description: >-
+        A job whose linked receipt is participants_only (SPEC.md §3.4, v0.26) is silently
+        omitted for a caller that isn't a party to it or an attesting verifier.
       tags: [jobs]
       security: []
       parameters:
@@ -358,6 +361,9 @@ paths:
     get:
       operationId: getJob
       summary: Fetch a single job
+      description: >-
+        JOB_NOT_VISIBLE (403, SPEC.md §3.4, v0.26) if the job's linked receipt is
+        participants_only and the caller isn't a party to it or an attesting verifier.
       tags: [jobs]
       security: []
       parameters: [{ $ref: "#/components/parameters/JobId" }]
@@ -367,6 +373,7 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Job" }
+        "403": { $ref: "#/components/responses/Error" }
         "404": { $ref: "#/components/responses/Error" }
 
   /jobs/{id}/offers:

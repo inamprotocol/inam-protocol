@@ -1,5 +1,5 @@
 import type { Context, Next } from "hono";
-import { sha256Hex } from "../../sdk-js/src/crypto/keys.js";
+import { sha256Hex, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
 import { badRequest, conflict } from "./errors.js";
 import type { AppEnv } from "./types.js";
 
@@ -34,9 +34,11 @@ export async function requireIdempotencyKey(c: Context<AppEnv>, next: Next) {
     return c.json(body, status as never);
   }
 
-  // Replay guard — see src/middleware/idempotency.ts for the rationale. A
-  // given verified signature may only ever pair with one Idempotency-Key.
-  const sigKey = `replay:${agentDid}:${sha256Hex(c.req.header("inam-signature") ?? "")}`;
+  // Replay guard — see src/middleware/idempotency.ts for the rationale, and
+  // for why this keys off the *decoded* signature bytes, not the raw header
+  // string (lenient base64 decoding otherwise lets the same signature bypass
+  // this check under multiple distinct string encodings).
+  const sigKey = `replay:${agentDid}:${sha256Hex(fromBase64(c.req.header("inam-signature") ?? ""))}`;
   const seenKey = await c.env.IDEMPOTENCY.get(sigKey);
   if (seenKey !== null && seenKey !== key) {
     throw conflict(

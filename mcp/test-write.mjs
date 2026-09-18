@@ -66,7 +66,10 @@ assert(!receipt.isError, `submit_receipt failed: ${receipt.content[0].text}`);
 const receiptId = JSON.parse(receipt.content[0].text).receiptId;
 console.log("draft receipt:", receiptId, JSON.parse(receipt.content[0].text).status);
 
-const fin = await c2.callTool({ name: "inam_countersign_receipt", arguments: { receiptId } });
+const fin = await c2.callTool({
+  name: "inam_countersign_receipt",
+  arguments: { receiptId, expectedJobId: jobId, expectedOutputHash: "sha256:write_smoke_output" },
+});
 assert(!fin.isError, `countersign failed: ${fin.content[0].text}`);
 assert(JSON.parse(fin.content[0].text).status === "finalized", "receipt not finalized");
 console.log("countersigned -> finalized");

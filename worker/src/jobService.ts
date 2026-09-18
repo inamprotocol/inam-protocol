@@ -16,8 +16,12 @@ export interface PostJobInput {
   expiresAt?: string;
 }
 
+// Math.random() isn't cryptographically random -- an external review flagged
+// job ids as guessable. randomUUID() closes it; job ids were never a secret
+// (jobs are discoverable by design, SPEC.md §3), but predictability has no
+// upside either.
 function generateJobId(): string {
-  return `job_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+  return `job_${crypto.randomUUID()}`;
 }
 
 /** Lazy expiry (SPEC.md §3.2): a job past its `expiresAt` accepts no offers

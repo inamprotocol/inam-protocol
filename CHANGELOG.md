@@ -4,6 +4,15 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.26 (Draft) — 2026-09-18
+- **Batch of six small hardening fixes** an external review found, none wire-breaking (a seventh — binding the request signature to the registry's own host identity — is deferred, wire-breaking, pending a design decision).
+- **Small-order Ed25519 key rejection.** A degenerate public key registers as a valid `did:key` with no rejection anywhere; for such a key, Ed25519 verification is satisfiable by arbitrary signature bytes with no private key at all. `sdk-js/src/crypto/keys.ts`'s `verify()`/`verifyRawEd25519()` now reject one before checking any signature, closing registration, receipt/verification signatures, and link-challenge proofs at once.
+- **Replay-guard base64 non-canonical re-encoding.** The replay guard hashed the raw `inam-signature` header *string*; a base64-encoded 64-byte signature has unused low bits in its final character that a decoder ignores, so a captured signature could be re-encoded into a different string decoding to the same bytes, bypassing the guard. Now hashes the decoded signature *bytes*.
+- **Draft-receipt spam / unconsented public exposure (§4.4).** A `draft` receipt was public and countable regardless of its own `visibility` — anyone could name any agent as `agentA` on an unbounded number of public drafts with zero involvement from that agent. `isReceiptRestricted` now also restricts `status === "draft"` regardless of `visibility`; `rawReceipts` excludes drafts.
+- **`participants_only` leak via the linked Job record (new §3.4).** `GET /jobs/:id`/`GET /jobs/search` exposed `postedBy`/`acceptedAgentId`/`budget` unconditionally even when the job's linked receipt was `participants_only`, defeating that setting entirely. New rule: a completed job inherits its linked receipt's visibility gate. New error code `JOB_NOT_VISIBLE`.
+- **Job ID predictability.** `Math.random()` → `crypto.randomUUID()` in both runtimes.
+- **Countersign blind-signing.** `acceptWork()` signed whatever receipt content it was handed, no validation — a real risk for a caller (e.g. an LLM-driven agent) that fetches a draft and signs it without re-confirming its content. Now refuses to sign unless the caller is the receipt's own `agentA`, and accepts an optional `expected` (jobId/outputHash/amount/currency) to validate against the fetched draft before signing.
+
 ### v0.25 (Draft) — 2026-09-18
 - **No negative-outcome path (§3.3).** An Execution Receipt requires the worker's own signature, so a worker who ghosts an accepted job left no record at all — success rate stayed structurally near 100%. New `POST /jobs/:id/report-nonperformance` (signed, poster only), callable once the dispute-resolution-length grace window (72h) has passed since acceptance with no receipt.
 - New job fields `acceptedAt` (set at acceptance) and `nonPerformance` (set on report), new terminal `JobStatus` value `nonperformed`. Reputation folds each report in as a zero-outcome contribution weighted by the *reporting poster's own* trust, deduped to one per poster so repeat reports don't compound (same discipline as the v0.20 wash-trading cap). New `components.nonPerformanceReports`, flag `nonperformance_reported`.
@@ -151,6 +160,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.6.0 — 2026-09-18
+- **`acceptWork(receipt, expected?)`** (SPEC.md v0.26): now refuses to sign a receipt whose `agentA.id` isn't this client's own `did`, before making any request — closes a blind-signing risk where a caller (e.g. an LLM-driven agent reachable via prompt injection through job/dispute free text) signs whatever receipt content it's handed with zero validation. New optional second argument `expected: { jobId?, outputHash?, amount?, currency? }`, validated against the fetched draft before signing when supplied; a mismatch throws before any signature is produced.
+- **`verify()`/`verifyRawEd25519()`** (`sdk-js/src/crypto/keys.ts`) now reject a small-order (low-order-torsion) Ed25519 public key before checking any signature against it — previously such a key registered as a valid `did:key` and its signature check was satisfiable by arbitrary bytes with no private key at all.
+- **`isReceiptRestricted()`** (`sdk-js/src/core/receiptVisibility.ts`) now also restricts any `status === "draft"` receipt regardless of its own `visibility` field — closes unconsented public exposure of drafts naming an unwilling `agentA`.
+- Minor bump: new public method signature (`acceptWork`'s second parameter) plus real behavior changes to existing exported functions, not a patch.
+
 ### 0.5.0 — 2026-09-18
 - New `client.reportNonPerformance(jobId, reason?)` (SPEC.md v0.25, §3.3) — reports that an accepted job's worker never delivered. `JobRecord` gains `acceptedAt`/`nonPerformance`, `JobStatus` gains `"nonperformed"`, `ReputationComponents` gains `nonPerformanceReports`. New `reportNonPerformanceSchema` (`sdk-js/src/core/schemas.ts`, internal — used by both server runtimes, not re-exported from the package root, same as `resolveDisputeSchema`).
 - Minor bump: new public API surface (client method + type fields), not a patch.
@@ -199,6 +214,14 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.7.6 (Node) / 0.6.18 (Worker) — 2026-09-18
+- **Batch of small hardening fixes (SPEC.md v0.26)**, both runtimes:
+  - `generateJobId()` (`src/services/jobService.ts`, `worker/src/jobService.ts`): `Math.random()` → `crypto.randomUUID()`.
+  - Replay-guard `sigKey` (`src/middleware/idempotency.ts`, `worker/src/idempotency.ts`): now hashes the *decoded* `inam-signature` bytes (`fromBase64(...)`) instead of the raw header string, closing a base64 non-canonical re-encoding bypass (one captured request could otherwise mint unlimited extra jobs by re-encoding its signature header).
+  - `rawReceipts` (`src/services/reputationService.ts`, `worker/src/reputationService.ts`) now excludes `draft`-status receipts, matching the shared `isReceiptRestricted` fix in `sdk-js` 0.6.0.
+  - **New job-visibility gate (§3.4)**: `GET /jobs/:id`/`GET /jobs/search` in both `src/routes/jobs.ts` and `worker/src/index.ts` now 403 (`JOB_NOT_VISIBLE`) or silently filter a job whose linked receipt is `participants_only`, for a caller that isn't a party or attesting verifier — closes a leak where the same counterparties/amounts a receipt restricted were still readable straight off its linked job record.
+- No D1 migration — all of the above are logic-only changes against existing columns. New regression tests in both runtimes covering every finding directly: Node `tests/hardening.test.ts` (6 new tests, 99→105 total), Worker `worker/tests/api.test.ts` (4 new tests, 70→74 total).
 
 ### 0.7.5 (Node) / 0.6.17 (Worker) — 2026-09-18
 - **No negative-outcome path (SPEC.md v0.25, §3.3).** New `POST /jobs/:id/report-nonperformance` (signed, poster only) — the only negative-outcome signal that doesn't require a Receipt, since a Receipt needs the worker's own signature and a ghosting worker will never provide one. Callable once the dispute-resolution-length grace window (72h) has passed since the job's `acceptedAt` with no finalized receipt; one-shot per job (moves `status` to terminal `nonperformed`).
@@ -334,6 +357,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.7.0 — 2026-09-18
+- **`accept_work(receipt, expected=None)`** (SPEC.md v0.26): mirrors `sdk-js` 0.6.0's `acceptWork` fix — now refuses to sign a receipt whose `agentA.id` isn't this client's own `did`, and accepts an optional `expected` dict (`jobId`/`outputHash`/`amount`/`currency`) validated against the fetched draft before signing.
+- **`verify()`/`verify_raw_ed25519()`** (`inamprotocol/keys.py`) now reject a small-order Ed25519 public key before checking any signature against it — a fixed 8-entry blacklist of the curve's known low-order points (edwards25519's cofactor is 8), the equivalent check to `sdk-js`'s `Point.fromHex(key).isSmallOrder()` without pulling in a full curve-arithmetic library.
+- Minor bump: new public method signature plus real behavior changes to existing exported functions, not a patch.
 
 ### 0.6.0 — 2026-09-18
 - New `client.report_non_performance(job_id, reason=None)` (SPEC.md v0.25, §3.3) — reports that an accepted job's worker never delivered. Untyped dict passthrough like the rest of the job methods, so no dataclass change. Optional `reason` omitted from the request body entirely when `None`, same fix as `submit_work`'s `visibility` (0.5.1) for the `json.dumps`-sends-explicit-`null` class of bug.

@@ -56,9 +56,41 @@ def sign(message: bytes, private_key: Ed25519PrivateKey) -> bytes:
     return private_key.sign(message)
 
 
+# edwards25519 has cofactor 8, so there are exactly 8 small-order (low-order
+# torsion) points on the curve -- for any of them, standard Ed25519
+# verification is satisfiable by arbitrary signature bytes with no private
+# key at all (must match sdk-js/src/crypto/keys.ts's isSmallOrderPublicKey,
+# which rejects the same set via `Point.fromHex(key).isSmallOrder()`; this
+# fixed 8-entry blacklist is the equivalent check without a full curve
+# library -- derived by scalar-multiplying a random curve point by the
+# prime subgroup order L to land in the torsion subgroup, then enumerating
+# its 8 multiples, each independently confirmed small-order via noble's
+# isSmallOrder()).
+_SMALL_ORDER_PUBLIC_KEYS = frozenset(
+    bytes.fromhex(h)
+    for h in (
+        "0000000000000000000000000000000000000000000000000000000000000000",
+        "0100000000000000000000000000000000000000000000000000000000000000",
+        "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+        "0000000000000000000000000000000000000000000000000000000000000080",
+        "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+        "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+        "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+        "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa",
+    )
+)
+
+
+def _is_small_order_public_key(public_key: bytes) -> bool:
+    return public_key in _SMALL_ORDER_PUBLIC_KEYS
+
+
 def verify(signature: bytes, message: bytes, did: str) -> bool:
     try:
-        public_key = Ed25519PublicKey.from_public_bytes(did_to_public_key(did))
+        raw = did_to_public_key(did)
+        if _is_small_order_public_key(raw):
+            return False
+        public_key = Ed25519PublicKey.from_public_bytes(raw)
         public_key.verify(signature, message)
         return True
     except Exception:
@@ -70,6 +102,8 @@ def verify_raw_ed25519(signature: bytes, message: bytes, public_key: bytes) -> b
     externally-issued identities (e.g. an AgentPass/AITP key) that aren't
     necessarily encoded as an INAM did:key."""
     try:
+        if _is_small_order_public_key(public_key):
+            return False
         Ed25519PublicKey.from_public_bytes(public_key).verify(signature, message)
         return True
     except Exception:
