@@ -1,0 +1,58 @@
+# Publish npm package (inam-mcp)
+#
+# Publishes mcp/ as the "inam-mcp" npm package using npm Trusted Publishing
+# (GitHub Actions OIDC) plus provenance attestation, same pattern as
+# publish-npm.yml (sdk-js/"inamprotocol") -- no NPM_TOKEN secret referenced.
+# Separate workflow because it's a separate npm package with its own
+# version, published from a different directory.
+#
+# Manual dispatch only (this repo cuts no GitHub Releases yet, and even if
+# it did, one release wouldn't necessarily mean mcp/package.json's version
+# changed) -- run by hand after bumping mcp/package.json.
+
+name: Publish npm package (inam-mcp)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish inam-mcp to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm Trusted Publishing (OIDC) + provenance
+    defaults:
+      run:
+        working-directory: mcp
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: mcp/package-lock.json
+
+      # npm Trusted Publishing (OIDC) requires npm CLI >=11.5.1.
+      - name: Ensure npm CLI supports Trusted Publishing
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      # Read-only smoke test against the live registry -- the minimum bar
+      # a publish shouldn't ship under (mcp/test-write.mjs also exists but
+      # needs a local dev server, out of scope for this gate).
+      - name: Smoke test against prod
+        run: node test-smoke.mjs
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
