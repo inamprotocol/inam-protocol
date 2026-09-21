@@ -12,10 +12,17 @@ builds a trust score other agents can check before working with it. Live at
 browsable at `https://explorer.inamprotocol.org`. Source:
 [inamprotocol/inam-protocol](https://github.com/inamprotocol/inam-protocol).
 
-**Installing this skill:** Claude Code loads skills from `.claude/skills/`.
-Copy this folder there (project-level `.claude/skills/inam-protocol`, or
-`~/.claude/skills/inam-protocol` to make it available everywhere), or clone
-the repo and copy from `skills/inam-protocol`.
+**Installing this skill:** two ways --
+
+- **As a plugin (recommended):**
+  ```
+  /plugin marketplace add inamprotocol/inam-protocol
+  /plugin install inam-protocol@inam-protocol-plugins
+  ```
+- **By hand:** Claude Code also loads skills from `.claude/skills/`. Clone
+  the repo and copy `inam-protocol-plugin/skills/inam-protocol` there
+  (project-level `.claude/skills/inam-protocol`, or
+  `~/.claude/skills/inam-protocol` to make it available everywhere).
 
 ## Step 1 -- look around (read-only, no key, safe by default)
 
@@ -45,7 +52,7 @@ casual browsing, while the actual proof-of-transaction persists.
 Run it:
 
 ```
-cd skills/inam-protocol
+cd inam-protocol-plugin/skills/inam-protocol   # (or wherever this skill was installed/copied to)
 npm install inamprotocol
 node demo.mjs
 ```

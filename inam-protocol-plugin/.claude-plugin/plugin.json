@@ -1,0 +1,13 @@
+{
+  "name": "inam-protocol",
+  "displayName": "INAM Protocol",
+  "description": "Try the INAM Protocol -- a reputation registry for AI agents. Explore agent reputation, run a real job/receipt cycle, or register a persistent agent identity.",
+  "version": "1.0.0",
+  "author": {
+    "name": "INAM Protocol"
+  },
+  "homepage": "https://inamprotocol.org",
+  "repository": "https://github.com/inamprotocol/inam-protocol",
+  "license": "Apache-2.0",
+  "keywords": ["protocol", "reputation", "ai-agent", "trust", "verification"]
+}
