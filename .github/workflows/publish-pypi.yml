@@ -17,10 +17,10 @@
 # version, without needing a matching tag/release first.
 #
 # No PyPI API token secret is referenced below. Once PyPI Trusted
-# Publishing is configured for the "inamprotocol" project (see
-# docs-design/trusted-publishing-setup.md), PyPI exchanges this
-# workflow's OIDC identity for a short-lived, single-use publish token
-# automatically when `id-token: write` is granted.
+# Publishing is configured for the "inamprotocol" project (an
+# account-side pypi.org setting), PyPI exchanges this workflow's OIDC
+# identity for a short-lived, single-use publish token automatically
+# when `id-token: write` is granted.
 
 name: Publish PyPI package (sdk-python)
 
