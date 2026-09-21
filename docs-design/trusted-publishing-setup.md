@@ -87,6 +87,31 @@ Note on npm CLI version: OIDC trusted publishing requires npm CLI
 npm@latest` before publishing) — nothing for you to do here, just don't
 remove that step if you ever edit the workflow.
 
+## 1b. npm — configure Trusted Publisher for `inam-mcp` (separate package, separate setup)
+
+`inam-mcp` (the `mcp/` directory) is an entirely different npm package
+from `inamprotocol` — npm's Trusted Publisher config is per-package, so
+setting it up for `inamprotocol` above does nothing for this one. Confirmed
+the hard way (2026-09-21): `.github/workflows/publish-npm-mcp.yml` exists
+and is otherwise correct, but every run 404s at the actual `npm publish`
+step until this section's steps are done — that publish went out manually
+(`npm login` + OTP) instead as a one-time workaround.
+
+1. Go to <https://www.npmjs.com/package/inam-mcp> → **Settings** → **Trusted
+   Publisher**.
+2. Fill in:
+   - **Organization or user:** `inamprotocol`
+   - **Repository:** `inam-protocol`
+   - **Workflow filename:** `publish-npm-mcp.yml` (filename only, not the
+     `.github/workflows/` path)
+   - **Environment name:** leave blank
+   - **Allowed actions:** `npm publish`
+3. Save, re-checking the values first (same no-dry-run caveat as above).
+
+After this, `gh workflow run publish-npm-mcp.yml` publishes `inam-mcp`
+with OIDC + provenance, same as the other two packages — no more manual
+`npm login`/OTP step for this package's releases.
+
 ## 2. PyPI — configure Trusted Publisher for `inamprotocol`
 
 Prerequisite: you must be logged into [pypi.org](https://pypi.org/) as an
