@@ -10,6 +10,6 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
-    "wrangler": "^4.0.0"
+    "wrangler": "^4.135.0"
   }
 }
