@@ -164,11 +164,16 @@ export async function hasVerifiedAttestation(env: Env, receiptId: string): Promi
   for (const v of records) {
     try {
       const agent = await getAgent(env, v.verifier);
-      if (agent.isAuthorizedVerifier) authorizedRecords.push(v);
+      // A self-revoked verifier's isAuthorizedVerifier flag is frozen —
+      // setVerifierStatus refuses to touch a revoked agent, so the operator
+      // can no longer clear it. Checking revokedAt here closes that:
+      // revocation always removes a verifier's standing, whether the
+      // operator or the agent itself initiated it.
+      if (agent.isAuthorizedVerifier && !agent.revokedAt) authorizedRecords.push(v);
     } catch {
-      // verifier no longer registered — shouldn't happen (agents are only
-      // ever revoked, not deleted), but don't let a lookup failure crash
-      // reputation computation for every other receipt.
+      // verifier truly doesn't exist (AGENT_NOT_FOUND) — shouldn't happen
+      // (agents are only ever revoked, not deleted), but don't let a lookup
+      // failure crash reputation computation for every other receipt.
     }
   }
   const verifiedCount = authorizedRecords.filter((v) => v.result === "verified").length;
