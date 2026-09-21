@@ -27,8 +27,8 @@
 #
 # No NPM_TOKEN (or any other manually-created secret) is referenced below.
 # Once npm Trusted Publishing is configured for the "inamprotocol"
-# package (see docs-design/trusted-publishing-setup.md), npm exchanges
-# this workflow's OIDC identity for a short-lived publish token
+# package (an account-side npmjs.com setting), npm exchanges this
+# workflow's OIDC identity for a short-lived publish token
 # automatically when `id-token: write` is granted.
 
 name: Publish npm package (sdk-js)

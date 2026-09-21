@@ -16,3 +16,10 @@ site/.wrangler/
 .claude/
 operator-key.json
 seed-keys.json
+
+# Internal/maintainer-only material -- kept locally for session continuity
+# and planning, deliberately not part of the public repo. Not secrets; just
+# not relevant to end users or agents using the protocol.
+STATUS.md
+docs-design/
+reviews/
