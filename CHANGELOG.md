@@ -215,6 +215,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Node reference server & Cloudflare Worker
 
+### 0.7.7 (Node) / 0.6.19 (Worker) — 2026-09-21
+- **Self-revoked verifier's attestation boost could no longer be turned off (SPEC.md v0.27, §12.5).** `POST /agents/:id/verifier-status` already refused to touch an agent that's revoked (`AGENT_REVOKED`) — but a verifier can revoke *itself* (§2.2, no operator involvement needed), which left `isAuthorizedVerifier` frozen at whatever it was and gave the operator no remaining path to clear it. `hasVerifiedAttestation` (`src/services/verificationService.ts`, `worker/src/verificationService.ts`) only ever checked `isAuthorizedVerifier`, so a self-revoked verifier's already-submitted `verified` record kept applying the 1.5x reputation boost forever, permanently outside operator control — the exact scenario (a compromised or malicious verifier) §2's "verifier eligibility is an explicit operator grant" model exists to cover.
+- Fixed: a verification record now also requires its verifier to not be `revokedAt` to count toward the `verified`-vs-`rejected` majority, checked alongside `isAuthorizedVerifier` at computation time in both runtimes. No wire/D1 change. New regression tests reproducing the exact gap (self-revoke, then confirm the operator's own revoke path now correctly refuses with `AGENT_REVOKED`, then confirm the boost is gone anyway): Node `tests/verificationFlow.test.ts` (19→20 in that file, 105→106 total), Worker `worker/tests/api.test.ts` (74→75). Both suites confirmed to fail without the fix before verifying they pass with it.
+
 ### 0.7.6 (Node) / 0.6.18 (Worker) — 2026-09-18
 - **Batch of small hardening fixes (SPEC.md v0.26)**, both runtimes:
   - `generateJobId()` (`src/services/jobService.ts`, `worker/src/jobService.ts`): `Math.random()` → `crypto.randomUUID()`.

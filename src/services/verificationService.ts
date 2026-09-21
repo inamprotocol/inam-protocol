@@ -156,9 +156,16 @@ export function listByReceipt(receiptId: string): VerificationRecord[] {
 export function hasVerifiedAttestation(receiptId: string): boolean {
   const records = listByReceipt(receiptId).filter((v) => {
     try {
-      return getAgent(v.verifier).isAuthorizedVerifier;
+      const agent = getAgent(v.verifier);
+      // A self-revoked verifier's isAuthorizedVerifier flag is frozen at
+      // whatever it was — setVerifierStatus refuses to touch a revoked
+      // agent (AGENT_REVOKED), so the operator can no longer clear it.
+      // Checking revokedAt here closes that: revocation always removes a
+      // verifier's standing, whether the operator or the agent itself
+      // initiated it.
+      return agent.isAuthorizedVerifier && !agent.revokedAt;
     } catch {
-      return false; // verifier no longer registered (e.g. self-revoked)
+      return false; // verifier truly doesn't exist (AGENT_NOT_FOUND)
     }
   });
   const verifiedCount = records.filter((v) => v.result === "verified").length;

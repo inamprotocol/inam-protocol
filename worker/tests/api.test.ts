@@ -1837,6 +1837,49 @@ describe("independent verification (SPEC.md §12)", () => {
     const after = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { attestedReceipts: number } };
     expect(after.components.attestedReceipts).toBe(0);
   });
+
+  it("stops a self-revoked verifier's past `verified` record from still boosting reputation, and the operator can no longer flip its status back off", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: verifier, idempotencyKey: `reg:${verifier.did}`, body: { capabilities: ["verification"] } });
+    await authorizeVerifier(verifier);
+
+    const receipt = await finalizeReceipt(requester, provider);
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+    const { signature } = await signVerification(verifier, input);
+    const submitRes = await call("POST", "/v1/verifications", {
+      keypair: verifier,
+      idempotencyKey: `verify:${Date.now()}`,
+      body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+    });
+    expect(submitRes.status).toBe(201);
+
+    const before = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { attestedReceipts: number } };
+    expect(before.components.attestedReceipts).toBe(1);
+
+    // The verifier retires itself -- not an operator action. isAuthorizedVerifier
+    // is left untouched by /revoke, and /verifier-status refuses to touch a
+    // revoked agent (AGENT_REVOKED), so the operator has no way left to flip it
+    // back to false. hasVerifiedAttestation must check revokedAt itself.
+    const selfRevoke = await call("POST", `/v1/agents/${encodeURIComponent(verifier.did)}/revoke`, {
+      keypair: verifier,
+      idempotencyKey: `self-revoke:${Date.now()}`,
+      body: { reason: "compromised key, self-revoking" },
+    });
+    expect(selfRevoke.status).toBe(200);
+
+    const blockedRevoke = await call("POST", `/v1/agents/${encodeURIComponent(verifier.did)}/verifier-status`, {
+      keypair: testOperatorKeypair,
+      idempotencyKey: `revoke3:${Date.now()}`,
+      body: { authorized: false },
+    });
+    expect(blockedRevoke.status).toBe(409);
+    expect((blockedRevoke.json as { error: { code: string } }).error.code).toBe("AGENT_REVOKED");
+
+    const after = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as { components: { attestedReceipts: number } };
+    expect(after.components.attestedReceipts).toBe(0);
+  });
 });
 
 describe("receipt visibility (SPEC.md §4.4, audit #13)", () => {

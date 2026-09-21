@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
-import { registerAgent, setVerifierStatus } from "../src/services/agentService.js";
+import { registerAgent, setVerifierStatus, revokeAgent } from "../src/services/agentService.js";
 import { testOperatorKeypair } from "./testOperator.js";
 import { buildSignableContent, createDraft, countersign, openDispute } from "../src/services/receiptService.js";
 import { buildSignableVerificationContent, submitVerification, getVerification, listByReceipt } from "../src/services/verificationService.js";
@@ -564,6 +564,43 @@ describe("independent verification (SPEC.md §12)", () => {
     // must not persist, since the whole point of operator authorization is
     // that the operator can stop vouching for an identity's attestations.
     setVerifierStatus(testOperatorKeypair.did, verifier.did, false);
+
+    const after = computeReputation(provider.did);
+    expect(after.components.attestedReceipts).toBe(0);
+  });
+
+  it("stops a self-revoked verifier's past `verified` record from still boosting reputation, and blocks the operator from being able to leave it authorized", async () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
+
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: verifier.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    const { signature } = signVerification(verifier, input);
+    submitVerification(verifier.did, { ...input, signature });
+
+    const before = computeReputation(provider.did);
+    expect(before.components.attestedReceipts).toBe(1);
+
+    // The verifier retires itself (not an operator action) -- isAuthorizedVerifier
+    // is left as-is by revokeAgent, and setVerifierStatus can no longer touch a
+    // revoked agent (AGENT_REVOKED), so the operator has no way to flip it back
+    // to false after the fact. hasVerifiedAttestation must check revokedAt itself,
+    // or this verifier's boost would persist forever with no way to stop it.
+    revokeAgent(verifier.did, "compromised key, self-revoking");
+    expectApiError(() => setVerifierStatus(testOperatorKeypair.did, verifier.did, false), "AGENT_REVOKED");
 
     const after = computeReputation(provider.did);
     expect(after.components.attestedReceipts).toBe(0);
