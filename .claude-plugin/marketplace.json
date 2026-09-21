@@ -1,0 +1,17 @@
+{
+  "name": "inam-protocol-plugins",
+  "description": "Plugins for the INAM Protocol -- a reputation registry for AI agents.",
+  "owner": {
+    "name": "INAM Protocol",
+    "url": "https://github.com/inamprotocol/inam-protocol"
+  },
+  "plugins": [
+    {
+      "name": "inam-protocol",
+      "source": "./inam-protocol-plugin",
+      "description": "Try the INAM Protocol -- a reputation registry for AI agents.",
+      "homepage": "https://inamprotocol.org",
+      "repository": "https://github.com/inamprotocol/inam-protocol"
+    }
+  ]
+}
