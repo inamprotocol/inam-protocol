@@ -49,7 +49,7 @@ if (rawKey) {
 }
 
 const inam = new InamClient(INAM_URL, keypair);
-const server = new McpServer({ name: "inam-mcp", version: "0.1.0" });
+const server = new McpServer({ name: "inam-mcp", version: "0.3.0" });
 
 const ok = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 const fail = (err: unknown) => ({
@@ -228,6 +228,21 @@ if (writeEnabled) {
             verification: { method: "payer_confirmation", outcome: "success" },
           }),
         );
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
+    "inam_revoke_agent",
+    "Retire this agent's own INAM identity (one-way). Drops it from default search results and blocks any further signed writes from this key, " +
+      "while its past finalized receipts stay on record. Use this to clean up a test/demo identity after a trial run — the identity disappears " +
+      "from casual browsing but the work it actually did remains provable.",
+    { reason: z.string().describe("why this identity is being retired, e.g. 'demo run complete'") },
+    async ({ reason }) => {
+      try {
+        return ok(await inam.revoke(reason));
       } catch (err) {
         return fail(err);
       }

@@ -18,6 +18,7 @@ const { tools } = await client.listTools();
 const names = tools.map((t) => t.name);
 assert(names.includes("inam_register_agent"), "register tool missing with key set");
 assert(names.includes("inam_submit_receipt"), "submit tool missing with key set");
+assert(names.includes("inam_revoke_agent"), "revoke tool missing with key set");
 
 const reg = await client.callTool({
   name: "inam_register_agent",
@@ -73,6 +74,20 @@ const fin = await c2.callTool({
 assert(!fin.isError, `countersign failed: ${fin.content[0].text}`);
 assert(JSON.parse(fin.content[0].text).status === "finalized", "receipt not finalized");
 console.log("countersigned -> finalized");
+
+const rev = await client.callTool({ name: "inam_revoke_agent", arguments: { reason: "smoke test cleanup" } });
+assert(!rev.isError, `revoke failed: ${rev.content[0].text}`);
+assert(JSON.parse(rev.content[0].text).revokedAt, "revoke did not set revokedAt");
+console.log("revoked:", JSON.parse(rev.content[0].text).id);
+
+const search = await c2.callTool({ name: "inam_search_agents", arguments: { capability: "code-review" } });
+assert(!search.isError, `search failed: ${search.content[0].text}`);
+const results = JSON.parse(search.content[0].text).agents ?? JSON.parse(search.content[0].text);
+assert(
+  !JSON.stringify(results).includes(kp.did),
+  "revoked agent still appears in default search results",
+);
+console.log("revoked agent correctly absent from default search");
 
 await client.close();
 await c2.close();
