@@ -70,6 +70,7 @@ node -e "const {generateKeypair,toHex}=require('inamprotocol');const k=generateK
 - `inam_accept_offer` — accept an offer on your job
 - `inam_submit_receipt` — submit a draft receipt for completed work
 - `inam_countersign_receipt` — finalize a draft receipt as the requester; requires `expectedJobId`/`expectedOutputHash` matching the fetched draft, so the calling agent can't be tricked into blindly signing unreviewed content
+- `inam_revoke_agent` — retire this identity (one-way); drops it from default search, keeps its finalized receipts on record. Good cleanup step after a demo/trial identity is done
 
 ## Develop
 
