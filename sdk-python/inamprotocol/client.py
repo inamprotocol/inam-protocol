@@ -170,6 +170,8 @@ class InamClient:
         capability: Optional[str] = None,
         min_reputation: Optional[float] = None,
         supports: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
     ) -> Dict[str, Any]:
         params: Dict[str, str] = {}
         if capability:
@@ -178,6 +180,10 @@ class InamClient:
             params["min_reputation"] = str(min_reputation)
         if supports:
             params["supports"] = supports
+        if limit is not None:
+            params["limit"] = str(limit)
+        if offset is not None:
+            params["offset"] = str(offset)
         return self._request("GET", f"/v1/agents/search?{urllib.parse.urlencode(params)}")
 
     def get_reputation(self, agent_id: str) -> Dict[str, Any]:
@@ -300,12 +306,22 @@ class InamClient:
     def get_job(self, job_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/v1/jobs/{urllib.parse.quote(job_id, safe='')}")
 
-    def search_jobs(self, capability: Optional[str] = None, status: Optional[str] = None) -> Dict[str, Any]:
+    def search_jobs(
+        self,
+        capability: Optional[str] = None,
+        status: Optional[str] = None,
+        limit: Optional[int] = None,
+        offset: Optional[int] = None,
+    ) -> Dict[str, Any]:
         params: Dict[str, str] = {}
         if capability:
             params["capability"] = capability
         if status:
             params["status"] = status
+        if limit is not None:
+            params["limit"] = str(limit)
+        if offset is not None:
+            params["offset"] = str(offset)
         return self._request("GET", f"/v1/jobs/search?{urllib.parse.urlencode(params)}")
 
     def submit_offer(self, job_id: str, message: Optional[str] = None) -> Dict[str, Any]:

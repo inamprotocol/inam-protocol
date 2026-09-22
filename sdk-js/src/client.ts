@@ -114,11 +114,19 @@ export class InamClient {
     });
   }
 
-  searchAgents(query: { capability?: string; minReputation?: number; supports?: string }): Promise<{ agents: AgentRecord[] }> {
+  searchAgents(query: {
+    capability?: string;
+    minReputation?: number;
+    supports?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<{ agents: AgentRecord[]; hasMore: boolean }> {
     const params = new URLSearchParams();
     if (query.capability) params.set("capability", query.capability);
     if (query.minReputation !== undefined) params.set("min_reputation", String(query.minReputation));
     if (query.supports) params.set("supports", query.supports);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    if (query.offset !== undefined) params.set("offset", String(query.offset));
     return this.request("GET", `/v1/agents/search?${params.toString()}`);
   }
 
@@ -225,10 +233,12 @@ export class InamClient {
     return this.request("GET", `/v1/jobs/${encodeURIComponent(id)}`);
   }
 
-  searchJobs(query: { capability?: string; status?: string }): Promise<{ jobs: JobRecord[] }> {
+  searchJobs(query: { capability?: string; status?: string; limit?: number; offset?: number }): Promise<{ jobs: JobRecord[]; hasMore: boolean }> {
     const params = new URLSearchParams();
     if (query.capability) params.set("capability", query.capability);
     if (query.status) params.set("status", query.status);
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    if (query.offset !== undefined) params.set("offset", String(query.offset));
     return this.request("GET", `/v1/jobs/search?${params.toString()}`);
   }
 

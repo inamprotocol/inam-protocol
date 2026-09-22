@@ -27,6 +27,7 @@ import {
   resolveDisputeSchema,
   submitVerificationSchema,
 } from "../../sdk-js/src/core/schemas.js";
+import { parsePageParams, paginate } from "../../sdk-js/src/core/pagination.js";
 import type { AppEnv } from "./types.js";
 
 const app = new Hono<AppEnv>();
@@ -114,7 +115,8 @@ app.get("/v1/agents/search", rateLimitReadByIp, async (c) => {
     const withReputation = await Promise.all(results.map(async (a) => ({ a, score: (await computeReputation(c.env, a.id)).trustScore })));
     results = withReputation.filter((x) => x.score >= minReputation).map((x) => x.a);
   }
-  return c.json({ agents: results });
+  const { page, hasMore } = paginate(results, parsePageParams(c.req.query("limit"), c.req.query("offset")));
+  return c.json({ agents: page, hasMore });
 });
 
 app.get("/v1/agents/:id", async (c) => c.json(await agentService.getAgent(c.env, c.req.param("id")!)));
@@ -236,8 +238,10 @@ app.get("/v1/jobs/search", optionalSignedRequest, rateLimitReadByIp, async (c) =
   const status = c.req.query("status");
   const callerDid = c.get("agentDid");
   const all = await jobService.searchJobs(c.env, { capability, status });
-  const visible = await Promise.all(all.map(async (j) => ((await isJobVisible(c, j, callerDid)) ? j : null)));
-  return c.json({ jobs: visible.filter((j): j is NonNullable<typeof j> => j !== null) });
+  const visibleResults = await Promise.all(all.map(async (j) => ((await isJobVisible(c, j, callerDid)) ? j : null)));
+  const visible = visibleResults.filter((j): j is NonNullable<typeof j> => j !== null);
+  const { page, hasMore } = paginate(visible, parsePageParams(c.req.query("limit"), c.req.query("offset")));
+  return c.json({ jobs: page, hasMore });
 });
 
 app.get("/v1/jobs/:id", optionalSignedRequest, async (c) => {

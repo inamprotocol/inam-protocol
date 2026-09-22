@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { registerAgentSchema, linkChallengeSchema, linkSchema, setVerifierStatusSchema, revokeAgentSchema } from "../../sdk-js/src/core/schemas.js";
+import { parsePageParams, paginate } from "../../sdk-js/src/core/pagination.js";
 import { requireSignedRequest, optionalSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
@@ -40,7 +41,10 @@ agentsRouter.get("/search", rateLimitReadByIp, (req, res) => {
   if (minReputation !== undefined) {
     results = results.filter((a) => computeReputation(a.id).trustScore >= minReputation);
   }
-  res.json({ agents: results });
+  const rawLimit = typeof req.query.limit === "string" ? req.query.limit : undefined;
+  const rawOffset = typeof req.query.offset === "string" ? req.query.offset : undefined;
+  const { page, hasMore } = paginate(results, parsePageParams(rawLimit, rawOffset));
+  res.json({ agents: page, hasMore });
 });
 
 agentsRouter.get("/:id", (req, res) => {

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { postJobSchema, offerSchema, acceptOfferSchema, reportNonPerformanceSchema } from "../../sdk-js/src/core/schemas.js";
+import { parsePageParams, paginate } from "../../sdk-js/src/core/pagination.js";
 import { requireSignedRequest, optionalSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitWriteByAgent, rateLimitReadByIp } from "../middleware/rateLimit.js";
@@ -39,8 +40,11 @@ jobsRouter.post("/", requireSignedRequest, rateLimitWriteByAgent, requireIdempot
 jobsRouter.get("/search", optionalSignedRequest, rateLimitReadByIp, (req, res) => {
   const capability = typeof req.query.capability === "string" ? req.query.capability : undefined;
   const status = typeof req.query.status === "string" ? req.query.status : undefined;
-  const jobs = jobService.searchJobs({ capability, status }).filter((j) => isJobVisible(j, req.agentDid));
-  res.json({ jobs });
+  const visible = jobService.searchJobs({ capability, status }).filter((j) => isJobVisible(j, req.agentDid));
+  const rawLimit = typeof req.query.limit === "string" ? req.query.limit : undefined;
+  const rawOffset = typeof req.query.offset === "string" ? req.query.offset : undefined;
+  const { page, hasMore } = paginate(visible, parsePageParams(rawLimit, rawOffset));
+  res.json({ jobs: page, hasMore });
 });
 
 jobsRouter.get("/:id", optionalSignedRequest, (req, res) => {

@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.28 (Draft) — 2026-09-22
+- **Search pagination (round-2 item 7).** `GET /agents/search` and `GET /jobs/search` had no result-set bound at all — the Worker's D1 job-search query ran with no `LIMIT` clause whatsoever. Both now accept optional `limit`/`offset` (default `limit=50`, clamped to 200; invalid values fall back to the default) and both responses gain `hasMore`. Applied after post-fetch filtering (job visibility, `min_reputation`) so a page reflects what the caller actually sees. Purely additive, no wire break — new shared `sdk-js/src/core/pagination.ts`.
+
+### v0.27 (Draft) — 2026-09-22
+- **Self-revoked-verifier attestation-boost gap (§12.5).** `POST /agents/:id/verifier-status` already couldn't touch an already-revoked agent, but a verifier revoking *itself* (§2.2, self-service, no operator involvement) froze its `isAuthorizedVerifier` flag at whatever it was — `hasVerifiedAttestation` only ever checked that flag, never `revokedAt`, so a self-revoked verifier's already-submitted `verified` records kept applying the 1.5x boost forever with no operator action able to stop it. Fixed in both runtimes' `hasVerifiedAttestation`: now requires `isAuthorizedVerifier && !revokedAt`. No wire/D1 change.
+
 ### v0.26 (Draft) — 2026-09-18
 - **Batch of six small hardening fixes** an external review found, none wire-breaking (a seventh — binding the request signature to the registry's own host identity — is deferred, wire-breaking, pending a design decision).
 - **Small-order Ed25519 key rejection.** A degenerate public key registers as a valid `did:key` with no rejection anywhere; for such a key, Ed25519 verification is satisfiable by arbitrary signature bytes with no private key at all. `sdk-js/src/crypto/keys.ts`'s `verify()`/`verifyRawEd25519()` now reject one before checking any signature, closing registration, receipt/verification signatures, and link-challenge proofs at once.
@@ -160,6 +166,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.6.1 — 2026-09-22
+- `searchAgents()`/`searchJobs()` gain optional `limit`/`offset` passthrough params (SPEC.md v0.28); both return types gain `hasMore: boolean`. New `sdk-js/src/core/pagination.ts` (`parsePageParams`/`paginate`), shared by both server runtimes. Patch bump: added optional parameters, existing calls unaffected.
+
 ### 0.6.0 — 2026-09-18
 - **`acceptWork(receipt, expected?)`** (SPEC.md v0.26): now refuses to sign a receipt whose `agentA.id` isn't this client's own `did`, before making any request — closes a blind-signing risk where a caller (e.g. an LLM-driven agent reachable via prompt injection through job/dispute free text) signs whatever receipt content it's handed with zero validation. New optional second argument `expected: { jobId?, outputHash?, amount?, currency? }`, validated against the fetched draft before signing when supplied; a mismatch throws before any signature is produced.
 - **`verify()`/`verifyRawEd25519()`** (`sdk-js/src/crypto/keys.ts`) now reject a small-order (low-order-torsion) Ed25519 public key before checking any signature against it — previously such a key registered as a valid `did:key` and its signature check was satisfiable by arbitrary bytes with no private key at all.
@@ -214,6 +223,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.7.8 (Node) / 0.6.20 (Worker) — 2026-09-22
+- **Search pagination (SPEC.md v0.28).** `GET /agents/search`/`GET /jobs/search` (`src/routes/jobs.ts`, `src/routes/agents.ts`, `worker/src/index.ts`) now accept `limit`/`offset` and cap the response with the new shared `sdk-js/src/core/pagination.ts`. The Worker's job search previously issued `SELECT * FROM jobs ${where}` with no `LIMIT` at all. New tests: Node `tests/pagination.test.ts` (5 tests), Worker `worker/tests/api.test.ts` (+2 tests, 75→77).
 
 ### 0.7.7 (Node) / 0.6.19 (Worker) — 2026-09-21
 - **Self-revoked verifier's attestation boost could no longer be turned off (SPEC.md v0.27, §12.5).** `POST /agents/:id/verifier-status` already refused to touch an agent that's revoked (`AGENT_REVOKED`) — but a verifier can revoke *itself* (§2.2, no operator involvement needed), which left `isAuthorizedVerifier` frozen at whatever it was and gave the operator no remaining path to clear it. `hasVerifiedAttestation` (`src/services/verificationService.ts`, `worker/src/verificationService.ts`) only ever checked `isAuthorizedVerifier`, so a self-revoked verifier's already-submitted `verified` record kept applying the 1.5x reputation boost forever, permanently outside operator control — the exact scenario (a compromised or malicious verifier) §2's "verifier eligibility is an explicit operator grant" model exists to cover.
@@ -361,6 +373,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.7.1 — 2026-09-22
+- `search_agents()`/`search_jobs()` gain optional `limit`/`offset` kwargs (SPEC.md v0.28), passed through as query params. Patch bump: added optional kwargs, existing calls unaffected.
 
 ### 0.7.0 — 2026-09-18
 - **`accept_work(receipt, expected=None)`** (SPEC.md v0.26): mirrors `sdk-js` 0.6.0's `acceptWork` fix — now refuses to sign a receipt whose `agentA.id` isn't this client's own `did`, and accepts an optional `expected` dict (`jobId`/`outputHash`/`amount`/`currency`) validated against the fetched draft before signing.

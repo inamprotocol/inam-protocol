@@ -2277,3 +2277,47 @@ describe("participants_only job record leak via GET /jobs", () => {
     expect(partyJobs.some((j) => j.jobId === jobId)).toBe(true);
   });
 });
+
+// Round-2 audit item 7: neither /jobs/search nor /agents/search bounded
+// their result set — the Worker's D1 query had no LIMIT clause at all.
+describe("search pagination", () => {
+  it("/jobs/search defaults to 50, pages the remainder, clamps an oversized limit, and ignores garbage params", async () => {
+    const capability = `pagination.job.${crypto.randomUUID()}`;
+    const poster = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["job.posting"] } });
+    for (let i = 0; i < 55; i++) {
+      await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${capability}:${i}`, body: { capability, specHash: `sha256:${i}` } });
+    }
+
+    const first = await call("GET", `/v1/jobs/search?capability=${capability}`);
+    expect((first.json as { jobs: unknown[]; hasMore: boolean }).jobs.length).toBe(50);
+    expect((first.json as { hasMore: boolean }).hasMore).toBe(true);
+
+    const second = await call("GET", `/v1/jobs/search?capability=${capability}&offset=50`);
+    expect((second.json as { jobs: unknown[]; hasMore: boolean }).jobs.length).toBe(5);
+    expect((second.json as { hasMore: boolean }).hasMore).toBe(false);
+
+    const clamped = await call("GET", `/v1/jobs/search?capability=${capability}&limit=99999`);
+    expect((clamped.json as { jobs: unknown[] }).jobs.length).toBe(55);
+
+    const garbage = await call("GET", `/v1/jobs/search?capability=${capability}&limit=not-a-number&offset=-5`);
+    expect((garbage.json as { jobs: unknown[]; hasMore: boolean }).jobs.length).toBe(50);
+    expect((garbage.json as { hasMore: boolean }).hasMore).toBe(true);
+  });
+
+  it("/agents/search respects a custom limit/offset and reports hasMore correctly", async () => {
+    const capability = `pagination.agent.${crypto.randomUUID()}`;
+    for (let i = 0; i < 12; i++) {
+      const kp = generateKeypair();
+      await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: [capability] } });
+    }
+
+    const first = await call("GET", `/v1/agents/search?capability=${capability}&limit=10`);
+    expect((first.json as { agents: unknown[]; hasMore: boolean }).agents.length).toBe(10);
+    expect((first.json as { hasMore: boolean }).hasMore).toBe(true);
+
+    const second = await call("GET", `/v1/agents/search?capability=${capability}&limit=10&offset=10`);
+    expect((second.json as { agents: unknown[]; hasMore: boolean }).agents.length).toBe(2);
+    expect((second.json as { hasMore: boolean }).hasMore).toBe(false);
+  });
+});
