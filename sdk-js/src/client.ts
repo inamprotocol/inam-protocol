@@ -311,4 +311,40 @@ export class InamClient {
   listReceiptVerifications(receiptId: string): Promise<{ verifications: VerificationRecord[] }> {
     return this.request("GET", `/v1/receipts/${encodeURIComponent(receiptId)}/verifications`);
   }
+
+  // ---- Transparency log (audit round-2 item 6) — RFC 6962-style Merkle log
+  // of receipt-lifecycle events. Fetch-only here; verifyInclusion/
+  // verifyConsistency (exported from this package's core/merkleLog.js) are
+  // the pure functions a caller runs itself against what these return,
+  // rather than trusting the registry's own arithmetic. ----
+
+  /** Current tree size + root hash. Unsigned: the registry holds no signing
+   *  keypair of its own (only verifies operator-signed *requests*) — the
+   *  tamper-evidence guarantee comes from consistency proofs between two
+   *  client-observed STHs, not a signature on any single one. */
+  getTransparencySTH(): Promise<{ treeSize: number; rootHash: string; timestamp: string }> {
+    return this.request("GET", "/v1/transparency/sth");
+  }
+
+  getTransparencyEntries(query?: {
+    limit?: number;
+    offset?: number;
+  }): Promise<{ entries: { leafIndex: number; entryType: string; refId: string; createdAt: string; data: string; leafHash: string }[]; hasMore: boolean }> {
+    const params = new URLSearchParams();
+    if (query?.limit !== undefined) params.set("limit", String(query.limit));
+    if (query?.offset !== undefined) params.set("offset", String(query.offset));
+    return this.request("GET", `/v1/transparency/entries?${params.toString()}`);
+  }
+
+  getInclusionProof(leafIndex: number, treeSize?: number): Promise<{ leafIndex: number; treeSize: number; leafHash: string; rootHash: string; proof: string[] }> {
+    const params = new URLSearchParams({ leafIndex: String(leafIndex) });
+    if (treeSize !== undefined) params.set("treeSize", String(treeSize));
+    return this.request("GET", `/v1/transparency/proof/inclusion?${params.toString()}`);
+  }
+
+  getConsistencyProof(first: number, second?: number): Promise<{ firstSize: number; firstRootHash: string; secondSize: number; secondRootHash: string; proof: string[] }> {
+    const params = new URLSearchParams({ first: String(first) });
+    if (second !== undefined) params.set("second", String(second));
+    return this.request("GET", `/v1/transparency/proof/consistency?${params.toString()}`);
+  }
 }

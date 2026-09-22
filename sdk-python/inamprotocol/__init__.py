@@ -14,6 +14,7 @@ from .keys import (
 from .p256 import P256Keypair, generate_p256_keypair, p256_sign, p256_verify
 from .canonical import canonicalize
 from .client import InamClient
+from .merkle_log import verify_inclusion, verify_consistency
 
 __all__ = [
     "Keypair",
@@ -33,4 +34,6 @@ __all__ = [
     "p256_verify",
     "canonicalize",
     "InamClient",
+    "verify_inclusion",
+    "verify_consistency",
 ]

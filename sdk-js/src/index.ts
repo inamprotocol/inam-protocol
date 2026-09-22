@@ -33,6 +33,13 @@ export { computeReceiptId, buildSignableContent, type ReceiptContentInput } from
 
 export { computeVerificationId, buildSignableVerificationContent, type VerificationContentInput } from "./core/verificationContent.js";
 
+// Transparency log (audit round-2 item 6, RFC 6962-style Merkle log): pure
+// verification functions, so a caller can verify an inclusion/consistency
+// proof returned by InamClient's transparency methods itself, without
+// trusting the registry's own arithmetic.
+export { verifyInclusion, verifyConsistency } from "./core/merkleLog.js";
+export { type TransparencyEntryType } from "./core/transparencyLog.js";
+
 // Request-body validation schemas — shared by the Node reference server and
 // the Cloudflare Worker so both accept/reject the exact same requests (see
 // core/schemas.ts's own header comment for why this exists). Exported

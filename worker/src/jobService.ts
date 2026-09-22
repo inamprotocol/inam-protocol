@@ -1,5 +1,6 @@
 import * as db from "./db.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
+import * as transparencyService from "./transparencyService.js";
 import type { Env, JobRecord } from "./types.js";
 
 // Same value as receiptService.ts's DISPUTE_WINDOW_HOURS (kept as separate
@@ -115,7 +116,9 @@ export async function reportNonPerformance(env: Env, jobId: string, callerDid: s
   }
   const applied = await db.reportNonPerformanceIfAccepted(env, jobId, new Date().toISOString(), reason);
   if (!applied) throw conflict("JOB_NOT_REPORTABLE", "Only an accepted job can be reported as non-performed");
-  return getJob(env, jobId);
+  const updated = await getJob(env, jobId);
+  await transparencyService.appendEntry(env, "nonperformance_reported", jobId, updated.nonPerformance);
+  return updated;
 }
 
 /** Every job the given agent was the accepted worker on and was later

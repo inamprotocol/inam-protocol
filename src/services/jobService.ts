@@ -1,6 +1,7 @@
 import { jobs, agents } from "../storage/db.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
 import { config } from "../config.js";
+import * as transparencyService from "./transparencyService.js";
 import type { JobRecord } from "../types.js";
 
 export interface PostJobInput {
@@ -121,6 +122,7 @@ export function reportNonPerformance(jobId: string, callerDid: string, reason?: 
   }
   const updated: JobRecord = { ...job, status: "nonperformed", nonPerformance: { reportedAt: new Date().toISOString(), reason } };
   jobs.set(jobId, updated);
+  transparencyService.appendEntry("nonperformance_reported", jobId, updated.nonPerformance);
   return updated;
 }
 

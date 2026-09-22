@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.30 (Draft) — 2026-09-22
+- **Append-only transparency log (round-2 item 6), new §13.** RFC 6962-style Merkle log over receipt-lifecycle events (`receipt_finalized`, `dispute_opened`, `dispute_resolved`, `nonperformance_reported`) — the mutable receipt/job rows these events update give no external signal if a row is retroactively edited between two reads; the log does. New endpoints `GET /transparency/sth`, `/entries`, `/proof/inclusion`, `/proof/consistency`. STH served unsigned (the registry has no signing keypair of its own, §7); tamper-evidence comes from consistency proofs between two client-observed tree heads. New error codes `INVALID_TREE_SIZE`, `INVALID_LEAF_INDEX`. See the per-package entries below for the implementation.
+
 ### v0.29 (Draft) — 2026-09-22
 - **Host-binding for request signing (round-2 sub-finding-7, deferred at v0.26).** The v1 signing string had no host/domain component, so a signature minted for one hostname verified equally against any other host serving the same code (the Worker is dual-hosted: custom domain + `*.workers.dev` fallback). New v2 string adds a `host` line and an `inam-sig-version: 2` header; a verifier always recomputes using its own actual incoming `Host` header, never a client-supplied value, so a captured v2-signed request can't be replayed against a different host. Migration, not a cutover: v1 (no version header) is still accepted; both SDKs now always sign v2. New shared `sdk-js/src/core/signingString.ts`, new error code `UNSUPPORTED_SIG_VERSION` (401). No D1 migration.
 
@@ -169,6 +172,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.8.0 — 2026-09-22
+- **Transparency log support (SPEC.md v0.30, §13).** New `sdk-js/src/core/merkleLog.ts` — RFC 6962-style Merkle tree: `leafHash`, `rootHash`, `inclusionProof`, `consistencyProof` (generation, used server-side by both runtimes) and `verifyInclusion`/`verifyConsistency` (pure verification, now exported from the package root so a caller can check a proof itself). New `sdk-js/src/core/transparencyLog.ts` (`buildLogEntry`, canonicalizes a log entry into its leaf bytes; `TransparencyEntryType` also exported).
+- New `InamClient` methods: `getTransparencySTH()`, `getTransparencyEntries({ limit?, offset? })`, `getInclusionProof(leafIndex, treeSize?)`, `getConsistencyProof(first, second?)` — fetch-only; verification is the caller's own job via the exports above.
+- New tests: `tests/merkleLog.test.ts` (10 tests) — exhaustive self-consistency across tree sizes 1–40 for both proof types, known-SHA256-empty-tree check, tamper-rejection, and a full retroactive-tampering-detection scenario. Minor bump: new public API surface.
+
 ### 0.7.0 — 2026-09-22
 - **`InamClient` now always signs the v2 (host-bound) request-signing string** (SPEC.md v0.29, §7), sending a new `inam-sig-version: 2` header. The host is derived automatically from the client's own `baseUrl` — no new constructor parameter, no caller-visible API change, but every outgoing signed request's wire bytes change. New shared `sdk-js/src/core/signingString.ts` (`buildSigningStringV1`/`buildSigningStringV2`), also imported by both server runtimes. Minor bump: real behavior change to an existing exported class's requests, not a patch.
 
@@ -229,6 +237,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.8.0 (Node) / 0.7.0 (Worker) — 2026-09-22
+- **Append-only transparency log (SPEC.md v0.30, §13).** Four new hooks append one leaf each to a per-registry Merkle log: `countersign` → `receipt_finalized`, `openDispute` → `dispute_opened`, `resolveDispute` → `dispute_resolved` (all in `src/services/receiptService.ts`/`worker/src/receiptService.ts`), `reportNonPerformance` → `nonperformance_reported` (`src/services/jobService.ts`/`worker/src/jobService.ts`). New `src/services/transparencyService.ts`/`worker/src/transparencyService.ts` compute root/proofs on demand over the ordered leaf-hash list (`O(n)` per request — deliberately not a persisted frontier structure at this scale). New routes mounted at `/v1/transparency`: `GET /sth`, `/entries`, `/proof/inclusion`, `/proof/consistency`, all rate-limited the same as other public reads.
+- **New storage**: Node gets a `transparency_log` table in the existing `node:sqlite` database (`src/storage/db.ts`, `TransparencyLogRepo`). Worker gets a new D1 table (`worker/schema.sql`) — **`worker/migration-add-transparency-log.sql` must run against production D1 before deploying this Worker version.** The Worker's append path (`db.appendTransparencyLog`) assigns `leaf_index` via `COUNT(*)` then a plain INSERT, with a single retry on a lost race (D1 has no cross-request transaction to serialize this the way Node's single-process `node:sqlite` naturally does) — a `ponytail:`-marked ceiling, narrow enough at this event volume not to need more.
+- New error codes `INVALID_TREE_SIZE`, `INVALID_LEAF_INDEX`.
+- New regression tests: Node `tests/transparencyFlow.test.ts` (2 tests) — wires all four lifecycle hooks through real HTTP-equivalent service calls and verifies every new leaf's inclusion proof plus a full-range consistency proof against real cryptographic verification (`sdk-js/src/core/merkleLog.ts`'s `verifyInclusion`/`verifyConsistency`), not just that the endpoints return 200. Worker `worker/tests/api.test.ts` (+2 tests, 80→82) — same end-to-end proof verification, driven through actual HTTP calls into the Worker.
 
 ### 0.7.9 (Node) / 0.6.21 (Worker) — 2026-09-22
 - **Host-binding verification (SPEC.md v0.29, §7).** `requireSignedRequest` (`src/middleware/signedRequest.ts`, `worker/src/signedRequest.ts`) now accepts an `inam-sig-version: 2` request and verifies it against the v2 (host-bound) signing string, recomputed using the server's own actual incoming `Host` header — never a client-supplied value — so a captured v2-signed request replayed against a different host fails verification. A request with no `inam-sig-version` header still verifies against the legacy v1 string (migration, not a cutover); an `inam-sig-version` present but neither absent nor `"2"` is rejected as `UNSUPPORTED_SIG_VERSION` (401). New tests: Node `tests/hostBinding.test.ts` (4 tests), Worker `worker/tests/api.test.ts` (+3 tests, 77→80) — including a real cross-host replay reproduction (same signature bytes, different `Host` header, rejected) and a same-host control case (accepted). Also live-proven via the full TS↔Python cross-language interop demo (`scripts/run-interop-demo.sh`) against a real running server.
@@ -382,6 +396,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.9.0 — 2026-09-22
+- **Transparency log support (SPEC.md v0.30, §13).** New `inamprotocol/merkle_log.py` — a verification-only 1:1 port of `sdk-js/src/core/merkleLog.ts`'s `verifyInclusion`/`verifyConsistency` (proof *generation* stays server-side/TypeScript-only, the source of truth both runtimes build from). Exported as `verify_inclusion`/`verify_consistency` from the package root, stdlib `hashlib` only, no new dependency.
+- New `InamClient` methods: `get_transparency_sth()`, `get_transparency_entries(limit=None, offset=None)`, `get_inclusion_proof(leaf_index, tree_size=None)`, `get_consistency_proof(first, second=None)`.
+- New `tests/test_merkle_interop.py` (6 tests) — vectors generated once from the TypeScript reference implementation over a fixed 7-leaf tree, confirming the Python port accepts a real TS-produced proof and rejects it against a tampered root/index, byte-for-byte matching the TypeScript side's pass/fail behavior. Minor bump: new public API surface.
 
 ### 0.8.0 — 2026-09-22
 - **`InamClient` now always signs the v2 (host-bound) request-signing string** (SPEC.md v0.29, §7), mirroring `sdk-js` 0.7.0 — mirrors `sdk-js`'s `_host` derivation (`urlparse(base_url).netloc`), adds `inam-sig-version: 2` to every signed request. No public API change, but every outgoing signed request's wire bytes change. Minor bump: real behavior change to existing requests, not a patch. Live-proven end-to-end against a real Node server via `scripts/run-interop-demo.sh` (Python-side registration + draft-receipt signing, TypeScript-side countersign).

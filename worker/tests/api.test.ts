@@ -30,6 +30,7 @@ const SCHEMA_STATEMENTS = [
   "CREATE TABLE IF NOT EXISTS link_challenges (challenge_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id), protocol TEXT NOT NULL, external_public_key TEXT NOT NULL, key_type TEXT NOT NULL, challenge TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS verifications (verification_id TEXT PRIMARY KEY, receipt_id TEXT NOT NULL REFERENCES receipts(receipt_id), provider TEXT NOT NULL, verifier TEXT NOT NULL, result TEXT NOT NULL, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_verifications_receipt ON verifications(receipt_id)",
+  "CREATE TABLE IF NOT EXISTS transparency_log (leaf_index INTEGER PRIMARY KEY, entry_type TEXT NOT NULL, ref_id TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL, leaf_hash TEXT NOT NULL)",
 ];
 
 beforeAll(async () => {
@@ -2412,5 +2413,80 @@ describe("host-binding signing string (v1/v2)", () => {
     const replay = await rawCall("evil.example.com", "/v1/agents", replayHeaders, replayBody);
     expect(replay.status).toBe(401);
     expect((replay.json as { error: { code: string } }).error.code).toBe("INVALID_SIGNATURE");
+  });
+});
+
+describe("transparency log (audit round-2 item 6, RFC 6962 Merkle log)", () => {
+  it("appends one leaf per receipt lifecycle event, all independently verifiable via the proof endpoints", async () => {
+    const { verifyInclusion, verifyConsistency } = await import("../../sdk-js/src/core/merkleLog.js");
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+
+    const before = (await call("GET", "/v1/transparency/sth")).json as { treeSize: number; rootHash: string };
+
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+
+    const input = job();
+    const content = buildSignableContent(requester.did, worker_.did, input);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+    const draftRes = await call("POST", "/v1/receipts", {
+      keypair: worker_,
+      idempotencyKey: `receipt:${input.jobId}`,
+      body: { ...input, agentAId: requester.did, signature: draftSig },
+    });
+    const draft = draftRes.json as { receiptId: string };
+
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+    await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, {
+      keypair: requester,
+      idempotencyKey: `countersign:${draft.receiptId}`,
+      body: { signature: counterSig },
+    });
+
+    await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/dispute`, {
+      keypair: requester,
+      idempotencyKey: `dispute:${draft.receiptId}`,
+      body: { reason: "output was wrong" },
+    });
+    await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/dispute/resolve`, {
+      keypair: requester,
+      idempotencyKey: `dispute-resolve:${draft.receiptId}`,
+      body: { note: "resolved off-band" },
+    });
+
+    const after = (await call("GET", "/v1/transparency/sth")).json as { treeSize: number; rootHash: string };
+    expect(after.treeSize).toBe(before.treeSize + 3); // receipt_finalized, dispute_opened, dispute_resolved
+    expect(after.rootHash).not.toBe(before.rootHash);
+
+    const entriesRes = await call("GET", `/v1/transparency/entries?limit=10&offset=${before.treeSize}`);
+    const { entries } = entriesRes.json as { entries: { entryType: string; refId: string }[] };
+    expect(entries.map((e) => e.entryType)).toEqual(["receipt_finalized", "dispute_opened", "dispute_resolved"]);
+    expect(entries.every((e) => e.refId === draft.receiptId)).toBe(true);
+
+    for (let leafIndex = before.treeSize; leafIndex < after.treeSize; leafIndex++) {
+      const proofRes = await call("GET", `/v1/transparency/proof/inclusion?leafIndex=${leafIndex}&treeSize=${after.treeSize}`);
+      const proof = proofRes.json as { leafHash: string; proof: string[] };
+      expect(verifyInclusion(proof.leafHash, leafIndex, after.treeSize, proof.proof, after.rootHash)).toBe(true);
+    }
+
+    const consistencyRes = await call("GET", `/v1/transparency/proof/consistency?first=${before.treeSize}&second=${after.treeSize}`);
+    const consistency = consistencyRes.json as { firstRootHash: string; secondRootHash: string; proof: string[] };
+    expect(consistency.firstRootHash).toBe(before.rootHash);
+    expect(consistency.secondRootHash).toBe(after.rootHash);
+    expect(verifyConsistency(before.treeSize, before.rootHash, after.treeSize, after.rootHash, consistency.proof)).toBe(true);
+  });
+
+  it("rejects out-of-range leafIndex/treeSize on the proof endpoints", async () => {
+    const sth = (await call("GET", "/v1/transparency/sth")).json as { treeSize: number };
+    const badLeaf = await call("GET", `/v1/transparency/proof/inclusion?leafIndex=${sth.treeSize + 1000}`);
+    expect(badLeaf.status).toBe(400);
+    expect((badLeaf.json as { error: { code: string } }).error.code).toBe("INVALID_LEAF_INDEX");
+
+    const badTree = await call("GET", `/v1/transparency/proof/consistency?first=${sth.treeSize + 1000}`);
+    expect(badTree.status).toBe(400);
+    expect((badTree.json as { error: { code: string } }).error.code).toBe("INVALID_TREE_SIZE");
   });
 });

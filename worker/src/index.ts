@@ -10,6 +10,7 @@ import * as receiptService from "./receiptService.js";
 import * as jobService from "./jobService.js";
 import * as verificationService from "./verificationService.js";
 import { computeReputation } from "./reputationService.js";
+import * as transparencyService from "./transparencyService.js";
 import { badgeDataForReputation, badgeDataToJson, notFoundBadgeData, renderBadgeSvg } from "./badgeService.js";
 import {
   registerAgentSchema,
@@ -334,5 +335,35 @@ app.post("/v1/verifications", requireSignedRequest, rateLimitWriteByAgent, requi
 });
 
 app.get("/v1/verifications/:id", async (c) => c.json(await verificationService.getVerification(c.env, c.req.param("id")!)));
+
+app.get("/v1/transparency/sth", rateLimitReadByIp, async (c) => c.json(await transparencyService.getSTH(c.env)));
+
+app.get("/v1/transparency/entries", rateLimitReadByIp, async (c) => {
+  const { limit, offset } = parsePageParams(c.req.query("limit"), c.req.query("offset"));
+  const { entries, total } = await transparencyService.getEntries(c.env, limit, offset);
+  return c.json({ entries, hasMore: offset + limit < total });
+});
+
+function parseIntParam(raw: string | undefined, name: string): number {
+  const n = Number(raw);
+  if (raw === undefined || !Number.isFinite(n)) {
+    throw badRequest("VALIDATION_ERROR", `${name} must be an integer`);
+  }
+  return n;
+}
+
+app.get("/v1/transparency/proof/inclusion", rateLimitReadByIp, async (c) => {
+  const leafIndex = parseIntParam(c.req.query("leafIndex"), "leafIndex");
+  const rawTreeSize = c.req.query("treeSize");
+  const treeSize = rawTreeSize !== undefined ? parseIntParam(rawTreeSize, "treeSize") : undefined;
+  return c.json(await transparencyService.getInclusionProof(c.env, leafIndex, treeSize));
+});
+
+app.get("/v1/transparency/proof/consistency", rateLimitReadByIp, async (c) => {
+  const first = parseIntParam(c.req.query("first"), "first");
+  const rawSecond = c.req.query("second");
+  const second = rawSecond !== undefined ? parseIntParam(rawSecond, "second") : undefined;
+  return c.json(await transparencyService.getConsistencyProof(c.env, first, second));
+});
 
 export default app;

@@ -53,6 +53,15 @@ conn.exec(`
     verifier TEXT NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_verifications_receipt_verifier ON verifications (receipt_id, verifier);
+
+  CREATE TABLE IF NOT EXISTS transparency_log (
+    leaf_index INTEGER PRIMARY KEY,
+    entry_type TEXT NOT NULL,
+    ref_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    data TEXT NOT NULL,
+    leaf_hash TEXT NOT NULL
+  );
 `);
 
 /** A blob-plus-indexed-columns table: `data` is the JSON source of truth,
@@ -198,10 +207,61 @@ export function explainQueryPlan(sql: string): string {
   return (conn.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as Array<{ detail: string }>).map((r) => r.detail).join("; ");
 }
 
+export interface TransparencyLogEntry {
+  leafIndex: number;
+  entryType: string;
+  refId: string;
+  createdAt: string;
+  data: string;
+  leafHash: string;
+}
+
+/** Append-only by construction: no `set`/update method exists, only
+ *  `append` (INSERT, never UPDATE) and reads. `leaf_index` is assigned as
+ *  the current row count inside the same transaction as the insert, so it's
+ *  always the next contiguous 0-based index — single-process reference
+ *  implementation, no concurrent-writer race to guard against here. */
+class TransparencyLogRepo {
+  append(entryType: string, refId: string, createdAt: string, data: string, leafHash: string): number {
+    conn.exec("BEGIN");
+    try {
+      const { n } = conn.prepare("SELECT COUNT(*) AS n FROM transparency_log").get() as { n: number };
+      conn
+        .prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash) VALUES (?, ?, ?, ?, ?, ?)")
+        .run(n, entryType, refId, createdAt, data, leafHash);
+      conn.exec("COMMIT");
+      return n;
+    } catch (err) {
+      conn.exec("ROLLBACK");
+      throw err;
+    }
+  }
+
+  count(): number {
+    return (conn.prepare("SELECT COUNT(*) AS n FROM transparency_log").get() as { n: number }).n;
+  }
+
+  /** Ordered leaf hashes from index 0, the only shape merkleLog.ts's pure
+   *  functions need. `upTo` bounds it to a past tree size a caller observed. */
+  leafHashes(upTo?: number): string[] {
+    const sql = upTo === undefined ? "SELECT leaf_hash FROM transparency_log ORDER BY leaf_index ASC" : "SELECT leaf_hash FROM transparency_log WHERE leaf_index < ? ORDER BY leaf_index ASC";
+    const rows = (upTo === undefined ? conn.prepare(sql).all() : conn.prepare(sql).all(upTo)) as Array<{ leaf_hash: string }>;
+    return rows.map((r) => r.leaf_hash);
+  }
+
+  entries(limit: number, offset: number): TransparencyLogEntry[] {
+    const rows = conn
+      .prepare("SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?")
+      .all(limit, offset) as Array<{ leaf_index: number; entry_type: string; ref_id: string; created_at: string; data: string; leaf_hash: string }>;
+    return rows.map((r) => ({ leafIndex: r.leaf_index, entryType: r.entry_type, refId: r.ref_id, createdAt: r.created_at, data: r.data, leafHash: r.leaf_hash }));
+  }
+}
+
 export const agents = new AgentsRepo();
 export const receipts = new ReceiptsRepo();
 export const jobs = new JobsRepo();
 export const verifications = new VerificationsRepo();
+export const transparencyLog = new TransparencyLogRepo();
 
 /** In-memory idempotency cache: (agentDid:key) -> cached response + expiry.
  *  Only terminal 2xx responses are stored (see middleware/idempotency.ts) so

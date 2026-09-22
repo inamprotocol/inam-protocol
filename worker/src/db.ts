@@ -406,6 +406,69 @@ export async function verificationsByReceipt(env: Env, receiptId: string): Promi
   return results.map((r) => JSON.parse(r.data));
 }
 
+// ---- Transparency log ----
+
+export interface TransparencyLogEntryRow {
+  leafIndex: number;
+  entryType: string;
+  refId: string;
+  createdAt: string;
+  data: string;
+  leafHash: string;
+}
+
+/** Append-only: leaf_index is assigned as COUNT(*), then a plain INSERT on
+ *  the PRIMARY KEY. A racing concurrent append re-reading the same COUNT(*)
+ *  hits the PRIMARY KEY UNIQUE violation and the caller can retry -- D1 has
+ *  no cross-statement transaction here (see Node's node:sqlite version,
+ *  which wraps this in BEGIN/COMMIT since node:sqlite is single-process;
+ *  D1 requests aren't, so this accepts a narrow lost-append-retry window
+ *  rather than serializing every write through one connection).
+ *  ponytail: at INAM's actual event volume (one append per receipt
+ *  lifecycle transition) this race is vanishingly rare; if it ever bites,
+ *  the fix is D1's session/transaction API once broadly available, not a
+ *  redesign here. */
+export async function appendTransparencyLog(env: Env, entryType: string, refId: string, createdAt: string, data: string, leafHash: string): Promise<void> {
+  const { count } = (await env.DB.prepare("SELECT COUNT(*) AS count FROM transparency_log").first()) as { count: number };
+  try {
+    await env.DB.prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash) VALUES (?, ?, ?, ?, ?, ?)")
+      .bind(count, entryType, refId, createdAt, data, leafHash)
+      .run();
+  } catch (err) {
+    if (err instanceof Error && err.message.includes(UNIQUE_VIOLATION)) {
+      // Lost the race for this leaf_index -- retry once against the now-current count.
+      const { count: retryCount } = (await env.DB.prepare("SELECT COUNT(*) AS count FROM transparency_log").first()) as { count: number };
+      await env.DB.prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash) VALUES (?, ?, ?, ?, ?, ?)")
+        .bind(retryCount, entryType, refId, createdAt, data, leafHash)
+        .run();
+      return;
+    }
+    throw err;
+  }
+}
+
+export async function transparencyLogCount(env: Env): Promise<number> {
+  const row = (await env.DB.prepare("SELECT COUNT(*) AS count FROM transparency_log").first()) as { count: number };
+  return row.count;
+}
+
+export async function transparencyLeafHashes(env: Env, upTo?: number): Promise<string[]> {
+  const { results } =
+    upTo === undefined
+      ? await env.DB.prepare("SELECT leaf_hash FROM transparency_log ORDER BY leaf_index ASC").all<{ leaf_hash: string }>()
+      : await env.DB.prepare("SELECT leaf_hash FROM transparency_log WHERE leaf_index < ? ORDER BY leaf_index ASC").bind(upTo).all<{ leaf_hash: string }>();
+  return results.map((r) => r.leaf_hash);
+}
+
+export async function transparencyEntries(env: Env, limit: number, offset: number): Promise<TransparencyLogEntryRow[]> {
+  const { results } = await env.DB.prepare(
+    "SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?",
+  )
+    .bind(limit, offset)
+    .all<{ leaf_index: number; entry_type: string; ref_id: string; created_at: string; data: string; leaf_hash: string }>();
+  return results.map((r) => ({ leafIndex: r.leaf_index, entryType: r.entry_type, refId: r.ref_id, createdAt: r.created_at, data: r.data, leafHash: r.leaf_hash }));
+}
+
 function rowToOffer(row: Record<string, unknown>): JobOffer {
   return {
     agentId: row.agent_id as string,

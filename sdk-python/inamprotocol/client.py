@@ -428,3 +428,37 @@ class InamClient:
 
     def list_receipt_verifications(self, receipt_id: str) -> Dict[str, Any]:
         return self._request("GET", f"/v1/receipts/{urllib.parse.quote(receipt_id, safe='')}/verifications")
+
+    # ---- Transparency log (audit round-2 item 6) -- RFC 6962-style Merkle
+    # log of receipt lifecycle events. Fetch-only here; verify_inclusion/
+    # verify_consistency (merkle_log.py) are the pure functions a caller runs
+    # itself against what these return, rather than trusting the registry's
+    # own arithmetic. ----
+
+    def get_transparency_sth(self) -> Dict[str, Any]:
+        """Current tree size + root hash. Unsigned: the registry holds no
+        signing keypair of its own (only verifies operator-signed
+        *requests*) -- the tamper-evidence guarantee comes from consistency
+        proofs between two client-observed STHs, not a signature on any
+        single one."""
+        return self._request("GET", "/v1/transparency/sth")
+
+    def get_transparency_entries(self, limit: Optional[int] = None, offset: Optional[int] = None) -> Dict[str, Any]:
+        params: Dict[str, str] = {}
+        if limit is not None:
+            params["limit"] = str(limit)
+        if offset is not None:
+            params["offset"] = str(offset)
+        return self._request("GET", f"/v1/transparency/entries?{urllib.parse.urlencode(params)}")
+
+    def get_inclusion_proof(self, leaf_index: int, tree_size: Optional[int] = None) -> Dict[str, Any]:
+        params: Dict[str, str] = {"leafIndex": str(leaf_index)}
+        if tree_size is not None:
+            params["treeSize"] = str(tree_size)
+        return self._request("GET", f"/v1/transparency/proof/inclusion?{urllib.parse.urlencode(params)}")
+
+    def get_consistency_proof(self, first: int, second: Optional[int] = None) -> Dict[str, Any]:
+        params: Dict[str, str] = {"first": str(first)}
+        if second is not None:
+            params["second"] = str(second)
+        return self._request("GET", f"/v1/transparency/proof/consistency?{urllib.parse.urlencode(params)}")

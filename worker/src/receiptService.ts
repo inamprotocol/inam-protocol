@@ -6,6 +6,7 @@ import { isReceiptRestricted, isReceiptParticipant } from "../../sdk-js/src/core
 import { hasUsedDisputeRight } from "../../sdk-js/src/core/disputeLifecycle.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import * as jobService from "./jobService.js";
+import * as transparencyService from "./transparencyService.js";
 import type { Env, ExecutionReceipt } from "./types.js";
 
 export type { ReceiptContentInput };
@@ -119,6 +120,7 @@ export async function countersign(env: Env, receiptId: string, callerDid: string
     throw conflict("NOT_DRAFT", "Receipt was concurrently modified and is no longer in draft state");
   }
   await jobService.markCompletedByReceipt(env, finalized.jobId, receiptId);
+  await transparencyService.appendEntry(env, "receipt_finalized", receiptId, finalized);
   return finalized;
 }
 
@@ -155,6 +157,7 @@ export async function openDispute(env: Env, receiptId: string, callerDid: string
   if (!applied) {
     throw conflict("NOT_FINALIZED", "Receipt was concurrently modified and is no longer finalized");
   }
+  await transparencyService.appendEntry(env, "dispute_opened", receiptId, disputed.dispute);
   return disputed;
 }
 
@@ -187,5 +190,6 @@ export async function resolveDispute(env: Env, receiptId: string, callerDid: str
   if (!applied) {
     throw conflict("NOT_DISPUTED", "Receipt was concurrently modified and is no longer disputed");
   }
+  await transparencyService.appendEntry(env, "dispute_resolved", receiptId, resolved.dispute);
   return resolved;
 }

@@ -127,3 +127,18 @@ CREATE TABLE IF NOT EXISTS verifications (
 );
 
 CREATE INDEX IF NOT EXISTS idx_verifications_receipt ON verifications(receipt_id);
+
+-- Append-only transparency log (audit round-2 item 6, RFC 6962-style Merkle
+-- tree). One row per receipt-lifecycle event (finalize, dispute
+-- opened/resolved, non-performance report). Never updated or deleted, only
+-- appended -- the Merkle proofs computed over this table's leaf_hash column
+-- (worker/src/transparencyService.ts) are what makes retroactive tampering
+-- with a past row detectable.
+CREATE TABLE IF NOT EXISTS transparency_log (
+  leaf_index INTEGER PRIMARY KEY,
+  entry_type TEXT NOT NULL,
+  ref_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  data TEXT NOT NULL,       -- canonical entry JSON that leaf_hash was computed over
+  leaf_hash TEXT NOT NULL
+);

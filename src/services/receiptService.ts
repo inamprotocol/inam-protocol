@@ -7,6 +7,7 @@ import { buildSignableContent, type ReceiptContentInput } from "../../sdk-js/src
 import { isReceiptRestricted, isReceiptParticipant } from "../../sdk-js/src/core/receiptVisibility.js";
 import { hasUsedDisputeRight } from "../../sdk-js/src/core/disputeLifecycle.js";
 import * as jobService from "./jobService.js";
+import * as transparencyService from "./transparencyService.js";
 import type { ExecutionReceipt } from "../types.js";
 
 export type { ReceiptContentInput } from "../../sdk-js/src/core/receiptContent.js";
@@ -126,6 +127,7 @@ export function countersign(receiptId: string, callerDid: string, signature: str
   };
   receipts.set(receiptId, finalized);
   jobService.markCompletedByReceipt(finalized.jobId, receiptId);
+  transparencyService.appendEntry("receipt_finalized", receiptId, finalized);
   return finalized;
 }
 
@@ -162,6 +164,7 @@ export function openDispute(receiptId: string, callerDid: string, reason: string
     dispute: { ...receipt.dispute, status: "open", reason, openedBy: callerDid, resolutionDeadline },
   };
   receipts.set(receiptId, disputed);
+  transparencyService.appendEntry("dispute_opened", receiptId, disputed.dispute);
   return disputed;
 }
 
@@ -194,5 +197,6 @@ export function resolveDispute(receiptId: string, callerDid: string, note?: stri
     },
   };
   receipts.set(receiptId, resolved);
+  transparencyService.appendEntry("dispute_resolved", receiptId, resolved.dispute);
   return resolved;
 }
