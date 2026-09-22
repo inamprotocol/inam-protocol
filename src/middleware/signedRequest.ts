@@ -1,6 +1,7 @@
 import type { NextFunction, Request, Response } from "express";
 import { config } from "../config.js";
 import { sha256Hex, verify, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
+import { buildSigningStringV1, buildSigningStringV2, SIG_VERSION_HEADER } from "../../sdk-js/src/core/signingString.js";
 import { agents } from "../storage/db.js";
 import { unauthorized, forbidden } from "./errors.js";
 
@@ -25,16 +26,26 @@ declare global {
  * Required headers:
  *   inam-agent:      did:key:z...            (claimed caller identity)
  *   inam-timestamp:  unix ms                  (replay window)
- *   inam-signature:  base64 Ed25519 signature over:
- *     `${METHOD}\n${path}\n${timestamp}\n${sha256hex(rawBody)}`
+ *   inam-signature:  base64 Ed25519 signature over the signing string
+ *   inam-sig-version: "2" (optional, see below)
+ *
+ * v2 signing string (current SDKs): `${METHOD}\n${path}\n${host}\n${timestamp}\n${sha256hex(rawBody)}`
+ * v1 signing string (legacy, still accepted): `${METHOD}\n${path}\n${timestamp}\n${sha256hex(rawBody)}`
+ *
+ * `host` in v2 is always THIS server's own actual incoming Host header, never
+ * a client-supplied value — see sdk-js/src/core/signingString.ts for why.
  */
 export function requireSignedRequest(req: Request, _res: Response, next: NextFunction) {
   const agentDid = req.header("inam-agent");
   const timestamp = req.header("inam-timestamp");
   const signatureB64 = req.header("inam-signature");
+  const sigVersion = req.header(SIG_VERSION_HEADER);
 
   if (!agentDid || !timestamp || !signatureB64) {
     throw unauthorized("MISSING_SIGNATURE", "inam-agent, inam-timestamp and inam-signature headers are required");
+  }
+  if (sigVersion !== undefined && sigVersion !== "2") {
+    throw unauthorized("UNSUPPORTED_SIG_VERSION", `Unsupported inam-sig-version "${sigVersion}"`);
   }
 
   const ts = Number(timestamp);
@@ -48,7 +59,10 @@ export function requireSignedRequest(req: Request, _res: Response, next: NextFun
   // here too, or every signature on a sub-routed endpoint would fail to verify.
   const pathOnly = req.originalUrl.split("?")[0];
   const bodyHash = sha256Hex(req.rawBody ?? Buffer.alloc(0));
-  const signingString = `${req.method.toUpperCase()}\n${pathOnly}\n${timestamp}\n${bodyHash}`;
+  const signingString =
+    sigVersion === "2"
+      ? buildSigningStringV2(req.method, pathOnly, req.header("host") ?? "", timestamp, bodyHash)
+      : buildSigningStringV1(req.method, pathOnly, timestamp, bodyHash);
 
   let signatureOk = false;
   try {

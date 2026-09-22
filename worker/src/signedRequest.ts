@@ -1,5 +1,6 @@
 import type { Context, Next } from "hono";
 import { sha256Hex, verify, fromBase64 } from "../../sdk-js/src/crypto/keys.js";
+import { buildSigningStringV1, buildSigningStringV2, SIG_VERSION_HEADER } from "../../sdk-js/src/core/signingString.js";
 import { unauthorized, badRequest, forbidden } from "./errors.js";
 import * as db from "./db.js";
 import type { AppEnv } from "./types.js";
@@ -9,16 +10,22 @@ const CLOCK_SKEW_MS = 5 * 60 * 1000;
 /**
  * Same simplified, RFC 9421-inspired scheme as the Node reference server
  * (src/middleware/signedRequest.ts) — see that file's doc comment for the
- * header contract. Reads the raw body once and stashes both the raw text and
+ * header contract, and sdk-js/src/core/signingString.ts for the v1/v2
+ * signing-string shapes and why v2 exists (host-binding, round-2
+ * sub-finding-7). Reads the raw body once and stashes both the raw text and
  * the parsed JSON on the context so route handlers never re-read the stream.
  */
 export async function requireSignedRequest(c: Context<AppEnv>, next: Next) {
   const agentDid = c.req.header("inam-agent");
   const timestamp = c.req.header("inam-timestamp");
   const signatureB64 = c.req.header("inam-signature");
+  const sigVersion = c.req.header(SIG_VERSION_HEADER);
 
   if (!agentDid || !timestamp || !signatureB64) {
     throw unauthorized("MISSING_SIGNATURE", "inam-agent, inam-timestamp and inam-signature headers are required");
+  }
+  if (sigVersion !== undefined && sigVersion !== "2") {
+    throw unauthorized("UNSUPPORTED_SIG_VERSION", `Unsupported inam-sig-version "${sigVersion}"`);
   }
 
   const ts = Number(timestamp);
@@ -28,7 +35,10 @@ export async function requireSignedRequest(c: Context<AppEnv>, next: Next) {
 
   const rawBody = await c.req.text();
   const bodyHash = sha256Hex(rawBody);
-  const signingString = `${c.req.method.toUpperCase()}\n${c.req.path}\n${timestamp}\n${bodyHash}`;
+  const signingString =
+    sigVersion === "2"
+      ? buildSigningStringV2(c.req.method, c.req.path, c.req.header("host") ?? "", timestamp, bodyHash)
+      : buildSigningStringV1(c.req.method, c.req.path, timestamp, bodyHash);
 
   let signatureOk = false;
   try {

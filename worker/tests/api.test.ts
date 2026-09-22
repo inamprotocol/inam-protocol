@@ -7,6 +7,7 @@ import { generateP256Keypair, p256Sign } from "../../sdk-js/src/crypto/p256.js";
 import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
 import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
 import { testOperatorKeypair } from "./testOperator.js";
+import { buildSigningStringV1, buildSigningStringV2 } from "../../sdk-js/src/core/signingString.js";
 
 // Inlined rather than read from ../schema.sql at runtime: this test file
 // executes inside the Workers-simulated environment (via @cloudflare/vitest-plugin),
@@ -2319,5 +2320,97 @@ describe("search pagination", () => {
     const second = await call("GET", `/v1/agents/search?capability=${capability}&limit=10&offset=10`);
     expect((second.json as { agents: unknown[]; hasMore: boolean }).agents.length).toBe(2);
     expect((second.json as { hasMore: boolean }).hasMore).toBe(false);
+  });
+});
+
+// Round-2 sub-finding-7: the v1 signing string had no host component. v2
+// adds it; the server verifies against its own actual incoming Host header,
+// never a client-supplied value, so a captured v2-signed request can't be
+// replayed against a different host. `call()`'s helper above only ever
+// signs v1 (proving that legacy path still works everywhere above) -- this
+// block builds v2 requests directly, and a raw Request to exercise the
+// cross-host replay case `call()` has no way to express.
+describe("host-binding signing string (v1/v2)", () => {
+  const WORKER_HOST = "worker.test";
+
+  async function rawCall(reqHost: string, path: string, headers: Record<string, string>, body: string) {
+    const request = new Request(`http://${reqHost}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": crypto.randomUUID(), host: reqHost, ...headers },
+      body,
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    const json = await response.json().catch(() => undefined);
+    return { status: response.status, json };
+  }
+
+  it("still accepts a legacy v1 request (no inam-sig-version header)", async () => {
+    const kp = generateKeypair();
+    const body = JSON.stringify({ capabilities: ["x"] });
+    const timestamp = Date.now().toString();
+    const signingString = buildSigningStringV1("POST", "/v1/agents", timestamp, sha256Hex(body));
+    const signature = toBase64(sign(new TextEncoder().encode(signingString), kp.privateKey));
+
+    const res = await rawCall(WORKER_HOST, "/v1/agents", {
+      "inam-agent": kp.did,
+      "inam-timestamp": timestamp,
+      "inam-signature": signature,
+      "idempotency-key": `reg:${kp.did}`,
+    }, body);
+    expect(res.status).toBe(201);
+  });
+
+  it("rejects an unsupported inam-sig-version value", async () => {
+    const kp = generateKeypair();
+    const body = JSON.stringify({ capabilities: ["x"] });
+    const timestamp = Date.now().toString();
+    const signingString = buildSigningStringV1("POST", "/v1/agents", timestamp, sha256Hex(body));
+    const signature = toBase64(sign(new TextEncoder().encode(signingString), kp.privateKey));
+
+    const res = await rawCall(WORKER_HOST, "/v1/agents", {
+      "inam-agent": kp.did,
+      "inam-timestamp": timestamp,
+      "inam-signature": signature,
+      "inam-sig-version": "99",
+      "idempotency-key": `reg:${kp.did}`,
+    }, body);
+    expect(res.status).toBe(401);
+    expect((res.json as { error: { code: string } }).error.code).toBe("UNSUPPORTED_SIG_VERSION");
+  });
+
+  it("accepts a v2 request whose signed host matches the request's actual Host header, and rejects the identical signature replayed against a different host", async () => {
+    const kp = generateKeypair();
+    const body = JSON.stringify({ capabilities: ["x"] });
+    const timestamp = Date.now().toString();
+    const signingString = buildSigningStringV2("POST", "/v1/agents", WORKER_HOST, timestamp, sha256Hex(body));
+    const signature = toBase64(sign(new TextEncoder().encode(signingString), kp.privateKey));
+    const headers = {
+      "inam-agent": kp.did,
+      "inam-timestamp": timestamp,
+      "inam-signature": signature,
+      "inam-sig-version": "2",
+      "idempotency-key": `reg:${kp.did}`,
+    };
+
+    const real = await rawCall(WORKER_HOST, "/v1/agents", headers, body);
+    expect(real.status).toBe(201);
+
+    const replayKp = generateKeypair();
+    const replayBody = JSON.stringify({ capabilities: ["x"] });
+    const replayTimestamp = Date.now().toString();
+    const replaySigningString = buildSigningStringV2("POST", "/v1/agents", WORKER_HOST, replayTimestamp, sha256Hex(replayBody));
+    const replaySignature = toBase64(sign(new TextEncoder().encode(replaySigningString), replayKp.privateKey));
+    const replayHeaders = {
+      "inam-agent": replayKp.did,
+      "inam-timestamp": replayTimestamp,
+      "inam-signature": replaySignature,
+      "inam-sig-version": "2",
+      "idempotency-key": `reg:${replayKp.did}`,
+    };
+    const replay = await rawCall("evil.example.com", "/v1/agents", replayHeaders, replayBody);
+    expect(replay.status).toBe(401);
+    expect((replay.json as { error: { code: string } }).error.code).toBe("INVALID_SIGNATURE");
   });
 });

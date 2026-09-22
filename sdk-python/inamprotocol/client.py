@@ -13,6 +13,7 @@ import urllib.parse
 import urllib.request
 from importlib.metadata import PackageNotFoundError, version
 from typing import Any, Dict, List, Optional
+from urllib.parse import urlparse
 
 from .canonical import canonicalize
 from .keys import Keypair, sha256_hex, sign, to_base64
@@ -44,6 +45,10 @@ class InamApiError(Exception):
 class InamClient:
     def __init__(self, base_url: str, keypair: Keypair):
         self.base_url = base_url.rstrip("/")
+        # Signed for automatically (SPEC.md v0.28, host-binding) -- derived
+        # from the same base_url the request actually goes to, so this can't
+        # drift from what the server sees as the request's real Host header.
+        self._host = urlparse(self.base_url).netloc
         self.keypair = keypair
 
     @property
@@ -60,7 +65,7 @@ class InamClient:
         raw_body = json.dumps(body, separators=(",", ":")) if body is not None else ""
         timestamp = str(int(time.time() * 1000))
         body_hash = sha256_hex(raw_body)
-        signing_string = f"{method.upper()}\n{path}\n{timestamp}\n{body_hash}"
+        signing_string = f"{method.upper()}\n{path}\n{self._host}\n{timestamp}\n{body_hash}"
         signature = to_base64(sign(signing_string.encode("utf-8"), self.keypair.private_key))
 
         headers = {
@@ -71,6 +76,7 @@ class InamClient:
             "inam-agent": self.keypair.did,
             "inam-timestamp": timestamp,
             "inam-signature": signature,
+            "inam-sig-version": "2",
         }
         if idempotency_key:
             headers["idempotency-key"] = idempotency_key

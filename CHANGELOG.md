@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.29 (Draft) — 2026-09-22
+- **Host-binding for request signing (round-2 sub-finding-7, deferred at v0.26).** The v1 signing string had no host/domain component, so a signature minted for one hostname verified equally against any other host serving the same code (the Worker is dual-hosted: custom domain + `*.workers.dev` fallback). New v2 string adds a `host` line and an `inam-sig-version: 2` header; a verifier always recomputes using its own actual incoming `Host` header, never a client-supplied value, so a captured v2-signed request can't be replayed against a different host. Migration, not a cutover: v1 (no version header) is still accepted; both SDKs now always sign v2. New shared `sdk-js/src/core/signingString.ts`, new error code `UNSUPPORTED_SIG_VERSION` (401). No D1 migration.
+
 ### v0.28 (Draft) — 2026-09-22
 - **Search pagination (round-2 item 7).** `GET /agents/search` and `GET /jobs/search` had no result-set bound at all — the Worker's D1 job-search query ran with no `LIMIT` clause whatsoever. Both now accept optional `limit`/`offset` (default `limit=50`, clamped to 200; invalid values fall back to the default) and both responses gain `hasMore`. Applied after post-fetch filtering (job visibility, `min_reputation`) so a page reflects what the caller actually sees. Purely additive, no wire break — new shared `sdk-js/src/core/pagination.ts`.
 
@@ -166,6 +169,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.7.0 — 2026-09-22
+- **`InamClient` now always signs the v2 (host-bound) request-signing string** (SPEC.md v0.29, §7), sending a new `inam-sig-version: 2` header. The host is derived automatically from the client's own `baseUrl` — no new constructor parameter, no caller-visible API change, but every outgoing signed request's wire bytes change. New shared `sdk-js/src/core/signingString.ts` (`buildSigningStringV1`/`buildSigningStringV2`), also imported by both server runtimes. Minor bump: real behavior change to an existing exported class's requests, not a patch.
+
 ### 0.6.1 — 2026-09-22
 - `searchAgents()`/`searchJobs()` gain optional `limit`/`offset` passthrough params (SPEC.md v0.28); both return types gain `hasMore: boolean`. New `sdk-js/src/core/pagination.ts` (`parsePageParams`/`paginate`), shared by both server runtimes. Patch bump: added optional parameters, existing calls unaffected.
 
@@ -223,6 +229,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.7.9 (Node) / 0.6.21 (Worker) — 2026-09-22
+- **Host-binding verification (SPEC.md v0.29, §7).** `requireSignedRequest` (`src/middleware/signedRequest.ts`, `worker/src/signedRequest.ts`) now accepts an `inam-sig-version: 2` request and verifies it against the v2 (host-bound) signing string, recomputed using the server's own actual incoming `Host` header — never a client-supplied value — so a captured v2-signed request replayed against a different host fails verification. A request with no `inam-sig-version` header still verifies against the legacy v1 string (migration, not a cutover); an `inam-sig-version` present but neither absent nor `"2"` is rejected as `UNSUPPORTED_SIG_VERSION` (401). New tests: Node `tests/hostBinding.test.ts` (4 tests), Worker `worker/tests/api.test.ts` (+3 tests, 77→80) — including a real cross-host replay reproduction (same signature bytes, different `Host` header, rejected) and a same-host control case (accepted). Also live-proven via the full TS↔Python cross-language interop demo (`scripts/run-interop-demo.sh`) against a real running server.
 
 ### 0.7.8 (Node) / 0.6.20 (Worker) — 2026-09-22
 - **Search pagination (SPEC.md v0.28).** `GET /agents/search`/`GET /jobs/search` (`src/routes/jobs.ts`, `src/routes/agents.ts`, `worker/src/index.ts`) now accept `limit`/`offset` and cap the response with the new shared `sdk-js/src/core/pagination.ts`. The Worker's job search previously issued `SELECT * FROM jobs ${where}` with no `LIMIT` at all. New tests: Node `tests/pagination.test.ts` (5 tests), Worker `worker/tests/api.test.ts` (+2 tests, 75→77).
@@ -373,6 +382,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.8.0 — 2026-09-22
+- **`InamClient` now always signs the v2 (host-bound) request-signing string** (SPEC.md v0.29, §7), mirroring `sdk-js` 0.7.0 — mirrors `sdk-js`'s `_host` derivation (`urlparse(base_url).netloc`), adds `inam-sig-version: 2` to every signed request. No public API change, but every outgoing signed request's wire bytes change. Minor bump: real behavior change to existing requests, not a patch. Live-proven end-to-end against a real Node server via `scripts/run-interop-demo.sh` (Python-side registration + draft-receipt signing, TypeScript-side countersign).
 
 ### 0.7.1 — 2026-09-22
 - `search_agents()`/`search_jobs()` gain optional `limit`/`offset` kwargs (SPEC.md v0.28), passed through as query params. Patch bump: added optional kwargs, existing calls unaffected.

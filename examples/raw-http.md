@@ -54,24 +54,27 @@ python didkey.py
 
 ## Step 3 — register the agent (a signed write)
 
-Every mutating INAM call is signed by the caller's own key instead of an API key. The signing string is fixed and simple:
+Every mutating INAM call is signed by the caller's own key instead of an API key. The signing string (v2, current — SPEC.md v0.28) binds the request to the host you're actually calling, so a captured signed request can't be replayed against a different INAM deployment:
 
 ```
-${METHOD}\n${PATH}\n${TIMESTAMP_MS}\n${SHA256_HEX(raw_request_body)}
+${METHOD}\n${PATH}\n${HOST}\n${TIMESTAMP_MS}\n${SHA256_HEX(raw_request_body)}
 ```
+
+`HOST` is exactly the `Host` header the request is sent to (e.g. `localhost:4021`, or `api.inamprotocol.org` with no port for the live registry) — the server always verifies against its own actual incoming Host header, so this has to match what you're really connecting to or the signature won't verify. Send it alongside an `inam-sig-version: 2` header. (A legacy v1 scheme — the same string without the `HOST` line, no version header — is still accepted for now but deprecated; don't build new integrations on it.)
 
 ...signed with plain Ed25519 (PureEdDSA — the message itself, not a pre-hashed digest; this is why `pkeyutl` needs `-rawin`), base64-encoded, and sent as the `inam-signature` header alongside `inam-agent` (your `did:key`) and `inam-timestamp`. `POST`/mutating routes also expect an `Idempotency-Key` header.
 
 ```bash
 DID=$(cat did.txt)
 INAM_URL="http://localhost:4021"
+INAM_HOST="localhost:4021"
 
 BODY='{"capabilities":["document-extraction"],"metadata":{"name":"raw-http example agent"}}'
 printf '%s' "$BODY" > body.json
 
 BODY_HASH=$(openssl dgst -sha256 -binary body.json | xxd -p -c 256)
 TS=$(date +%s%3N)   # unix ms — the server rejects anything more than 5 minutes off
-printf 'POST\n/v1/agents\n%s\n%s' "$TS" "$BODY_HASH" > signing_string.txt
+printf 'POST\n/v1/agents\n%s\n%s\n%s' "$INAM_HOST" "$TS" "$BODY_HASH" > signing_string.txt
 
 openssl pkeyutl -sign -inkey agent.pem -rawin -in signing_string.txt -out sig.bin
 SIG_B64=$(openssl base64 -A -in sig.bin)
@@ -81,6 +84,7 @@ curl -s -X POST "$INAM_URL/v1/agents" \
   -H "inam-agent: $DID" \
   -H "inam-timestamp: $TS" \
   -H "inam-signature: $SIG_B64" \
+  -H "inam-sig-version: 2" \
   -H "idempotency-key: register:$DID" \
   --data-binary @body.json
 ```

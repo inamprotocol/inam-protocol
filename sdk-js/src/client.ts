@@ -1,5 +1,6 @@
 import { canonicalize } from "./crypto/canonical.js";
 import { sha256Hex, sign, toBase64, type Keypair } from "./crypto/keys.js";
+import { buildSigningStringV2, SIG_VERSION_HEADER, CURRENT_SIG_VERSION } from "./core/signingString.js";
 import { buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";
 import { buildSignableVerificationContent, type VerificationContentInput } from "./core/verificationContent.js";
 import type {
@@ -21,10 +22,17 @@ import type {
  * `search_jobs` / `verify_agent` / `submit_work`-style tools.
  */
 export class InamClient {
+  private readonly host: string;
+
   constructor(
     private readonly baseUrl: string,
     private readonly keypair: Keypair,
-  ) {}
+  ) {
+    // Signed for automatically (SPEC.md v0.28, host-binding) -- derived from
+    // the same baseUrl the request actually goes to, so this can't drift
+    // from what the server sees as the request's real Host header.
+    this.host = new URL(baseUrl).host;
+  }
 
   get did(): string {
     return this.keypair.did;
@@ -34,7 +42,7 @@ export class InamClient {
     const rawBody = body !== undefined ? JSON.stringify(body) : "";
     const timestamp = Date.now().toString();
     const bodyHash = sha256Hex(rawBody);
-    const signingString = `${method.toUpperCase()}\n${path}\n${timestamp}\n${bodyHash}`;
+    const signingString = buildSigningStringV2(method, path, this.host, timestamp, bodyHash);
     const signature = toBase64(sign(new TextEncoder().encode(signingString), this.keypair.privateKey));
 
     const headers: Record<string, string> = {
@@ -42,6 +50,7 @@ export class InamClient {
       "inam-agent": this.keypair.did,
       "inam-timestamp": timestamp,
       "inam-signature": signature,
+      [SIG_VERSION_HEADER]: CURRENT_SIG_VERSION,
     };
     if (opts?.idempotencyKey) headers["idempotency-key"] = opts.idempotencyKey;
 
