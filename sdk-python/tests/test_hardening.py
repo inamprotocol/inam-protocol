@@ -29,7 +29,7 @@ def _fixture_receipt(**overrides):
         "task": {"capability": "x", "specHash": "sha256:spec", "createdAt": "2026-01-01T00:00:00.000Z"},
         "result": {"outputHash": "sha256:out", "completedAt": "2026-01-01T00:01:00.000Z"},
         "verification": {"method": "payer_confirmation", "outcome": "success"},
-        "dispute": {"status": "none", "windowClosesAt": ""},
+        "dispute": {"status": "none", "windowClosesAt": None},
         "signatures": {"agentB": "sig"},
         "status": "draft",
         "visibility": "public",

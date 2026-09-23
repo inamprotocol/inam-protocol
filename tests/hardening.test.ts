@@ -143,6 +143,8 @@ describe("draft receipts are restricted regardless of visibility, and excluded f
     const before = computeReputation(provider.did);
     const { draft } = finalizeReceipt(requester, provider, `job_draft_${Math.random()}`, "public");
     expect(draft.status).toBe("draft");
+    // SPEC v0.31: no dispute window until countersigned: null, not "".
+    expect(draft.dispute.windowClosesAt).toBeNull();
 
     const path = `/v1/receipts/${encodeURIComponent(draft.receiptId)}`;
     const strangerRes = await fetch(`${baseUrl}${path}`, { headers: signedGetHeaders(path, stranger) });
@@ -156,7 +158,8 @@ describe("draft receipts are restricted regardless of visibility, and excluded f
     // Once countersigned, it's finalized and counts as normal.
     const counterContent = { ...draft, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined };
     const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize(counterContent)), requester.privateKey));
-    countersign(draft.receiptId, requester.did, counterSig);
+    const finalized = countersign(draft.receiptId, requester.did, counterSig);
+    expect(Number.isNaN(Date.parse(finalized.dispute.windowClosesAt ?? ""))).toBe(false);
     const after = computeReputation(provider.did);
     expect(after.components.rawReceipts).toBe(before.components.rawReceipts + 1);
   });
@@ -173,7 +176,7 @@ describe("countersign-blind-signing guard (sdk-js InamClient.acceptWork)", () =>
       task: { capability: "x", specHash: "sha256:spec", createdAt: new Date().toISOString() },
       result: { outputHash: "sha256:out", completedAt: new Date().toISOString() },
       verification: { method: "payer_confirmation", outcome: "success" },
-      dispute: { status: "none", windowClosesAt: "" },
+      dispute: { status: "none", windowClosesAt: null },
       signatures: { agentB: "sig" },
       status: "draft",
       visibility: "public",

@@ -55,6 +55,6 @@ export function buildSignableContent(
     result: input.result,
     settlement: input.settlement,
     verification: input.verification,
-    dispute: { status: "none", windowClosesAt: "" }, // placeholder, excluded from signature scope in practice
+    dispute: { status: "none", windowClosesAt: null }, // placeholder; every signer and verifier strips `dispute` before signing
   };
 }

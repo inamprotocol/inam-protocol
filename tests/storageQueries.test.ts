@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agents, receipts, explainQueryPlan } from "../src/storage/db.js";
+import { agents, receipts, explainQueryPlan, migrateDraftWindowToNull } from "../src/storage/db.js";
 import type { AgentRecord, ExecutionReceipt } from "../src/types.js";
 
 function makeAgent(id: string, capabilities: string[]): AgentRecord {
@@ -61,5 +61,18 @@ describe("storage query indexing", () => {
     const plan = explainQueryPlan("SELECT data FROM receipts WHERE agent_a_id = 'did:key:party-a' OR agent_b_id = 'did:key:party-a'");
     expect(plan).not.toMatch(/SCAN/);
     expect(plan).toMatch(/USING INDEX/);
+  });
+
+  it("migrateDraftWindowToNull rewrites legacy \"\" draft windows to null and leaves real dates alone", () => {
+    const legacy = makeReceipt("rcpt-legacy-draft", "did:key:m-a", "did:key:m-b");
+    receipts.set(legacy.receiptId, { ...legacy, status: "draft", dispute: { status: "none", windowClosesAt: "" as unknown as null } });
+    const dated = makeReceipt("rcpt-dated", "did:key:m-a", "did:key:m-b");
+    receipts.set(dated.receiptId, dated);
+
+    migrateDraftWindowToNull();
+    migrateDraftWindowToNull(); // idempotent
+
+    expect(receipts.get("rcpt-legacy-draft")!.dispute.windowClosesAt).toBeNull();
+    expect(receipts.get("rcpt-dated")!.dispute.windowClosesAt).toBe(dated.dispute.windowClosesAt);
   });
 });

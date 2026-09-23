@@ -64,6 +64,16 @@ conn.exec(`
   );
 `);
 
+// SPEC v0.31: drafts used to store dispute.windowClosesAt as "" instead of
+// null. Idempotent, so it runs on every start and upgrades older databases
+// (including self-hosted ones) in place. The Worker's D1 equivalent is
+// worker/migration-draft-window-null.sql.
+export function migrateDraftWindowToNull(): void {
+  conn.exec(`UPDATE receipts SET data = json_set(data, '$.dispute.windowClosesAt', json('null'))
+    WHERE json_extract(data, '$.dispute.windowClosesAt') = ''`);
+}
+migrateDraftWindowToNull();
+
 /** A blob-plus-indexed-columns table: `data` is the JSON source of truth,
  *  the extra columns exist only so SQLite can index the fields services
  *  actually filter/join on. Callers get back the same T they put in. */

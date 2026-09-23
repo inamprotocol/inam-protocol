@@ -59,7 +59,7 @@ export async function createDraft(env: Env, callerDid: string, input: CreateDraf
 
   const receipt: ExecutionReceipt = {
     ...content,
-    dispute: { status: "none", windowClosesAt: "" },
+    dispute: { status: "none", windowClosesAt: null },
     signatures: { agentB: input.signature },
     status: "draft",
     visibility: input.visibility ?? "public",
@@ -141,7 +141,7 @@ export async function openDispute(env: Env, receiptId: string, callerDid: string
     throw conflict("DISPUTE_ALREADY_RESOLVED", "You already disputed and resolved this receipt — you cannot dispute it again");
   }
   if (receipt.status !== "finalized") throw conflict("NOT_FINALIZED", "Only finalized receipts can be disputed");
-  if (new Date(receipt.dispute.windowClosesAt).getTime() < Date.now()) {
+  if (!receipt.dispute.windowClosesAt || new Date(receipt.dispute.windowClosesAt).getTime() < Date.now()) {
     throw conflict("DISPUTE_WINDOW_CLOSED", "The dispute window for this receipt has closed");
   }
   // Resolution deadline — see sdk-js/src/core/disputeLifecycle.ts's doc

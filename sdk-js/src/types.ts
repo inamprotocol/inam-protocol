@@ -99,7 +99,8 @@ export interface ExecutionReceipt {
   dispute: {
     status: DisputeStatus;
     reason?: string;
-    windowClosesAt: string;
+    /** null while the receipt is a draft; set when it is countersigned (SPEC §4.3). */
+    windowClosesAt: string | null;
     openedBy?: string;
     resolvedAt?: string;
     resolution?: string;
@@ -123,7 +124,7 @@ export interface ExecutionReceipt {
 
 /** The subset of a receipt that gets signed — signatures can't sign themselves. */
 export type SignableReceiptContent = Omit<ExecutionReceipt, "signatures" | "status" | "dispute"> & {
-  dispute: { status: "none"; windowClosesAt: string };
+  dispute: { status: "none"; windowClosesAt: null };
 };
 
 /** Weighted receipt count/success-rate/volume for one side of an agent's

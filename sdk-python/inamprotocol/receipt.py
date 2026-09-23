@@ -31,5 +31,5 @@ def build_signable_content(agent_a_id: str, agent_b_id: str, input: Dict[str, An
         "result": input["result"],
         "settlement": input.get("settlement"),
         "verification": input["verification"],
-        "dispute": {"status": "none", "windowClosesAt": ""},
+        "dispute": {"status": "none", "windowClosesAt": None},
     }

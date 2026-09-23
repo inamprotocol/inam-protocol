@@ -8,6 +8,7 @@ import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPubl
 import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
 import { testOperatorKeypair } from "./testOperator.js";
 import { buildSigningStringV1, buildSigningStringV2 } from "../../sdk-js/src/core/signingString.js";
+import DRAFT_WINDOW_MIGRATION from "../migration-draft-window-null.sql?raw";
 
 // Inlined rather than read from ../schema.sql at runtime: this test file
 // executes inside the Workers-simulated environment (via @cloudflare/vitest-plugin),
@@ -264,8 +265,17 @@ describe("execution receipt lifecycle", () => {
       body: { ...input, agentAId: requester.did, signature: draftSig },
     });
     expect(draftRes.status).toBe(201);
-    const draft = draftRes.json as { receiptId: string; status: string };
+    const draft = draftRes.json as { receiptId: string; status: string; dispute: { windowClosesAt: string | null } };
     expect(draft.status).toBe("draft");
+    // SPEC v0.31: no dispute window until countersigned: null, not "".
+    expect(draft.dispute.windowClosesAt).toBeNull();
+
+    // A legacy row stored before v0.31 ("") is rewritten by the D1 migration,
+    // run here exactly as shipped (and twice, since it must be idempotent).
+    await env.DB.prepare("UPDATE receipts SET data = json_set(data, '$.dispute.windowClosesAt', '') WHERE receipt_id = ?").bind(draft.receiptId).run();
+    for (let i = 0; i < 2; i++) await env.DB.exec(DRAFT_WINDOW_MIGRATION.replace(/^--.*$/gm, "").replace(/\s+/g, " ").trim());
+    const migrated = await env.DB.prepare("SELECT json_extract(data, '$.dispute.windowClosesAt') AS w, json_type(data, '$.dispute.windowClosesAt') AS t FROM receipts WHERE receipt_id = ?").bind(draft.receiptId).first<{ w: unknown; t: string }>();
+    expect(migrated).toEqual({ w: null, t: "null" });
 
     // Duplicate submission of identical content, fresh idempotency key so it
     // actually reaches the DB-level duplicate check instead of replaying.

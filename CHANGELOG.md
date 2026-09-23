@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.31 (Draft) — 2026-09-23
+- **Draft `dispute.windowClosesAt` is `null`, not `""` (§4.3).** `""` isn't a valid `date-time`, so it contradicted the OpenAPI schema. It's now `null` until countersigning sets it, and the schema marks the field `nullable`. `dispute` is outside the signed content and the `receiptId` hash, so no signature or ID changes. Existing drafts are migrated in place (Node on startup, Worker via `worker/migration-draft-window-null.sql`).
+
 ### v0.30 (Draft) — 2026-09-22
 - **Append-only transparency log (round-2 item 6), new §13.** RFC 6962-style Merkle log over receipt-lifecycle events (`receipt_finalized`, `dispute_opened`, `dispute_resolved`, `nonperformance_reported`) — the mutable receipt/job rows these events update give no external signal if a row is retroactively edited between two reads; the log does. New endpoints `GET /transparency/sth`, `/entries`, `/proof/inclusion`, `/proof/consistency`. STH served unsigned (the registry has no signing keypair of its own, §7); tamper-evidence comes from consistency proofs between two client-observed tree heads. New error codes `INVALID_TREE_SIZE`, `INVALID_LEAF_INDEX`. See the per-package entries below for the implementation.
 
@@ -172,6 +175,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.8.1 — 2026-09-23
+- `ExecutionReceipt.dispute.windowClosesAt` is typed `string | null` (SPEC.md v0.31). The `buildSignableContent` placeholder now carries `null`; it is stripped before signing, so signatures are unaffected.
+
 ### 0.8.0 — 2026-09-22
 - **Transparency log support (SPEC.md v0.30, §13).** New `sdk-js/src/core/merkleLog.ts` — RFC 6962-style Merkle tree: `leafHash`, `rootHash`, `inclusionProof`, `consistencyProof` (generation, used server-side by both runtimes) and `verifyInclusion`/`verifyConsistency` (pure verification, now exported from the package root so a caller can check a proof itself). New `sdk-js/src/core/transparencyLog.ts` (`buildLogEntry`, canonicalizes a log entry into its leaf bytes; `TransparencyEntryType` also exported).
 - New `InamClient` methods: `getTransparencySTH()`, `getTransparencyEntries({ limit?, offset? })`, `getInclusionProof(leafIndex, treeSize?)`, `getConsistencyProof(first, second?)` — fetch-only; verification is the caller's own job via the exports above.
@@ -237,6 +243,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.8.1 (Node) / 0.7.1 (Worker) — 2026-09-23
+- Draft receipts return `dispute.windowClosesAt: null` instead of `""` (SPEC.md v0.31). `openDispute` treats a missing window as closed.
+- **Data migration.** The Node server rewrites legacy `""` drafts on every startup (`migrateDraftWindowToNull` in `src/storage/db.ts`, idempotent, so self-hosted databases upgrade themselves). The Worker needs `worker/migration-draft-window-null.sql` run against D1. It's idempotent and order-independent relative to the deploy.
+- Tests: Node asserts the draft value and the migration (`tests/hardening.test.ts`, `tests/storageQueries.test.ts`). The Worker test runs the shipped migration SQL file itself, twice (`worker/tests/api.test.ts`).
 
 ### 0.8.0 (Node) / 0.7.0 (Worker) — 2026-09-22
 - **Append-only transparency log (SPEC.md v0.30, §13).** Four new hooks append one leaf each to a per-registry Merkle log: `countersign` → `receipt_finalized`, `openDispute` → `dispute_opened`, `resolveDispute` → `dispute_resolved` (all in `src/services/receiptService.ts`/`worker/src/receiptService.ts`), `reportNonPerformance` → `nonperformance_reported` (`src/services/jobService.ts`/`worker/src/jobService.ts`). New `src/services/transparencyService.ts`/`worker/src/transparencyService.ts` compute root/proofs on demand over the ordered leaf-hash list (`O(n)` per request — deliberately not a persisted frontier structure at this scale). New routes mounted at `/v1/transparency`: `GET /sth`, `/entries`, `/proof/inclusion`, `/proof/consistency`, all rate-limited the same as other public reads.
@@ -396,6 +407,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.9.1 — 2026-09-23
+- `build_signable_content`'s `dispute` placeholder uses `None` instead of `""` (SPEC.md v0.31). It is stripped before signing, so signatures are unaffected.
 
 ### 0.9.0 — 2026-09-22
 - **Transparency log support (SPEC.md v0.30, §13).** New `inamprotocol/merkle_log.py` — a verification-only 1:1 port of `sdk-js/src/core/merkleLog.ts`'s `verifyInclusion`/`verifyConsistency` (proof *generation* stays server-side/TypeScript-only, the source of truth both runtimes build from). Exported as `verify_inclusion`/`verify_consistency` from the package root, stdlib `hashlib` only, no new dependency.

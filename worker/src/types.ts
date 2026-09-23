@@ -95,7 +95,8 @@ export interface ExecutionReceipt {
   dispute: {
     status: DisputeStatus;
     reason?: string;
-    windowClosesAt: string;
+    /** null while the receipt is a draft; set when it is countersigned (SPEC §4.3). */
+    windowClosesAt: string | null;
     openedBy?: string;
     resolvedAt?: string;
     resolution?: string;
