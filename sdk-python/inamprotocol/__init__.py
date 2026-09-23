@@ -15,6 +15,7 @@ from .p256 import P256Keypair, generate_p256_keypair, p256_sign, p256_verify
 from .canonical import canonicalize
 from .client import InamClient
 from .merkle_log import verify_inclusion, verify_consistency
+from .receipt import dispute_window_closes_at, is_dispute_window_open
 
 __all__ = [
     "Keypair",
@@ -36,4 +37,6 @@ __all__ = [
     "InamClient",
     "verify_inclusion",
     "verify_consistency",
+    "dispute_window_closes_at",
+    "is_dispute_window_open",
 ]

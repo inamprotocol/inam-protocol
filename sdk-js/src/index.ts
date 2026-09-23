@@ -31,6 +31,10 @@ export { canonicalize } from "./crypto/canonical.js";
 
 export { computeReceiptId, buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";
 
+// Dispute-window helpers (SPEC.md §4.3, v0.31). Use these instead of
+// new Date(receipt.dispute.windowClosesAt): the field is null on drafts.
+export { disputeWindowClosesAt, isDisputeWindowOpen } from "./core/disputeLifecycle.js";
+
 export { computeVerificationId, buildSignableVerificationContent, type VerificationContentInput } from "./core/verificationContent.js";
 
 // Transparency log (audit round-2 item 6, RFC 6962-style Merkle log): pure

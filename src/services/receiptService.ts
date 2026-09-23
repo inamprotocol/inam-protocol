@@ -5,7 +5,7 @@ import { config } from "../config.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
 import { buildSignableContent, type ReceiptContentInput } from "../../sdk-js/src/core/receiptContent.js";
 import { isReceiptRestricted, isReceiptParticipant } from "../../sdk-js/src/core/receiptVisibility.js";
-import { hasUsedDisputeRight } from "../../sdk-js/src/core/disputeLifecycle.js";
+import { hasUsedDisputeRight, isDisputeWindowOpen } from "../../sdk-js/src/core/disputeLifecycle.js";
 import * as jobService from "./jobService.js";
 import * as transparencyService from "./transparencyService.js";
 import type { ExecutionReceipt } from "../types.js";
@@ -149,7 +149,7 @@ export function openDispute(receiptId: string, callerDid: string, reason: string
     throw conflict("DISPUTE_ALREADY_RESOLVED", "You already disputed and resolved this receipt — you cannot dispute it again");
   }
   if (receipt.status !== "finalized") throw conflict("NOT_FINALIZED", "Only finalized receipts can be disputed");
-  if (!receipt.dispute.windowClosesAt || new Date(receipt.dispute.windowClosesAt).getTime() < Date.now()) {
+  if (!isDisputeWindowOpen(receipt)) {
     throw conflict("DISPUTE_WINDOW_CLOSED", "The dispute window for this receipt has closed");
   }
   // Resolution deadline: an open dispute the opener never resolves would

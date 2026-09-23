@@ -175,8 +175,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
-### 0.8.1 — 2026-09-23
+### 0.9.0 — 2026-09-23
 - `ExecutionReceipt.dispute.windowClosesAt` is typed `string | null` (SPEC.md v0.31). The `buildSignableContent` placeholder now carries `null`; it is stripped before signing, so signatures are unaffected.
+- New exports `disputeWindowClosesAt(receipt): Date | null` and `isDisputeWindowOpen(receipt, now?)`. They return "no window" for `null`, missing, or unparseable values, where `new Date(null)` would give 1970-01-01, and they also accept the `""` that pre-v0.31 registries return. Both runtimes' dispute gates now use `isDisputeWindowOpen`, so there's one definition of an open window. Minor bump: new public API.
 
 ### 0.8.0 — 2026-09-22
 - **Transparency log support (SPEC.md v0.30, §13).** New `sdk-js/src/core/merkleLog.ts` — RFC 6962-style Merkle tree: `leafHash`, `rootHash`, `inclusionProof`, `consistencyProof` (generation, used server-side by both runtimes) and `verifyInclusion`/`verifyConsistency` (pure verification, now exported from the package root so a caller can check a proof itself). New `sdk-js/src/core/transparencyLog.ts` (`buildLogEntry`, canonicalizes a log entry into its leaf bytes; `TransparencyEntryType` also exported).
@@ -245,7 +246,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## Node reference server & Cloudflare Worker
 
 ### 0.8.1 (Node) / 0.7.1 (Worker) — 2026-09-23
-- Draft receipts return `dispute.windowClosesAt: null` instead of `""` (SPEC.md v0.31). `openDispute` treats a missing window as closed.
+- Draft receipts return `dispute.windowClosesAt: null` instead of `""` (SPEC.md v0.31). `openDispute` now gates on the shared `isDisputeWindowOpen` (`sdk-js/src/core/disputeLifecycle.ts`), which treats a missing window as closed.
 - **Data migration.** The Node server rewrites legacy `""` drafts on every startup (`migrateDraftWindowToNull` in `src/storage/db.ts`, idempotent, so self-hosted databases upgrade themselves). The Worker needs `worker/migration-draft-window-null.sql` run against D1. It's idempotent and order-independent relative to the deploy.
 - Tests: Node asserts the draft value and the migration (`tests/hardening.test.ts`, `tests/storageQueries.test.ts`). The Worker test runs the shipped migration SQL file itself, twice (`worker/tests/api.test.ts`).
 
@@ -408,8 +409,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Python SDK (`sdk-python`)
 
-### 0.9.1 — 2026-09-23
+### 0.10.0 — 2026-09-23
 - `build_signable_content`'s `dispute` placeholder uses `None` instead of `""` (SPEC.md v0.31). It is stripped before signing, so signatures are unaffected.
+- New exports `dispute_window_closes_at(receipt) -> Optional[datetime]` (timezone-aware) and `is_dispute_window_open(receipt, now=None)`, which mirror the sdk-js helpers. They return "no window" for `None`, `""`, or unparseable values and handle a trailing `Z` on Python 3.9 and 3.10. New `tests/test_dispute_window.py`. Minor bump: new public API.
 
 ### 0.9.0 — 2026-09-22
 - **Transparency log support (SPEC.md v0.30, §13).** New `inamprotocol/merkle_log.py` — a verification-only 1:1 port of `sdk-js/src/core/merkleLog.ts`'s `verifyInclusion`/`verifyConsistency` (proof *generation* stays server-side/TypeScript-only, the source of truth both runtimes build from). Exported as `verify_inclusion`/`verify_consistency` from the package root, stdlib `hashlib` only, no new dependency.

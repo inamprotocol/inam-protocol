@@ -38,3 +38,23 @@ export function isDisputeActive(receipt: DisputeCheckable, now: number = Date.no
   if (!receipt.dispute.resolutionDeadline) return true;
   return now < new Date(receipt.dispute.resolutionDeadline).getTime();
 }
+
+/**
+ * SPEC.md §4.3 (v0.31): `dispute.windowClosesAt` is null until a receipt is
+ * countersigned. Read it through this helper instead of `new Date(...)`:
+ * `new Date(null)` is 1970-01-01, which a caller could mistake for a real,
+ * long-closed window. Returns null for null, missing, or unparseable values
+ * (including the "" that pre-v0.31 registries returned for drafts).
+ */
+export function disputeWindowClosesAt(receipt: { dispute: { windowClosesAt?: string | null } }): Date | null {
+  const raw = receipt.dispute.windowClosesAt;
+  if (!raw) return null;
+  const date = new Date(raw);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+/** True only while a dispute window exists and hasn't closed yet. A draft has no window, so it's false. */
+export function isDisputeWindowOpen(receipt: { dispute: { windowClosesAt?: string | null } }, now: number = Date.now()): boolean {
+  const closesAt = disputeWindowClosesAt(receipt);
+  return closesAt !== null && now < closesAt.getTime();
+}
