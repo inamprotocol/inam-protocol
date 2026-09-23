@@ -14,6 +14,17 @@ This directory is the Node/TypeScript reference implementation: Express registry
 
 New here? Start with [`QUICKSTART.md`](./QUICKSTART.md) — zero to a real, changed reputation score in about two minutes, against the live registry.
 
+### Self-host with Docker
+
+```
+git clone https://github.com/inamprotocol/inam-protocol && cd inam-protocol
+docker compose up -d     # registry on http://localhost:4021, data in the inam-data volume
+```
+
+Point any SDK at `http://localhost:4021` instead of the live API. Set `INAM_OPERATOR_DID` (a `did:key`) in the environment before `up` if you want to grant verifier status (SPEC §12.3); left unset, nobody can. `docker compose down -v` wipes the data.
+
+### From source
+
 `sdk-js` is a separate nested package that this server imports directly by relative path (see "What's here" below), so it needs its own `npm install` too — see [`CONTRIBUTING.md`](./CONTRIBUTING.md) if `npm run dev` fails with a missing-module error.
 
 ```

@@ -1,0 +1,10 @@
+# Allowlist: only what the Dockerfile copies. Keeps keys, local data, and
+# maintainer notes out of the build context entirely.
+*
+!package.json
+!package-lock.json
+!tsconfig.json
+!src/
+!sdk-js/package.json
+!sdk-js/package-lock.json
+!sdk-js/src/

@@ -1,0 +1,14 @@
+services:
+  registry:
+    build: .
+    ports:
+      - "4021:4021"
+    volumes:
+      - inam-data:/data
+    environment:
+      # did:key allowed to grant verifier status (SPEC §12.3). Unset = nobody can.
+      INAM_OPERATOR_DID: ${INAM_OPERATOR_DID:-}
+    restart: unless-stopped
+
+volumes:
+  inam-data:
