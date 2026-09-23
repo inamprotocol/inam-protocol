@@ -3,16 +3,27 @@
 
 const DEFAULT_API_BASE = "https://api.inamprotocol.org/v1";
 
+// The override ends up in a link href, so anything but http(s) (e.g. a
+// javascript: URL in a crafted ?api= link) is rejected, including a bad
+// value already persisted in localStorage.
+function safeApiBase(value) {
+  try {
+    const u = new URL(value);
+    if (u.protocol === "https:" || u.protocol === "http:") return u.href.replace(/\/$/, "");
+  } catch (_) { /* not a URL */ }
+  return null;
+}
+
 function resolveApiBase() {
-  const params = new URLSearchParams(location.search);
-  const fromQuery = params.get("api");
+  const fromQuery = safeApiBase(new URLSearchParams(location.search).get("api"));
   if (fromQuery) {
     try { localStorage.setItem("inam_explorer_api_base", fromQuery); } catch (_) { /* ignore */ }
-    return fromQuery.replace(/\/$/, "");
+    return fromQuery;
   }
   try {
-    const stored = localStorage.getItem("inam_explorer_api_base");
-    if (stored) return stored.replace(/\/$/, "");
+    const stored = safeApiBase(localStorage.getItem("inam_explorer_api_base"));
+    if (stored) return stored;
+    localStorage.removeItem("inam_explorer_api_base");
   } catch (_) { /* ignore */ }
   return DEFAULT_API_BASE;
 }
