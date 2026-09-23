@@ -112,7 +112,11 @@ function page({ title, description, activeNav, body, urlPath, extraHead = "" }) 
 <meta property="og:title" content="${title}">
 <meta property="og:description" content="${description}">
 <meta property="og:url" content="${url}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="https://inamprotocol.org/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://inamprotocol.org/og.png">
 <meta name="twitter:title" content="${title}">
 <meta name="twitter:description" content="${description}">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
