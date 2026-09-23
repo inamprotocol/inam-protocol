@@ -1,8 +1,14 @@
 # Inam Protocol Registry
 
+[![npm](https://img.shields.io/npm/v/inamprotocol?label=npm%20inamprotocol)](https://www.npmjs.com/package/inamprotocol)
+[![PyPI](https://img.shields.io/pypi/v/inamprotocol?label=pypi%20inamprotocol)](https://pypi.org/project/inamprotocol/)
+[![npm](https://img.shields.io/npm/v/inam-mcp?label=npm%20inam-mcp)](https://www.npmjs.com/package/inam-mcp)
+[![CI](https://github.com/inamprotocol/inam-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/inamprotocol/inam-protocol/actions/workflows/ci.yml)
+[![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
+
 The open reputation, verification, and economic-history layer for the agent economy. INAM is not an agent communication protocol (that's MCP/A2A), not an identity or authorization replacement (that's AgentPass/AITP/Passport Alliance/DID), and not an agent runtime — it's the neutral record of "this work actually happened between these two agents, and here's their evidence-based track record." Full specification: [`SPEC.md`](./SPEC.md), also readable at **[docs.inamprotocol.org](https://docs.inamprotocol.org)** alongside an interactive API reference generated from `openapi.yaml` (source in [`docs-site/`](./docs-site)).
 
-This directory is the Node/TypeScript reference implementation: Express registry server, `did:key` identity, sybil-resistant reputation engine, and the `InamClient` SDK. The SDK itself is published standalone as [`inamprotocol`](https://www.npmjs.com/package/inamprotocol) (source in [`sdk-js/`](./sdk-js) — the exact code this server and the Worker deployment import, not a separate build). A parity Python SDK is published as [`inamprotocol`](https://pypi.org/project/inamprotocol/) on PyPI (source in [`sdk-python/`](./sdk-python)). Node 22 — zero native dependencies (pure-JS crypto and a file-backed store), so `npm install` never needs a C++ toolchain.
+This directory is the Node/TypeScript reference implementation: Express registry server, `did:key` identity, sybil-resistant reputation engine, and the `InamClient` SDK. The SDK itself is published standalone as [`inamprotocol`](https://www.npmjs.com/package/inamprotocol) (source in [`sdk-js/`](./sdk-js) — the exact code this server and the Worker deployment import, not a separate build). A parity Python SDK is published as [`inamprotocol`](https://pypi.org/project/inamprotocol/) on PyPI (source in [`sdk-python/`](./sdk-python)). Node 22 — zero native dependencies (pure-JS crypto and the built-in `node:sqlite` store), so `npm install` never needs a C++ toolchain.
 
 ## Run it
 
@@ -20,7 +26,7 @@ npm run demo     # in another terminal: registers two agents, links an external
 npm test         # canonical-JSON, did:key/signing, and receipt-lifecycle tests
 ```
 
-Data is persisted to `data/*.json` (gitignored). Delete that folder to reset the registry to empty. Tests never touch it — they run against a fresh temp directory (see `tests/setupEnv.ts`).
+Data is persisted to `data/registry.db` (SQLite, gitignored). Delete that folder to reset the registry to empty. Tests never touch it — they run against a fresh temp directory (see `tests/setupEnv.ts`).
 
 ### Cross-language interop demo
 

@@ -39,6 +39,10 @@ html = html
   .replaceAll("{{PY_VERSION}}", PY_VERSION);
 writeFileSync(path.join(DIST, "index.html"), html);
 
-cpSync(path.join(SITE_ROOT, "public", "use-cases.html"), path.join(DIST, "use-cases.html"));
+// Everything else in public/ (use-cases.html, robots.txt, sitemap.xml, llms.txt) ships as-is.
+cpSync(path.join(SITE_ROOT, "public"), DIST, {
+  recursive: true,
+  filter: (src) => path.basename(src) !== "index.html",
+});
 
 console.log(`Built site/dist — spec ${SPEC_VERSION} ${SPEC_STATUS}, registry ${REGISTRY_VERSION}, js ${JS_VERSION}, py ${PY_VERSION}`);

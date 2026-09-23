@@ -95,7 +95,10 @@ footer.site { text-align: center; padding: 40px 24px; font-family: "IBM Plex Mon
 @media (max-width: 820px) { .toc { display: none; } }
 `;
 
-function page({ title, description, activeNav, body, extraHead = "" }) {
+const ORIGIN = "https://docs.inamprotocol.org";
+
+function page({ title, description, activeNav, body, urlPath, extraHead = "" }) {
+  const url = ORIGIN + urlPath;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -103,6 +106,15 @@ function page({ title, description, activeNav, body, extraHead = "" }) {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
 <meta name="description" content="${description}">
+<link rel="canonical" href="${url}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="INAM Protocol">
+<meta property="og:title" content="${title}">
+<meta property="og:description" content="${description}">
+<meta property="og:url" content="${url}">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${title}">
+<meta name="twitter:description" content="${description}">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
 <style>${CSS}</style>
 ${extraHead}
@@ -154,7 +166,17 @@ writeFileSync(
     title: "INAM Protocol",
     description: "The open reputation, verification, and economic-history layer for the agent economy.",
     activeNav: "home",
+    urlPath: "/",
     body: landingBody,
+    extraHead: `<script type="application/ld+json">${JSON.stringify({
+      "@context": "https://schema.org",
+      "@type": "TechArticle",
+      name: "INAM Protocol documentation",
+      url: ORIGIN + "/",
+      version: SPEC_VERSION,
+      license: "https://www.apache.org/licenses/LICENSE-2.0",
+      publisher: { "@type": "Organization", name: "INAM Protocol", url: "https://inamprotocol.org" },
+    })}</script>`,
   }),
 );
 
@@ -205,6 +227,7 @@ writeFileSync(
     title: "Specification — INAM Protocol",
     description: "The full INAM Protocol specification: identity, execution receipts, reputation, REST API, and request signing.",
     activeNav: "spec",
+    urlPath: "/spec/",
     body: specBody,
   }),
 );
@@ -234,12 +257,44 @@ writeFileSync(
     title: "API Reference — INAM Protocol",
     description: "Interactive REST API reference for the INAM Protocol Registry, generated from openapi.yaml.",
     activeNav: "api",
+    urlPath: "/api/",
     body: "",
-    extraHead: "",
   }).replace(
     '<footer class="site">',
     `${apiBody}\n<footer class="site">`,
   ),
+);
+
+// ---------- Crawler files (robots.txt, sitemap.xml, llms.txt) ----------
+writeFileSync(path.join(DIST, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
+writeFileSync(
+  path.join(DIST, "sitemap.xml"),
+  `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${["/", "/spec/", "/api/"].map((p) => `  <url><loc>${ORIGIN}${p}</loc></url>`).join("\n")}
+</urlset>
+`,
+);
+writeFileSync(
+  path.join(DIST, "llms.txt"),
+  `# INAM Protocol documentation
+
+> Specification (${SPEC_VERSION} ${SPEC_STATUS}) and REST API reference for INAM, the open reputation, verification, and economic-history layer for AI agents. Complements MCP/A2A (communication) and DID/AgentPass (identity); it does not replace them.
+
+## Docs
+
+- [Specification](${ORIGIN}/spec/): identity (did:key), jobs, signed execution receipts, disputes, reputation, request signing, transparency log
+- [API reference](${ORIGIN}/api/): interactive REST reference
+- [OpenAPI YAML](${ORIGIN}/api/openapi.yaml): machine-readable API definition
+
+## Use it
+
+- [Live registry API](https://api.inamprotocol.org/v1/health)
+- [TypeScript SDK (npm: inamprotocol)](https://www.npmjs.com/package/inamprotocol)
+- [Python SDK (PyPI: inamprotocol)](https://pypi.org/project/inamprotocol/)
+- [MCP server (npm: inam-mcp)](https://www.npmjs.com/package/inam-mcp)
+- [Source on GitHub](https://github.com/inamprotocol/inam-protocol)
+`,
 );
 
 console.log("Built docs-site to", DIST);

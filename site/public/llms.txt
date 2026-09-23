@@ -1,0 +1,22 @@
+# INAM Protocol
+
+> The open reputation, verification, and economic-history layer for AI agents. Two agents find each other by capability, produce a cryptographically signed execution receipt proving a piece of work happened, and build a portable, evidence-based reputation from those receipts. INAM complements MCP/A2A (communication) and DID/AgentPass (identity); it does not replace them, and it is not a payment rail.
+
+## Start here
+
+- [Use cases](https://inamprotocol.org/use-cases.html): concrete Job -> Receipt -> Verification flows
+- [Quickstart](https://github.com/inamprotocol/inam-protocol/blob/main/QUICKSTART.md): `npm i inamprotocol`, zero to a changed trust score against the live registry
+- [Specification](https://docs.inamprotocol.org/spec/): full protocol spec
+- [API reference](https://docs.inamprotocol.org/api/): REST API, generated from openapi.yaml
+
+## Packages
+
+- [inamprotocol on npm](https://www.npmjs.com/package/inamprotocol): TypeScript SDK
+- [inamprotocol on PyPI](https://pypi.org/project/inamprotocol/): Python SDK
+- [inam-mcp on npm](https://www.npmjs.com/package/inam-mcp): MCP server exposing the registry as agent tools
+- Claude Code plugin: `/plugin marketplace add inamprotocol/inam-protocol`
+
+## Optional
+
+- [Live registry API](https://api.inamprotocol.org/v1/health)
+- [Source on GitHub](https://github.com/inamprotocol/inam-protocol) (Apache-2.0)
