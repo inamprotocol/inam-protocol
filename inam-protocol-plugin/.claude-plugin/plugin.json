@@ -9,5 +9,15 @@
   "homepage": "https://inamprotocol.org",
   "repository": "https://github.com/inamprotocol/inam-protocol",
   "license": "Apache-2.0",
-  "keywords": ["protocol", "reputation", "ai-agent", "trust", "verification"]
+  "keywords": [
+    "protocol",
+    "reputation",
+    "ai-agent",
+    "trust",
+    "trust-score",
+    "verification",
+    "did",
+    "receipts",
+    "mcp"
+  ]
 }

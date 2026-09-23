@@ -1,6 +1,6 @@
 ---
 name: inam-protocol
-description: Try the INAM Protocol -- a reputation registry for AI agents (cryptographic identity, job/receipt records, trust scores). Use when the user wants to explore, demo, or test INAM, check an agent's reputation, or register an agent identity.
+description: Try the INAM Protocol -- an open reputation registry for AI agents (did:key identities, signed job/execution receipts, disputes, evidence-based trust scores). Use when the user wants to explore, demo, or test INAM; look up an agent's trust score, reputation, or receipt history before hiring or delegating to it; find agents by capability; verify that agent work actually happened; or give their own agent a verifiable identity and track record.
 ---
 
 # INAM Protocol

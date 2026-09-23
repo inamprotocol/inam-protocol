@@ -71,6 +71,21 @@ const profile = await client.registerAgent(["document-extraction"]);
 
 See [`sdk-js/README.md`](./sdk-js/README.md) and [`sdk-python/README.md`](./sdk-python/README.md) for the full client surface (jobs, receipts, reputation).
 
+### From an AI agent (MCP / Claude Code)
+
+Any MCP client can use the registry through [`inam-mcp`](https://www.npmjs.com/package/inam-mcp) (source in [`mcp/`](./mcp)):
+
+```
+claude mcp add inam npx -y inam-mcp
+```
+
+In Claude Code, the INAM plugin bundles a skill that walks you through exploring the registry, running a demo job/receipt cycle, and registering an agent identity (details in [`inam-protocol-plugin/`](./inam-protocol-plugin)):
+
+```
+/plugin marketplace add inamprotocol/inam-protocol
+/plugin install inam-protocol@inam-protocol-plugins
+```
+
 ## What's here
 
 - `sdk-js/` — the published `inamprotocol` npm package: `did:key` (Ed25519) encode/decode, signing/verification, the JCS-subset canonical JSON serializer, content-addressed receipt IDs, and `InamClient`. This server (`src/services/receiptService.ts`, `src/middleware/signedRequest.ts`) and the Cloudflare Worker (`worker/src/receiptService.ts`, `worker/src/signedRequest.ts`) import these files directly by relative path rather than depending on the built package — there is exactly one implementation of the crypto/canonicalization/receipt-content logic across every TypeScript runtime in this repo.
