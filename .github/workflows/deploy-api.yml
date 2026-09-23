@@ -1,0 +1,52 @@
+# Deploy the registry Worker (api.inamprotocol.org).
+#
+# Manual dispatch only, never on push: when a release adds a D1 migration
+# (worker/migration-*.sql), that migration has to run against prod *before*
+# the new code deploys, or new writes fail against a missing column/table
+# (audit #14's agent_capabilities rollout depended on this ordering).
+# Run the migration first, then dispatch this workflow.
+#
+# Tests and typecheck gate the deploy.
+
+name: Deploy API
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      # The Worker imports sdk-js/src directly (same as ci.yml's worker job).
+      - name: Install sdk-js dependencies
+        working-directory: sdk-js
+        run: npm ci
+
+      - name: Install worker dependencies
+        working-directory: worker
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: worker
+        run: npm run typecheck
+
+      - name: Test
+        working-directory: worker
+        run: npm test
+
+      - name: Deploy
+        working-directory: worker
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy

@@ -1,0 +1,37 @@
+# Deploy explorer.inamprotocol.org on every push to main that touches it.
+# explorer/ had no CD: the live site was still missing the audit #7
+# per-currency volume view weeks after it landed in the repo.
+# Static assets only (explorer/public), no build step.
+
+name: Deploy explorer
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "explorer/**"
+      - ".github/workflows/deploy-explorer.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        working-directory: explorer
+        run: npm ci
+
+      - name: Deploy
+        working-directory: explorer
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+        run: npx wrangler deploy
