@@ -23,3 +23,6 @@ seed-keys.json
 STATUS.md
 docs-design/
 reviews/
+
+# reference-agent private keys written by scripts/seed-reference-agents.ts
+seed-keys*.json
