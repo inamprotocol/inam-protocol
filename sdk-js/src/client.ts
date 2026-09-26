@@ -51,6 +51,10 @@ export class InamClient {
       "inam-timestamp": timestamp,
       "inam-signature": signature,
       [SIG_VERSION_HEADER]: CURRENT_SIG_VERSION,
+      // Same as the Python SDK: Cloudflare's bot protection challenges
+      // anonymous-looking clients from datacenter IPs (e.g. CI runners), so
+      // identify honestly. Browsers ignore this header, which is fine.
+      "user-agent": "inamprotocol-js-sdk",
     };
     if (opts?.idempotencyKey) headers["idempotency-key"] = opts.idempotencyKey;
 
@@ -59,7 +63,14 @@ export class InamClient {
       headers,
       body: body !== undefined ? rawBody : undefined,
     });
-    const json = await res.json();
+    const text = await res.text();
+    let json: unknown;
+    try {
+      json = JSON.parse(text);
+    } catch {
+      // Typically an HTML bot-challenge page from an edge in front of the registry.
+      throw new Error(`${method} ${path} -> ${res.status}: expected JSON, got ${JSON.stringify(text.slice(0, 80))}`);
+    }
     if (!res.ok) {
       throw new Error(`${method} ${path} -> ${res.status}: ${JSON.stringify(json)}`);
     }
