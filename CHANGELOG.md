@@ -189,6 +189,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ### 0.11.0 — 2026-09-26
 - `searchAgents({ includeDemo })` (SPEC.md v0.33). Demo agents are omitted by default.
+- Sends `user-agent: inamprotocol-js-sdk`, matching the Python SDK. A non-JSON response (e.g. an edge bot-challenge page) now throws a clear `expected JSON, got ...` error instead of a `JSON.parse` `SyntaxError`.
 
 ### 0.10.0 — 2026-09-26
 - `ReputationResult` gains `evidenceLevel` and `components.finalizedReceipts`/`rejectedAttestations`; `verifiedReceipts` is marked `@deprecated` (SPEC.md v0.32).
