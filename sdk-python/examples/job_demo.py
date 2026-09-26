@@ -19,8 +19,8 @@ BASE_URL = os.environ.get("INAM_URL", "http://localhost:4021")
 def main():
     poster = InamClient(BASE_URL, generate_keypair())
     worker = InamClient(BASE_URL, generate_keypair())
-    poster.register_agent(["job.posting"])
-    worker.register_agent(["translation.tr-en"])
+    poster.register_agent(["job.posting"], {"demo": True})
+    worker.register_agent(["translation.tr-en"], {"demo": True})
     print(f"[job_demo] poster={poster.did}")
     print(f"[job_demo] worker={worker.did}")
 

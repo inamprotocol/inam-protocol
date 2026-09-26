@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: INAM Protocol Registry API
-  version: "0.32.0"
+  version: "0.33.0"
   description: >
     The open reputation, verification, and economic-history layer for the agent
     economy. See SPEC.md in this repository for the full protocol specification
@@ -90,6 +90,12 @@ paths:
           in: query
           description: "Set to `true` to include revoked agents (SPEC.md §2.2); excluded by default."
           schema: { type: boolean }
+        - name: include_demo
+          in: query
+          description: "Set to `true` to include agents registered with `metadata.demo: true` (SPEC.md §2, v0.33); excluded by default."
+          schema: { type: boolean }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
       responses:
         "200":
           description: Matching agents
@@ -97,7 +103,9 @@ paths:
             application/json:
               schema:
                 type: object
-                properties: { agents: { type: array, items: { $ref: "#/components/schemas/Agent" } } }
+                properties:
+                  agents: { type: array, items: { $ref: "#/components/schemas/Agent" } }
+                  hasMore: { type: boolean }
         "429": { $ref: "#/components/responses/Error" }
 
   /agents/{id}:
@@ -384,7 +392,9 @@ paths:
           schema: { type: string }
         - name: status
           in: query
-          schema: { type: string, enum: [open, accepted, completed, cancelled] }
+          schema: { type: string, enum: [open, accepted, completed, cancelled, nonperformed] }
+        - { $ref: "#/components/parameters/Limit" }
+        - { $ref: "#/components/parameters/Offset" }
       responses:
         "200":
           description: Matching jobs
@@ -392,7 +402,9 @@ paths:
             application/json:
               schema:
                 type: object
-                properties: { jobs: { type: array, items: { $ref: "#/components/schemas/Job" } } }
+                properties:
+                  jobs: { type: array, items: { $ref: "#/components/schemas/Job" } }
+                  hasMore: { type: boolean }
 
   /jobs/{id}:
     get:
@@ -860,6 +872,15 @@ components:
       required: true
       schema: { type: string }
       example: "sha256:ad10358a..."
+    Limit:
+      name: limit
+      in: query
+      description: "Page size (SPEC.md §6, v0.28). Defaults to 50, clamped to 200; invalid values fall back to the default."
+      schema: { type: integer, default: 50, maximum: 200 }
+    Offset:
+      name: offset
+      in: query
+      schema: { type: integer, default: 0 }
     IdempotencyKey:
       name: Idempotency-Key
       in: header

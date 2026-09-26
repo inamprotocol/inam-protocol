@@ -26,7 +26,7 @@ BASE_URL = os.environ.get("INAM_URL", "http://localhost:4021")
 
 def main():
     agent = InamClient(BASE_URL, generate_keypair())
-    agent.register_agent(["x"])
+    agent.register_agent(["x"], {"demo": True})
     print(f"[link_challenge_demo] agent={agent.did}")
 
     # --- Ed25519 external identity (e.g. an aitp_id) ---

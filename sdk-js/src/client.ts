@@ -129,6 +129,8 @@ export class InamClient {
     supports?: string;
     limit?: number;
     offset?: number;
+    /** Include agents registered with `metadata.demo: true` (SPEC.md §2, v0.33). */
+    includeDemo?: boolean;
   }): Promise<{ agents: AgentRecord[]; hasMore: boolean }> {
     const params = new URLSearchParams();
     if (query.capability) params.set("capability", query.capability);
@@ -136,6 +138,7 @@ export class InamClient {
     if (query.supports) params.set("supports", query.supports);
     if (query.limit !== undefined) params.set("limit", String(query.limit));
     if (query.offset !== undefined) params.set("offset", String(query.offset));
+    if (query.includeDemo) params.set("include_demo", "true");
     return this.request("GET", `/v1/agents/search?${params.toString()}`);
   }
 

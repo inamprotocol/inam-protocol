@@ -178,6 +178,7 @@ class InamClient:
         supports: Optional[str] = None,
         limit: Optional[int] = None,
         offset: Optional[int] = None,
+        include_demo: bool = False,
     ) -> Dict[str, Any]:
         params: Dict[str, str] = {}
         if capability:
@@ -190,6 +191,8 @@ class InamClient:
             params["limit"] = str(limit)
         if offset is not None:
             params["offset"] = str(offset)
+        if include_demo:
+            params["include_demo"] = "true"
         return self._request("GET", f"/v1/agents/search?{urllib.parse.urlencode(params)}")
 
     def get_reputation(self, agent_id: str) -> Dict[str, Any]:

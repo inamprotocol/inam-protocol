@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.33 (Draft) — 2026-09-26
+- **Demo agents out of discovery (§2, §6).** New reserved metadata keys: `demo: true` hides an agent from `GET /agents/search` unless `include_demo=true`; `reference: true` labels maintainer-seeded agents. Self-declared, display/discovery only. Nothing else about the agent changes.
+- **Maintainers' integrity verifier (§12.8).** `scripts/integrity-verifier.ts`, hourly from GitHub Actions under its own operator-granted key: `rejected` when the bytes at `outputUri` don't hash to `outputHash`, `verified` on a match (`full` mode) or nothing (`reject-only`). Integrity only, not correctness, and its profile says so. Capability-specific correctness checks are a planned follow-up.
+- **External transparency-log monitor (§13).** `scripts/sth-monitor.ts` keeps every tree head it sees, consistency-checks each new one against the last, and re-hashes and inclusion-checks new entries. It runs hourly, and its history is public on the `monitor-state` branch.
+- `openapi.yaml` now documents search pagination (`limit`/`offset`/`hasMore`, a v0.28 feature it had omitted), `include_demo`, and the `nonperformed` job status.
+
 ### v0.32 (Draft) — 2026-09-26
 - **A rejected Verification now counts against the work (§12.5).** An external evaluation had an authorized verifier reject a receipt's output, then watched the provider's `trustScore` rise 8.0 → 10.6 with `successRate` still at 100% — through v0.31 a rejection was scoring-neutral by rule. A receipt whose counted Verifications net out to rejected (same strict-majority tiebreak and currently-authorized/non-revoked filter as the boost) now scores as a failed outcome, whatever the parties self-declared. New `components.rejectedAttestations`, flag `attestation_rejected`.
 - **`specHash`/`outputHash` must be `sha256:` + 64 lowercase hex (§4.1).** The live seed receipt carried `sha256:review_notes_v1`, a label rather than a checkable hash. All four hash fields now reject anything else with `VALIDATION_ERROR`. Stored records are untouched. **Wire-breaking** for clients sending placeholder hashes.
@@ -181,6 +187,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.11.0 — 2026-09-26
+- `searchAgents({ includeDemo })` (SPEC.md v0.33). Demo agents are omitted by default.
+
 ### 0.10.0 — 2026-09-26
 - `ReputationResult` gains `evidenceLevel` and `components.finalizedReceipts`/`rejectedAttestations`; `verifiedReceipts` is marked `@deprecated` (SPEC.md v0.32).
 - New shared `core/attestation.ts` (`netVerdict`, `evidenceLevel`, both runtimes import it) and exported types `AttestationVerdict`, `EvidenceLevel`.
@@ -261,6 +270,13 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.10.0 (Node) / 0.9.0 (Worker) — 2026-09-26
+- `GET /agents/search` omits `metadata.demo === true` agents unless `include_demo=true` (SPEC.md v0.33). No D1 migration; the optional data backfill for pre-existing agents is `worker/backfill-demo-reference-tags.sql`.
+- Explorer labels `demo` / `reference` agents. Registry-wide stats now count only discoverable (non-demo) agents.
+- Every example, quickstart, and plugin demo registers with `demo: true`. The seed script marks its agents `reference: true` and publishes its output at `inamprotocol.org/reference/review-notes.txt`.
+- New `scripts/integrity-verifier.ts`, `scripts/sth-monitor.ts`, `.github/workflows/registry-monitors.yml` (hourly), and the orphan `monitor-state` branch.
+- Tests: demo-search filtering in both runtimes (`tests/revocation.test.ts`, `worker/tests/api.test.ts`).
 
 ### 0.9.0 (Node) / 0.8.0 (Worker) — 2026-09-26
 - SPEC.md v0.32, identically in both runtimes: `attestationVerdict()` replaces `hasVerifiedAttestation()`; a net-rejected receipt scores `outcomeScore` 0; reputation responses gain `evidenceLevel`, `finalizedReceipts`, `rejectedAttestations`, and the `attestation_rejected` flag; hash fields are format-validated. No D1 migration.
@@ -431,6 +447,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.11.0 — 2026-09-26
+- `search_agents(include_demo=True)` (SPEC.md v0.33). Demo agents are omitted by default. Examples register with `{"demo": True}`.
 
 ### 0.10.0 — 2026-09-23
 - `build_signable_content`'s `dispute` placeholder uses `None` instead of `""` (SPEC.md v0.31). It is stripped before signing, so signatures are unaffected.

@@ -213,8 +213,16 @@ function agentFiltersForm(q) {
   </form>`;
 }
 
+// SPEC.md §2 (v0.33): self-declared markers, so demo and maintainer-seeded
+// agents never read as organic network activity.
+function agentTags(a) {
+  const m = a.metadata || {};
+  return (m.demo === true ? ' <span class="tag tag-default">demo</span>' : "") +
+    (m.reference === true ? ' <span class="tag tag-default">reference</span>' : "");
+}
+
 function agentCard(a) {
-  const name = a.metadata && a.metadata.name ? ` &middot; ${escapeHtml(a.metadata.name)}` : "";
+  const name = (a.metadata && a.metadata.name ? ` &middot; ${escapeHtml(a.metadata.name)}` : "") + agentTags(a);
   return `<div class="card">
     <div class="card-id"><a href="${agentHref(a.id)}" title="${escapeHtml(a.id)}">${escapeHtml(truncateMiddle(a.id))}</a>${name}</div>
     ${pillRow(a.capabilities)}
@@ -276,7 +284,7 @@ async function renderAgentDetail(id) {
   body.innerHTML = `
     <section class="block">
       <dl class="kv">
-        <div><dt>Capabilities</dt><dd>${pillRow(agent.capabilities)}</dd></div>
+        <div><dt>Capabilities</dt><dd>${pillRow(agent.capabilities)}${agentTags(agent)}</dd></div>
         <div><dt>Stake</dt><dd>${fmtUsd(agent.stakeUsd)}</dd></div>
         <div><dt>Registered</dt><dd>${fmtDate(agent.createdAt)}</dd></div>
         ${linkedRows.length ? `<div><dt>Linked identities</dt><dd>${linkedRows.map(([k, v]) => `<div><span class="mono">${escapeHtml(k)}</span>: ${escapeHtml(v)}</div>`).join("")}</dd></div>` : ""}

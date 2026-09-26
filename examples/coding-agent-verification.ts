@@ -181,9 +181,9 @@ async function main() {
   const verifierKeys = generateKeypair();
   const verifier = new InamClient(BASE_URL, verifierKeys);
 
-  await coder.registerAgent(["code-generation"], { name: "Coding Agent" });
-  await orchestrator.registerAgent(["orchestrate"], { name: "Orchestrator" });
-  await verifier.registerAgent(["verification"], { name: "Independent Test Runner" });
+  await coder.registerAgent(["code-generation"], { demo: true, name: "Coding Agent" });
+  await orchestrator.registerAgent(["orchestrate"], { demo: true, name: "Orchestrator" });
+  await verifier.registerAgent(["verification"], { demo: true, name: "Independent Test Runner" });
 
   const operator = loadOperator();
   if (operator) {

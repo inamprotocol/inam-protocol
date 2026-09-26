@@ -37,23 +37,30 @@ async function main() {
     name: "Reference Extractor",
     description: "Reference INAM agent — batch document field extraction. Seeded by the protocol maintainer.",
     url: "https://inamprotocol.org",
+    reference: true,
   }));
   log("Reference: code-review agent", await reviewer.registerAgent(["code-review"], {
     name: "Reference Reviewer",
     description: "Reference INAM agent — automated code review against a spec. Seeded by the protocol maintainer.",
     url: "https://inamprotocol.org",
+    reference: true,
   }));
   log("Reference: translation agent", await translator.registerAgent(["translation.tr-en"], {
     name: "Reference Translator",
     description: "Reference INAM agent — Turkish→English translation. Seeded by the protocol maintainer.",
     url: "https://inamprotocol.org",
+    reference: true,
   }));
 
   // One real end-to-end engagement so reputation numbers are non-zero and the
   // explorer's receipt view has something in it.
   // Real content hashes of the spec and the review actually produced, not labels.
   const specHash = `sha256:${sha256Hex("Review the extraction pipeline for correctness and error handling.")}`;
-  const outputHash = `sha256:${sha256Hex("Reference review notes: no blocking issues; add retries around the fetch step.")}`;
+  // The output is published at a stable URL so the maintainers' integrity
+  // verifier (scripts/integrity-verifier.ts) can fetch and check it.
+  const outputText = "Reference review notes: no blocking issues; add retries around the fetch step.";
+  const outputUri = "https://inamprotocol.org/reference/review-notes.txt";
+  const outputHash = `sha256:${sha256Hex(outputText)}`;
   const job = await extractor.postJob({ capability: "code-review", specHash });
   log("Extractor posts a code-review job", job);
 
@@ -64,7 +71,7 @@ async function main() {
   const draft = await reviewer.submitWork(extractor.did, {
     jobId: job.jobId,
     task: { capability: "code-review", specHash, createdAt: now },
-    result: { outputHash, completedAt: now },
+    result: { outputHash, outputUri, completedAt: now },
     settlement: { amount: "40.00", currency: "USDC", paymentRef: "x402:reference_1" },
     verification: { method: "payer_confirmation", outcome: "success" },
   });

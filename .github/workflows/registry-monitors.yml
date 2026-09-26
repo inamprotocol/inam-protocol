@@ -1,0 +1,73 @@
+# Hourly external checks against the live registry (SPEC.md v0.33):
+#
+# 1. Transparency-log monitor (scripts/sth-monitor.ts) — keeps every tree head
+#    it has seen and proves each new one is an append-only extension of the
+#    last. The registry's tree head is unsigned by design, so this outside
+#    record is what makes the log tamper-evident. Fails the run on any
+#    rewrite.
+# 2. Integrity verifier (scripts/integrity-verifier.ts) — the maintainers'
+#    operator-authorized verifier. Only runs once the VERIFIER_PRIVATE_KEY
+#    secret exists; VERIFY_MODE repo variable picks `full` (default) or
+#    `reject-only`.
+#
+# State for both lives on the orphan `monitor-state` branch (sth.jsonl,
+# verifier-state.json), so the monitor's history is public and anyone can
+# diff it against their own copy.
+
+name: Registry monitors
+
+on:
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch: {}
+
+permissions:
+  contents: write # push to monitor-state only; main is branch-protected
+
+concurrency:
+  group: registry-monitors
+  cancel-in-progress: false
+
+jobs:
+  monitor:
+    runs-on: ubuntu-latest
+    env:
+      INAM_URL: https://api.inamprotocol.org
+      VERIFIER_PRIVATE_KEY: ${{ secrets.VERIFIER_PRIVATE_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with:
+          ref: monitor-state
+          path: state
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm ci
+        working-directory: sdk-js
+
+      - name: Transparency-log consistency
+        run: npx tsx scripts/sth-monitor.ts
+        env:
+          STATE_FILE: state/sth.jsonl
+
+      - name: Output-integrity verifier
+        if: always() && env.VERIFIER_PRIVATE_KEY != ''
+        run: npx tsx scripts/integrity-verifier.ts
+        env:
+          STATE_FILE: state/verifier-state.json
+          VERIFY_MODE: ${{ vars.VERIFY_MODE || 'full' }}
+          # ponytail: Actions logs expire (90 days by default); a durable evidence store is the upgrade if verifications need longer-lived evidence.
+          EVIDENCE_URI: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+      - name: Save state
+        if: always()
+        working-directory: state
+        run: |
+          git add -A
+          git diff --cached --quiet && exit 0
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "monitor state $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push -q origin HEAD:monitor-state

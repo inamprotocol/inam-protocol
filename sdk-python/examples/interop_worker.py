@@ -34,7 +34,7 @@ def main():
 
     worker_kp = generate_keypair()
     client = InamClient(BASE_URL, worker_kp)
-    profile = client.register_agent(["document-extraction"], {"name": "Python Worker (interop demo)"})
+    profile = client.register_agent(["document-extraction"], {"name": "Python Worker (interop demo)", "demo": True})
     print(f"[phase B / Python] Registered worker {profile['id']}")
 
     # agentpass_id is a key-derived identity (SPEC.md section 2.1) as of

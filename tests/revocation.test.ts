@@ -84,4 +84,18 @@ describe("agent identity revocation", () => {
     expect(res.status).toBe(403);
     expect(res.json!.error).toMatchObject({ code: "NOT_SUBJECT_AGENT" });
   });
+
+  it("hides self-declared demo agents from search unless include_demo=true (v0.33)", async () => {
+    const demo = generateKeypair();
+    const real = generateKeypair();
+    const cap = `cap-${Math.random().toString(36).slice(2)}`;
+    await signedPost(demo, "/v1/agents", { capabilities: [cap], metadata: { name: "Quickstart demo", demo: true } }, `reg:${demo.did}`);
+    await signedPost(real, "/v1/agents", { capabilities: [cap], metadata: { name: "Real", demo: "true" } }, `reg:${real.did}`);
+
+    const plain = await (await fetch(`${baseUrl}/v1/agents/search?capability=${cap}`)).json() as { agents: { id: string }[] };
+    expect(plain.agents.map((a) => a.id)).toEqual([real.did]); // only boolean true opts out
+    const incl = await (await fetch(`${baseUrl}/v1/agents/search?capability=${cap}&include_demo=true`)).json() as { agents: { id: string }[] };
+    expect(incl.agents.map((a) => a.id).sort()).toEqual([demo.did, real.did].sort());
+    expect((await fetch(`${baseUrl}/v1/agents/${demo.did}`)).status).toBe(200);
+  });
 });

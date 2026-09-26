@@ -112,6 +112,9 @@ app.get("/v1/agents/search", rateLimitReadByIp, async (c) => {
   const includeRevoked = c.req.query("include_revoked") === "true";
 
   let results = await agentService.searchAgents(c.env, { capability, supports, includeRevoked });
+  // SPEC.md §2 (v0.33): self-declared demo/test agents stay out of discovery
+  // unless asked for, so they don't read as real network activity.
+  if (c.req.query("include_demo") !== "true") results = results.filter((a) => a.metadata?.demo !== true);
   if (minReputation !== undefined) {
     const withReputation = await Promise.all(results.map(async (a) => ({ a, score: (await computeReputation(c.env, a.id)).trustScore })));
     results = withReputation.filter((x) => x.score >= minReputation).map((x) => x.a);

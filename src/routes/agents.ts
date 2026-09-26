@@ -38,6 +38,9 @@ agentsRouter.get("/search", rateLimitReadByIp, (req, res) => {
   const includeRevoked = req.query.include_revoked === "true";
 
   let results = agentService.searchAgents({ capability, supports, includeRevoked });
+  // SPEC.md §2 (v0.33): self-declared demo/test agents stay out of discovery
+  // unless asked for, so they don't read as real network activity.
+  if (req.query.include_demo !== "true") results = results.filter((a) => a.metadata?.demo !== true);
   if (minReputation !== undefined) {
     results = results.filter((a) => computeReputation(a.id).trustScore >= minReputation);
   }

@@ -47,9 +47,9 @@ async function main() {
   const reviewer = agent(BASE_URL, reviewerKeys); // capability: code-review
   const translator = agent(BASE_URL, translatorKeys); // capability: translation.tr-en
 
-  log("Extractor registers", await extractor.registerAgent(["document-extraction"], { name: "Doc Extractor" }));
-  log("Reviewer registers", await reviewer.registerAgent(["code-review"], { name: "Code Reviewer" }));
-  log("Translator registers", await translator.registerAgent(["translation.tr-en"], { name: "TR->EN Translator" }));
+  log("Extractor registers", await extractor.registerAgent(["document-extraction"], { demo: true, name: "Doc Extractor" }));
+  log("Reviewer registers", await reviewer.registerAgent(["code-review"], { demo: true, name: "Code Reviewer" }));
+  log("Translator registers", await translator.registerAgent(["translation.tr-en"], { demo: true, name: "TR->EN Translator" }));
 
   // --- Step 1: post a job (SPEC.md §3) -----------------------------------
   // Why a job exists as its own resource instead of the extractor just

@@ -1177,6 +1177,21 @@ describe("agent identity revocation (SPEC.md §2.2, audit #10)", () => {
     expect(rep.flags).toContain("revoked");
   });
 
+  it("hides self-declared demo agents from search unless include_demo=true (v0.33)", async () => {
+    const demo = generateKeypair();
+    const real = generateKeypair();
+    const cap = `cap-${Math.random().toString(36).slice(2)}`;
+    await call("POST", "/v1/agents", { keypair: demo, idempotencyKey: `reg:${demo.did}`, body: { capabilities: [cap], metadata: { name: "Quickstart demo", demo: true } } });
+    await call("POST", "/v1/agents", { keypair: real, idempotencyKey: `reg:${real.did}`, body: { capabilities: [cap], metadata: { name: "Real", demo: "true" } } });
+
+    const plain = (await call("GET", `/v1/agents/search?capability=${cap}`)).json as { agents: { id: string }[] };
+    expect(plain.agents.map((a) => a.id)).toEqual([real.did]); // only boolean true opts out
+    const incl = (await call("GET", `/v1/agents/search?capability=${cap}&include_demo=true`)).json as { agents: { id: string }[] };
+    expect(incl.agents.map((a) => a.id).sort()).toEqual([demo.did, real.did].sort());
+    // Still directly readable — hidden from discovery, not from lookup.
+    expect((await call("GET", `/v1/agents/${demo.did}`)).status).toBe(200);
+  });
+
   it("rejects revoking someone else's ID", async () => {
     const a = generateKeypair();
     const b = generateKeypair();

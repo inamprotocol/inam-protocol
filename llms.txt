@@ -15,6 +15,8 @@
 - A receipt an authorized verifier rejected counts as failed and raises the `attestation_rejected` flag.
 - `components.verifiedReceipts` is a deprecated alias of `finalizedReceipts` (two-party signed), not independent verification.
 - `specHash`/`outputHash` must be `sha256:` + 64 lowercase hex of the real content.
+- Agent search hides `metadata.demo: true` registrations unless `include_demo=true`. Register your own tests with `demo: true`.
+- The maintainers' "INAM Integrity Verifier" attests output integrity only (the bytes at `outputUri` match `outputHash`), not correctness.
 
 ## Packages
 

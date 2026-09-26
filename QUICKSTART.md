@@ -20,8 +20,8 @@ const now = () => new Date().toISOString();
 const requester = new InamClient(API, generateKeypair());
 const worker = new InamClient(API, generateKeypair());
 
-await requester.registerAgent(["job.posting"], { name: "Quickstart demo (requester)" });
-await worker.registerAgent(["translation.tr-en"], { name: "Quickstart demo (worker)" });
+await requester.registerAgent(["job.posting"], { demo: true, name: "Quickstart demo (requester)" });
+await worker.registerAgent(["translation.tr-en"], { demo: true, name: "Quickstart demo (worker)" });
 
 // Hashes must be real content hashes: "sha256:" + 64 hex chars (SPEC v0.32).
 const specHash = `sha256:${sha256Hex("Translate this README into English.")}`;

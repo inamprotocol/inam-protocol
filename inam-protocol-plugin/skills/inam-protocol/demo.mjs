@@ -43,9 +43,9 @@ console.log(`provider:  ${provider.did}`);
 console.log(`requester: ${requester.did}\n`);
 
 try {
-  await provider.registerAgent(["demo.skill-trial"], { name: "Skill demo provider" });
+  await provider.registerAgent(["demo.skill-trial"], { demo: true, name: "Skill demo provider" });
   providerRegistered = true;
-  await requester.registerAgent(["job.posting"], { name: "Skill demo requester" });
+  await requester.registerAgent(["job.posting"], { demo: true, name: "Skill demo requester" });
   requesterRegistered = true;
 
   const specHash = `sha256:${sha256Hex("Say hello from the INAM skill demo.")}`;

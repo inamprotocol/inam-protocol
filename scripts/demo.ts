@@ -16,10 +16,10 @@ async function main() {
   const requester = new InamClient(BASE_URL, requesterKeys);
   const worker = new InamClient(BASE_URL, workerKeys);
 
-  log("Requester registering", await requester.registerAgent(["job.posting"], { name: "Demo Requester" }));
+  log("Requester registering", await requester.registerAgent(["job.posting"], { demo: true, name: "Demo Requester" }));
   log(
     "Worker registering",
-    await worker.registerAgent(["translation.tr-en"], { name: "Demo Translator" }),
+    await worker.registerAgent(["translation.tr-en"], { demo: true, name: "Demo Translator" }),
   );
 
   // agentpass_id is a key-derived identity (SPEC.md §2.1) as of protocol
@@ -32,7 +32,7 @@ async function main() {
 
   log(
     "Requester searches for a translator",
-    await requester.searchAgents({ capability: "translation.tr-en" }),
+    await requester.searchAgents({ capability: "translation.tr-en", includeDemo: true }),
   );
 
   // Two jobs, so the reputation numbers below show something other than a

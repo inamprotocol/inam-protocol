@@ -60,8 +60,8 @@ async function seedFinalizedReceipt(): Promise<ExecutionReceipt> {
   // for the verifier to check. (starter-agents.ts covers this flow in full.)
   const worker = new InamClient(BASE_URL, generateKeypair());
   const requester = new InamClient(BASE_URL, generateKeypair());
-  await worker.registerAgent(["summarize"], { name: "Worker" });
-  await requester.registerAgent(["orchestrate"], { name: "Requester" });
+  await worker.registerAgent(["summarize"], { demo: true, name: "Worker" });
+  await requester.registerAgent(["orchestrate"], { demo: true, name: "Requester" });
 
   const specHash = "sha256:a8807a674437ce8541013435b91e2c46262c8a84af4447528655f6f02c9d79af";
   const job = await requester.postJob({ capability: "summarize", specHash });
@@ -88,7 +88,7 @@ function loadOperator() {
 async function main() {
   const verifierKeys = generateKeypair();
   const verifier = new InamClient(BASE_URL, verifierKeys);
-  await verifier.registerAgent(["verification"], { name: "Reference Verifier" });
+  await verifier.registerAgent(["verification"], { demo: true, name: "Reference Verifier" });
 
   const receipt = await seedFinalizedReceipt();
   console.log(`\nVerifying receipt ${receipt.receiptId} (status: ${receipt.status})`);
