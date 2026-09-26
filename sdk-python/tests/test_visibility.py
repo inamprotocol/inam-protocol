@@ -22,8 +22,8 @@ def test_accept_work_countersign_content_ignores_visibility():
         "jobId": "job1",
         "agentA": {"id": kp.did, "role": "requester"},
         "agentB": {"id": "did:key:zB", "role": "worker"},
-        "task": {"capability": "x", "specHash": "sha256:s", "createdAt": "2026-01-01T00:00:00.000Z"},
-        "result": {"outputHash": "sha256:o", "completedAt": "2026-01-01T00:01:00.000Z"},
+        "task": {"capability": "x", "specHash": "sha256:043a718774c572bd8a25adbeb1bfcd5c0256ae11cecf9f9c3f925d0e52beaf89", "createdAt": "2026-01-01T00:00:00.000Z"},
+        "result": {"outputHash": "sha256:65c74c15a686187bb6bbf9958f494fc6b80068034a659a9ad44991b08c58f2d2", "completedAt": "2026-01-01T00:01:00.000Z"},
         "verification": {"method": "payer_confirmation", "outcome": "success"},
         "signatures": {"agentB": "sig"},
         "status": "draft",
@@ -60,8 +60,8 @@ def test_submit_work_passes_visibility_through_to_the_request_body():
 
     input = {
         "jobId": "job1",
-        "task": {"capability": "x", "specHash": "sha256:s", "createdAt": "2026-01-01T00:00:00.000Z"},
-        "result": {"outputHash": "sha256:o", "completedAt": "2026-01-01T00:01:00.000Z"},
+        "task": {"capability": "x", "specHash": "sha256:043a718774c572bd8a25adbeb1bfcd5c0256ae11cecf9f9c3f925d0e52beaf89", "createdAt": "2026-01-01T00:00:00.000Z"},
+        "result": {"outputHash": "sha256:65c74c15a686187bb6bbf9958f494fc6b80068034a659a9ad44991b08c58f2d2", "completedAt": "2026-01-01T00:01:00.000Z"},
         "verification": {"method": "payer_confirmation", "outcome": "success"},
     }
 

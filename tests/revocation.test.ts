@@ -47,7 +47,7 @@ describe("agent identity revocation", () => {
 
     // any subsequent signed request -> 403 AGENT_REVOKED (enforced in the
     // signature middleware, so it covers every signed route)
-    const job = await signedPost(kp, "/v1/jobs", { capability: "x", specHash: "sha256:s" }, `job:${Date.now()}`);
+    const job = await signedPost(kp, "/v1/jobs", { capability: "x", specHash: "sha256:043a718774c572bd8a25adbeb1bfcd5c0256ae11cecf9f9c3f925d0e52beaf89" }, `job:${Date.now()}`);
     expect(job.status).toBe(403);
     expect(job.json!.error).toMatchObject({ code: "AGENT_REVOKED" });
 

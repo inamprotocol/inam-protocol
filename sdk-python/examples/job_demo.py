@@ -24,7 +24,7 @@ def main():
     print(f"[job_demo] poster={poster.did}")
     print(f"[job_demo] worker={worker.did}")
 
-    job = poster.post_job("translation.tr-en", "sha256:spec_python_demo")
+    job = poster.post_job("translation.tr-en", "sha256:9f4164c5e1a5522d29fa7ed227bdfbc58dc794c5d7ba04901eef43a9059a6a8b")
     print(f"[job_demo] posted job {job['jobId']} status={job['status']}")
     assert job["status"] == "open"
 
@@ -42,8 +42,8 @@ def main():
         poster.did,
         {
             "jobId": job["jobId"],
-            "task": {"capability": "translation.tr-en", "specHash": "sha256:spec_python_demo", "createdAt": now},
-            "result": {"outputHash": "sha256:out_python_demo", "completedAt": now},
+            "task": {"capability": "translation.tr-en", "specHash": "sha256:9f4164c5e1a5522d29fa7ed227bdfbc58dc794c5d7ba04901eef43a9059a6a8b", "createdAt": now},
+            "result": {"outputHash": "sha256:6c2abf326f95631425e5697c1d4088b28be55f4c0f4d079ef2175f591ecccac2", "completedAt": now},
             "verification": {"method": "payer_confirmation", "outcome": "success"},
         },
     )

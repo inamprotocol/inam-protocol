@@ -178,6 +178,7 @@ function setApp(html) {
 // ---- flag descriptions (Reputation.flags — SPEC.md §5) ----
 function describeFlag(flag) {
   if (flag === "in_dispute") return "One or more of this agent's receipts is currently under an open dispute.";
+  if (flag === "attestation_rejected") return "An authorized independent verifier rejected at least one of this agent's receipts; those count as failed.";
   if (flag.startsWith("concentrated_counterparty:")) {
     const who = flag.slice("concentrated_counterparty:".length);
     return `A large share of this agent's history is with a single counterparty (${who}), which caps how much that history can raise the score.`;
@@ -306,9 +307,10 @@ function renderReputation(rep) {
   const flags = rep.flags || [];
   const rows = [
     ["Eigen weight (confidence)", fmtNum(c.eigenWeight)],
-    ["Verified receipts", c.verifiedReceipts ?? "—"],
+    ["Finalized receipts (both parties signed)", c.finalizedReceipts ?? c.verifiedReceipts ?? "—"],
     ["Raw receipts", c.rawReceipts ?? "—"],
-    ["Attested receipts", c.attestedReceipts ?? "—"],
+    ["Independently verified receipts", c.attestedReceipts ?? "—"],
+    ["Rejected by a verifier", c.rejectedAttestations ?? "—"],
     ["Success rate", c.successRate !== undefined ? `${(c.successRate * 100).toFixed(0)}%` : "—"],
     ["Volume (USD)", fmtUsd(c.volumeUsd)],
     ...(() => {
@@ -323,6 +325,7 @@ function renderReputation(rep) {
       <span class="num">${fmtNum(rep.trustScore, 1)} <small>/ 100</small></span>
       <span class="dim">trust score</span>
     </div>
+    ${renderEvidenceLevel(rep.evidenceLevel)}
     <div class="table-wrap">
       <table class="data">
         <tbody>
@@ -332,6 +335,20 @@ function renderReputation(rep) {
     </div>
     ${flags.length ? `<div style="margin-top:14px">${flags.map((f) => `<div style="margin-bottom:6px"><span class="tag tag-flag">${escapeHtml(f)}</span> <span class="faint">${escapeHtml(describeFlag(f))}</span></div>`).join("")}</div>` : ""}
   `;
+}
+
+// SPEC.md §5.3 (v0.32): shown next to the score so a countersign-only
+// history can't pass for independently checked work.
+const EVIDENCE_LEVELS = {
+  independently_verified: ["tag-verified", "Independently verified", "At least one receipt was checked by an operator-authorized verifier."],
+  countersigned: ["tag-draft", "Countersigned only", "Both parties signed, but no independent verifier has checked this agent's work. The parties' own claims are all this score rests on."],
+  none: ["tag-default", "No history", "No finalized receipts yet."],
+};
+
+function renderEvidenceLevel(level) {
+  const e = EVIDENCE_LEVELS[level];
+  if (!e) return "";
+  return `<div style="margin:8px 0 14px"><span class="tag ${e[0]}">${e[1]}</span> <span class="faint">${e[2]}</span></div>`;
 }
 
 function renderReceiptsTable(receipts, agentId) {

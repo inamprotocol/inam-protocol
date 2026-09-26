@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
@@ -33,8 +34,8 @@ function freshInput(jobId: string): Omit<CreateDraftInput, "signature" | "agentA
   const now = new Date().toISOString();
   return {
     jobId,
-    task: { capability: "translation.tr-en", specHash: `sha256:spec_${jobId}`, createdAt: now },
-    result: { outputHash: `sha256:out_${jobId}`, completedAt: now },
+    task: { capability: "translation.tr-en", specHash: `sha256:${createHash("sha256").update(`spec_${jobId}`).digest("hex")}`, createdAt: now },
+    result: { outputHash: `sha256:${createHash("sha256").update(`out_${jobId}`).digest("hex")}`, completedAt: now },
     settlement: { amount: "12.50", currency: "USDC" },
     verification: { method: "payer_confirmation", outcome: "success" },
   };
@@ -281,8 +282,8 @@ describe("execution receipt lifecycle", () => {
     const future = new Date(Date.now() + 60 * 24 * 3600_000).toISOString(); // 60 days from now
     const input = {
       jobId,
-      task: { capability: "translation.tr-en", specHash: `sha256:spec_${jobId}`, createdAt: future },
-      result: { outputHash: `sha256:out_${jobId}`, completedAt: future },
+      task: { capability: "translation.tr-en", specHash: `sha256:${createHash("sha256").update(`spec_${jobId}`).digest("hex")}`, createdAt: future },
+      result: { outputHash: `sha256:${createHash("sha256").update(`out_${jobId}`).digest("hex")}`, completedAt: future },
       settlement: { amount: "12.50", currency: "USDC" },
       verification: { method: "payer_confirmation" as const, outcome: "success" as const },
     };
@@ -302,8 +303,8 @@ describe("execution receipt lifecycle", () => {
     const completedBeforeCreated = new Date(now.getTime() - 3600_000).toISOString(); // 1 hour earlier
     const input = {
       jobId,
-      task: { capability: "translation.tr-en", specHash: `sha256:spec_${jobId}`, createdAt: created },
-      result: { outputHash: `sha256:out_${jobId}`, completedAt: completedBeforeCreated },
+      task: { capability: "translation.tr-en", specHash: `sha256:${createHash("sha256").update(`spec_${jobId}`).digest("hex")}`, createdAt: created },
+      result: { outputHash: `sha256:${createHash("sha256").update(`out_${jobId}`).digest("hex")}`, completedAt: completedBeforeCreated },
       settlement: { amount: "12.50", currency: "USDC" },
       verification: { method: "payer_confirmation" as const, outcome: "success" as const },
     };

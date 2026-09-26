@@ -22,12 +22,12 @@ def test_rejects_small_order_public_key_regardless_of_signature_bytes():
 
 def _fixture_receipt(**overrides):
     receipt = {
-        "receiptId": "sha256:fixture",
+        "receiptId": "sha256:f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
         "jobId": "job_fixture",
         "agentA": {"id": "did:key:zAgentA", "role": "requester"},
         "agentB": {"id": "did:key:zAgentB", "role": "worker"},
-        "task": {"capability": "x", "specHash": "sha256:spec", "createdAt": "2026-01-01T00:00:00.000Z"},
-        "result": {"outputHash": "sha256:out", "completedAt": "2026-01-01T00:01:00.000Z"},
+        "task": {"capability": "x", "specHash": "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", "createdAt": "2026-01-01T00:00:00.000Z"},
+        "result": {"outputHash": "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", "completedAt": "2026-01-01T00:01:00.000Z"},
         "verification": {"method": "payer_confirmation", "outcome": "success"},
         "dispute": {"status": "none", "windowClosesAt": None},
         "signatures": {"agentB": "sig"},
@@ -54,4 +54,4 @@ def test_accept_work_refuses_to_sign_on_expected_mismatch():
     with pytest.raises(ValueError, match="expected jobId"):
         client.accept_work(receipt, expected={"jobId": "job_other"})
     with pytest.raises(ValueError, match="expected outputHash"):
-        client.accept_work(receipt, expected={"outputHash": "sha256:different"})
+        client.accept_work(receipt, expected={"outputHash": "sha256:9d6f965ac832e40a5df6c06afe983e3b449c07b843ff51ce76204de05c690d11"})

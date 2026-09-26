@@ -2,7 +2,8 @@ import { config } from "../config.js";
 import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
 import { listNonPerformanceAgainst } from "./jobService.js";
-import { hasVerifiedAttestation } from "./verificationService.js";
+import { attestationVerdict } from "./verificationService.js";
+import { evidenceLevel } from "../../sdk-js/src/core/attestation.js";
 import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
 import { isDisputeActive, type DisputeCheckable } from "../../sdk-js/src/core/disputeLifecycle.js";
 import type { ReputationResult } from "../types.js";
@@ -177,6 +178,7 @@ export function computeReputation(agentId: string): ReputationResult {
   }
 
   let attestedCount = 0;
+  let rejectedAttestationCount = 0;
   for (const r of finalized) {
     const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
     const pairCount = pairCounts.get(counterparty) ?? 1;
@@ -195,14 +197,23 @@ export function computeReputation(agentId: string): ReputationResult {
     // that receipt's weight without bound rather than the intended "older
     // work counts for less, down to a floor of zero, never more than fresh".
     const decay = clamp(Math.pow(2, -ageDays / config.decayHalfLifeDays), 0, 1);
-    const outcomeScore = r.verification.outcome === "success" ? 1 : r.verification.outcome === "partial" ? 0.5 : 0;
 
     // SPEC.md §12.5: independently-verified work counts for more. This loop
     // only ever sees `finalized` receipts (disputed ones already excluded by
     // the filter above), so a verified attestation on a since-disputed
     // receipt never reaches here — no separate dispute check needed.
-    const isAttested = hasVerifiedAttestation(r.receiptId);
+    const verdict = attestationVerdict(r.receiptId);
+    const isAttested = verdict === "verified";
     if (isAttested) attestedCount++;
+    if (verdict === "rejected") rejectedAttestationCount++;
+    // v0.32: a receipt that independent verification nets out to *rejected*
+    // scores as failed, whatever outcome its two parties self-declared. An
+    // external test found a rejected receipt still raised trustScore
+    // (8.0 -> 10.6) with successRate pinned at 100% — the rejection was
+    // recorded but invisible in the score. Safe to act on because only
+    // currently operator-authorized verifiers are counted (§12.3).
+    const outcomeScore =
+      verdict === "rejected" ? 0 : r.verification.outcome === "success" ? 1 : r.verification.outcome === "partial" ? 0.5 : 0;
     const attestationBoost = isAttested ? ATTESTATION_BOOST : 1;
 
     const countedSoFar = counterpartyWeightedCount.get(counterparty) ?? 0;
@@ -276,6 +287,7 @@ export function computeReputation(agentId: string): ReputationResult {
   if (disputedCount > 0) flags.push("in_dispute");
   if (record.revokedAt) flags.push("revoked");
   if (nonPerformanceReports.length > 0) flags.push("nonperformance_reported");
+  if (rejectedAttestationCount > 0) flags.push("attestation_rejected");
 
   // v0.24: a Sybil ring spread across many counterparties bypasses the
   // per-pair check above (no single one is concentrated) — flag when most
@@ -296,8 +308,12 @@ export function computeReputation(agentId: string): ReputationResult {
 
   return {
     trustScore: Math.round(trustScore * 10) / 10,
+    evidenceLevel: evidenceLevel(finalized.length, attestedCount),
     components: {
       eigenWeight: Math.round(confidence * 1000) / 1000,
+      // v0.32: `finalizedReceipts` is the honest name; `verifiedReceipts`
+      // stays as a deprecated alias (live consumers may parse it).
+      finalizedReceipts: finalized.length,
       verifiedReceipts: finalized.length,
       // Excludes `draft` receipts (v0.26): an unfinalized draft is a claim
       // only agentB has made and agentA hasn't acted on — an external review
@@ -310,6 +326,7 @@ export function computeReputation(agentId: string): ReputationResult {
       stakeUsd: record.stakeUsd,
       decayHalfLifeDays: config.decayHalfLifeDays,
       attestedReceipts: attestedCount,
+      rejectedAttestations: rejectedAttestationCount,
       nonPerformanceReports: nonPerformanceReports.length,
       asProvider: {
         receipts: asProviderCount,

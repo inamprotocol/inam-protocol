@@ -34,8 +34,8 @@ def main():
         requester.did,
         {
             "jobId": "job_verification_python_demo",
-            "task": {"capability": "document-extraction", "specHash": "sha256:spec_verify_demo", "createdAt": now},
-            "result": {"outputHash": "sha256:out_verify_demo", "completedAt": now},
+            "task": {"capability": "document-extraction", "specHash": "sha256:bbe1f01724e43e3bf9ce4ef3eded104a6ad61b52ab6f20c23671749ad094e839", "createdAt": now},
+            "result": {"outputHash": "sha256:6f93ccb29e7dcf66ccc8699121077b036407d3785c75e41e56c52671dc611f16", "completedAt": now},
             "verification": {"method": "payer_confirmation", "outcome": "success"},
         },
     )

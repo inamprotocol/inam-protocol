@@ -29,7 +29,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { InamClient, generateKeypair, keypairFromPrivateKey, fromHex, type Keypair } from "inamprotocol";
+import { InamClient, generateKeypair, keypairFromPrivateKey, fromHex, sha256Hex, type Keypair } from "inamprotocol";
 
 const INAM_URL = process.env.INAM_URL ?? "https://api.inamprotocol.org";
 
@@ -49,7 +49,7 @@ if (rawKey) {
 }
 
 const inam = new InamClient(INAM_URL, keypair);
-const server = new McpServer({ name: "inam-mcp", version: "0.3.0" });
+const server = new McpServer({ name: "inam-mcp", version: "0.4.0" });
 
 const ok = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
 const fail = (err: unknown) => ({
@@ -61,7 +61,9 @@ const fail = (err: unknown) => ({
 
 server.tool(
   "inam_check_reputation",
-  "Look up an agent's INAM reputation (trust score, finalized-receipt count, success rate, dispute flags) before deciding whether to trust or transact with it. Takes a did:key agent id.",
+  "Look up an agent's INAM reputation (trust score, finalized-receipt count, success rate, dispute flags) before deciding whether to trust or transact with it. Takes a did:key agent id. " +
+    "Do not decide on trustScore alone: check evidenceLevel first. 'countersigned' means only the two parties vouched for the work; " +
+    "'independently_verified' (components.attestedReceipts > 0) means an operator-authorized verifier checked it. Treat any 'attestation_rejected' flag as a strong negative.",
   { agentId: z.string().describe("did:key:... id of the agent to check") },
   async ({ agentId }) => {
     try {
@@ -86,6 +88,13 @@ server.tool(
       return fail(err);
     }
   },
+);
+
+server.tool(
+  "inam_hash_content",
+  "Compute the 'sha256:<64 hex>' content hash INAM requires for specHash/outputHash. Pass the exact spec or output text; anyone holding that text can recompute and check the hash.",
+  { content: z.string().describe("the exact spec or output text to hash") },
+  async ({ content }) => ok({ hash: `sha256:${sha256Hex(content)}` }),
 );
 
 server.tool(
@@ -140,7 +149,7 @@ if (writeEnabled) {
     "Post an open job to the INAM registry that other agents can discover and offer to work on.",
     {
       capability: z.string().describe("capability the job needs"),
-      specHash: z.string().describe("sha256:... hash of the job spec / requirements"),
+      specHash: z.string().describe("sha256:<64 hex> of the job spec text; use inam_hash_content"),
     },
     async ({ capability, specHash }) => {
       try {
@@ -211,8 +220,8 @@ if (writeEnabled) {
       requesterId: z.string().describe("did:key of the requesting agent (agentA)"),
       jobId: z.string().describe("id of the job this receipt settles"),
       capability: z.string(),
-      specHash: z.string().describe("sha256:... of the job spec"),
-      outputHash: z.string().describe("sha256:... of the work output"),
+      specHash: z.string().describe("sha256:<64 hex> of the job spec text; use inam_hash_content"),
+      outputHash: z.string().describe("sha256:<64 hex> of the actual work output; use inam_hash_content"),
       amount: z.string().optional().describe("settlement amount, e.g. '40.00'"),
       currency: z.string().optional().describe("settlement currency, e.g. 'USDC'"),
     },

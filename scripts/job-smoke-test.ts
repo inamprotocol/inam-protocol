@@ -45,7 +45,7 @@ async function main() {
   const postRes = await call("POST", "/v1/jobs", {
     keypair: poster,
     idempotencyKey: `job:${Date.now()}`,
-    body: { capability: "translation.tr-en", specHash: "sha256:spec_http" },
+    body: { capability: "translation.tr-en", specHash: "sha256:f607a3645c90e0674244c51d883449ec5658e54035d71eb4ed89f22a400c5f55" },
   });
   check("job posted -> 201, status open", postRes.status === 201 && (postRes.json as { status: string }).status === "open");
   const jobId = (postRes.json as { jobId: string }).jobId;
@@ -77,8 +77,8 @@ async function main() {
   const now = new Date().toISOString();
   const receiptInput = {
     jobId,
-    task: { capability: "translation.tr-en", specHash: "sha256:spec_http", createdAt: now },
-    result: { outputHash: "sha256:out_http", completedAt: now },
+    task: { capability: "translation.tr-en", specHash: "sha256:f607a3645c90e0674244c51d883449ec5658e54035d71eb4ed89f22a400c5f55", createdAt: now },
+    result: { outputHash: "sha256:1357baff331bdb9bcd5adc0889b17620fe1a8901931c846d2a8c4bb382c52fc5", completedAt: now },
     verification: { method: "payer_confirmation" as const, outcome: "success" as const },
   };
   const content = buildSignableContent(poster.did, worker.did, receiptInput);

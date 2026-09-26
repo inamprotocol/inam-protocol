@@ -59,7 +59,7 @@ describe("signature replay guard", () => {
     const kp = generateKeypair();
     await register(kp);
 
-    const body = JSON.stringify({ capability: "translation.tr-en", specHash: "sha256:replay_spec" });
+    const body = JSON.stringify({ capability: "translation.tr-en", specHash: "sha256:660a1392b785c5b80d489ee91d0c83fb7ad28e3f6ecd58a98f14319dee14abd5" });
     const headers = signedHeaders(kp, "POST", "/v1/jobs", body);
 
     const first = await fetch(`${baseUrl}/v1/jobs`, { method: "POST", headers: { ...headers, "idempotency-key": "key-A" }, body });
@@ -84,7 +84,7 @@ describe("signature replay guard", () => {
     await register(poster);
     await register(worker, ["translation.tr-en"]);
 
-    const job = await signedPost(poster, "/v1/jobs", { capability: "translation.tr-en", specHash: "sha256:retry_spec" }, `job:${Date.now()}`);
+    const job = await signedPost(poster, "/v1/jobs", { capability: "translation.tr-en", specHash: "sha256:6c26976138cd2d86675cf98ef0abb61bc9d09a2679c63765ef5cd86af7a71a59" }, `job:${Date.now()}`);
     const jobId = job.json!.jobId as string;
 
     // Accept before any offer exists -> 400 OFFER_NOT_FOUND. If this response

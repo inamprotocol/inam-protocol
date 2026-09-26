@@ -39,7 +39,7 @@ describe("job lifecycle", () => {
     registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
     registerAgent(stranger.did, { capabilities: ["translation.tr-en"] });
 
-    const job = jobService.postJob(poster.did, { capability: "translation.tr-en", specHash: "sha256:spec_1" });
+    const job = jobService.postJob(poster.did, { capability: "translation.tr-en", specHash: "sha256:91b9443982eec3c5a65d2ad677e39e5c9f47ad5b06085337267c9055e692780e" });
     expect(job.status).toBe("open");
 
     await expectApiError(() => jobService.submitOffer(job.jobId, poster.did), "SELF_DEALING");
@@ -63,7 +63,7 @@ describe("job lifecycle", () => {
     registerAgent(poster.did, { capabilities: ["job.posting"] });
     registerAgent(stranger.did, { capabilities: ["x"] });
 
-    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_2" });
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:da859f09c346a9d6b2936c0b0e5917487291455e0f37629569e2159e0aa4db03" });
     await expectApiError(() => jobService.cancelJob(job.jobId, stranger.did), "NOT_POSTER");
 
     const cancelled = jobService.cancelJob(job.jobId, poster.did);
@@ -77,15 +77,15 @@ describe("job lifecycle", () => {
     registerAgent(poster.did, { capabilities: ["job.posting"] });
     registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
 
-    const job = jobService.postJob(poster.did, { capability: "translation.tr-en", specHash: "sha256:spec_3" });
+    const job = jobService.postJob(poster.did, { capability: "translation.tr-en", specHash: "sha256:8c485c1f8eddc4c77e3632557d29e77e08323adcf865ff95b3dfac453d96d0a3" });
     jobService.submitOffer(job.jobId, worker.did);
     jobService.acceptOffer(job.jobId, poster.did, worker.did);
 
     const now = new Date().toISOString();
     const input = {
       jobId: job.jobId,
-      task: { capability: "translation.tr-en", specHash: "sha256:spec_3", createdAt: now },
-      result: { outputHash: "sha256:out_3", completedAt: now },
+      task: { capability: "translation.tr-en", specHash: "sha256:8c485c1f8eddc4c77e3632557d29e77e08323adcf865ff95b3dfac453d96d0a3", createdAt: now },
+      result: { outputHash: "sha256:1b26a1db881b1598c0c96bde9199ed7486a8080c7c7335315df7e586f0b181d3", completedAt: now },
       verification: { method: "payer_confirmation" as const, outcome: "success" as const },
     };
     const signature = signDraft(poster.did, worker.privateKey, worker.did, input);
@@ -105,15 +105,15 @@ describe("job lifecycle", () => {
     registerAgent(worker.did, { capabilities: ["x"] });
     registerAgent(impostorWorker.did, { capabilities: ["x"] });
 
-    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_4" });
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:6bfdf1dc666ee4b7ad2deeb7246bd7e007b382495878012b274939d414782f02" });
     jobService.submitOffer(job.jobId, worker.did);
     jobService.acceptOffer(job.jobId, poster.did, worker.did);
 
     const now = new Date().toISOString();
     const input = {
       jobId: job.jobId,
-      task: { capability: "x", specHash: "sha256:spec_4", createdAt: now },
-      result: { outputHash: "sha256:out_4", completedAt: now },
+      task: { capability: "x", specHash: "sha256:6bfdf1dc666ee4b7ad2deeb7246bd7e007b382495878012b274939d414782f02", createdAt: now },
+      result: { outputHash: "sha256:1ea02e69ddacdcb6e8a45e60d76965887217ddb2c191fcd6a83624607c08800b", completedAt: now },
       verification: { method: "payer_confirmation" as const, outcome: "success" as const },
     };
     const signature = signDraft(poster.did, impostorWorker.privateKey, impostorWorker.did, input);
@@ -130,13 +130,13 @@ describe("job lifecycle", () => {
     registerAgent(poster.did, { capabilities: ["job.posting"] });
     registerAgent(worker.did, { capabilities: ["x"] });
 
-    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_5" });
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:025d962c66b822baa3a4bd7bd908c30e9bd9750d0b72ba104abb000190b28921" });
 
     const now = new Date().toISOString();
     const input = {
       jobId: job.jobId,
-      task: { capability: "x", specHash: "sha256:spec_5", createdAt: now },
-      result: { outputHash: "sha256:out_5", completedAt: now },
+      task: { capability: "x", specHash: "sha256:025d962c66b822baa3a4bd7bd908c30e9bd9750d0b72ba104abb000190b28921", createdAt: now },
+      result: { outputHash: "sha256:33be53d948082b1604474f90c6cc9aaf0c236f470fbc7b8d1670a17bbce3e0ef", completedAt: now },
       verification: { method: "payer_confirmation" as const, outcome: "success" as const },
     };
     const signature = signDraft(poster.did, worker.privateKey, worker.did, input);
@@ -150,15 +150,15 @@ describe("job lifecycle", () => {
     registerAgent(poster.did, { capabilities: ["job.posting"] });
     registerAgent(worker.did, { capabilities: ["x"] });
 
-    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_cancel_race" });
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:422bf826331bea32b36dfcd7339778a6fb20e9ecf10265b00568f207c0b09a27" });
     jobService.submitOffer(job.jobId, worker.did);
     jobService.acceptOffer(job.jobId, poster.did, worker.did);
 
     const now = new Date().toISOString();
     const input = {
       jobId: job.jobId,
-      task: { capability: "x", specHash: "sha256:spec_cancel_race", createdAt: now },
-      result: { outputHash: "sha256:out_cr", completedAt: now },
+      task: { capability: "x", specHash: "sha256:422bf826331bea32b36dfcd7339778a6fb20e9ecf10265b00568f207c0b09a27", createdAt: now },
+      result: { outputHash: "sha256:cde679d980386d2ce9a828dff82ddd9b9acaba0f76970d85d40e8b73b29ecdc0", completedAt: now },
       verification: { method: "payer_confirmation" as const, outcome: "success" as const },
     };
     const signature = signDraft(poster.did, worker.privateKey, worker.did, input);
@@ -181,7 +181,7 @@ describe("job lifecycle", () => {
     registerAgent(worker.did, { capabilities: ["x"] });
 
     const past = new Date(Date.now() - 60_000).toISOString();
-    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_exp", expiresAt: past });
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:3eb1322388bf2bc62a21e781b5d5d9e59e39ee462fd2c07527a6e926c10397e2", expiresAt: past });
     await expectApiError(() => jobService.submitOffer(job.jobId, worker.did), "JOB_EXPIRED");
   });
 
@@ -193,7 +193,7 @@ describe("job lifecycle", () => {
     registerAgent(worker.did, { capabilities: ["x"] });
     registerAgent(stranger.did, { capabilities: ["x"] });
 
-    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_np" });
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:9022f0185cec9c225a63f4960cd790f54f95b65cac5208afc2ae574a528cd8c3" });
     await expectApiError(() => jobService.reportNonPerformance(job.jobId, poster.did), "JOB_NOT_REPORTABLE"); // still open
 
     jobService.submitOffer(job.jobId, worker.did);
@@ -226,7 +226,7 @@ describe("job lifecycle", () => {
 
     expect(computeReputation(worker.did).components.nonPerformanceReports).toBe(0);
 
-    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:spec_np2" });
+    const job = jobService.postJob(poster.did, { capability: "x", specHash: "sha256:835f1bd8a61aafe09605fc54bf0bffe5e754140954e2530c757344693dba4bab" });
     jobService.submitOffer(job.jobId, worker.did);
     jobService.acceptOffer(job.jobId, poster.did, worker.did);
 
@@ -246,7 +246,7 @@ describe("job lifecycle", () => {
   it("finds an open job by capability search", () => {
     const poster = generateKeypair();
     registerAgent(poster.did, { capabilities: ["job.posting"] });
-    jobService.postJob(poster.did, { capability: "very.unique.capability.xyz", specHash: "sha256:spec_6" });
+    jobService.postJob(poster.did, { capability: "very.unique.capability.xyz", specHash: "sha256:8823501e4f1c50ee3d0522a8ee54d72590ee3e1f5f381796eac3d5526e738c85" });
 
     const results = jobService.searchJobs({ capability: "very.unique.capability.xyz", status: "open" });
     expect(results).toHaveLength(1);

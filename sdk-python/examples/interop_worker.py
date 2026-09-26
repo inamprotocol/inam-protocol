@@ -8,6 +8,7 @@ signed Execution Receipt drafts naming that requester as agent_a. Phase C
 protocol works end to end across languages, not just within one SDK.
 """
 
+import hashlib
 import json
 import os
 import sys
@@ -50,8 +51,8 @@ def main():
             requester_did,
             {
                 "jobId": f"job_interop_{i}",
-                "task": {"capability": "document-extraction", "specHash": f"sha256:spec_{i}", "createdAt": now},
-                "result": {"outputHash": f"sha256:out_{i}", "completedAt": now},
+                "task": {"capability": "document-extraction", "specHash": "sha256:" + hashlib.sha256(f"spec_{i}".encode()).hexdigest(), "createdAt": now},
+                "result": {"outputHash": "sha256:" + hashlib.sha256(f"out_{i}".encode()).hexdigest(), "completedAt": now},
                 "settlement": {"amount": "20.00", "currency": "USDC", "paymentRef": f"x402:tx_py_{i}"},
                 "verification": {"method": "payer_confirmation", "outcome": "success"},
             },

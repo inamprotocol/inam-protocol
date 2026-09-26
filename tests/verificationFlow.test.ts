@@ -24,8 +24,8 @@ function finalizeReceipt(requester: ReturnType<typeof generateKeypair>, provider
   const now = new Date().toISOString();
   const input: Omit<CreateDraftInput, "signature" | "agentAId"> = {
     jobId,
-    task: { capability: "x", specHash: "sha256:spec", createdAt: now },
-    result: { outputHash: "sha256:out", completedAt: now },
+    task: { capability: "x", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", createdAt: now },
+    result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: now },
     verification: { method: "payer_confirmation", outcome: "success" },
   };
   const content = buildSignableContent(requester.did, provider.did, input);
@@ -77,6 +77,8 @@ describe("independent verification (SPEC.md §12)", () => {
     const after = computeReputation(provider.did);
     expect(after.components.attestedReceipts).toBe(1);
     expect(after.trustScore).toBeGreaterThan(before.trustScore);
+    expect(after.evidenceLevel).toBe("independently_verified");
+    expect(after.components.finalizedReceipts).toBe(after.components.verifiedReceipts);
   });
 
   it("rejects self-verification", async () => {
@@ -188,8 +190,8 @@ describe("independent verification (SPEC.md §12)", () => {
     const now = new Date().toISOString();
     const draftInput = {
       jobId: `job_${Math.random()}`,
-      task: { capability: "x", specHash: "sha256:spec", createdAt: now },
-      result: { outputHash: "sha256:out", completedAt: now },
+      task: { capability: "x", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", createdAt: now },
+      result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: now },
       verification: { method: "payer_confirmation" as const, outcome: "success" as const },
     };
     const content = buildSignableContent(requester.did, provider.did, draftInput);
@@ -225,7 +227,7 @@ describe("independent verification (SPEC.md §12)", () => {
       provider: provider.did,
       verifier: verifier.did,
       method: "deterministic",
-      outputHash: "sha256:not_the_real_output",
+      outputHash: "sha256:85d63db4a44d979fa331156182eb08f7f13b84b24057063efa5d15e8eef6a35d",
       result: "verified",
     };
     const { signature } = signVerification(verifier, input);
@@ -329,7 +331,7 @@ describe("independent verification (SPEC.md §12)", () => {
     await expectApiError(() => submitVerification(verifier.did, { ...input, signature }), "DUPLICATE_VERIFICATION");
   });
 
-  it("records a rejected verification without any reputation boost", () => {
+  it("scores a net-rejected receipt as failed, whatever outcome the parties declared (v0.32)", () => {
     const requester = generateKeypair();
     const provider = generateKeypair();
     const verifier = generateKeypair();
@@ -348,12 +350,25 @@ describe("independent verification (SPEC.md §12)", () => {
       outputHash: receipt.result.outputHash,
       result: "rejected",
     };
+    const before = computeReputation(provider.did);
+    expect(before.components.successRate).toBe(1);
+    expect(before.evidenceLevel).toBe("countersigned");
+
     const { signature } = signVerification(verifier, input);
     const record = submitVerification(verifier.did, { ...input, signature });
     expect(record.result).toBe("rejected");
 
+    // An external test found the rejection recorded but invisible: the
+    // receipt kept counting as a success, so trustScore still rose and
+    // successRate stayed at 100%.
     const reputation = computeReputation(provider.did);
     expect(reputation.components.attestedReceipts).toBe(0);
+    expect(reputation.components.rejectedAttestations).toBe(1);
+    expect(reputation.components.successRate).toBe(0);
+    expect(reputation.components.asProvider.successRate).toBe(0);
+    expect(reputation.trustScore).toBeLessThan(before.trustScore);
+    expect(reputation.flags).toContain("attestation_rejected");
+    expect(reputation.evidenceLevel).toBe("countersigned");
   });
 
   it("does not let a verified attestation resurrect a since-disputed receipt's reputation contribution", () => {

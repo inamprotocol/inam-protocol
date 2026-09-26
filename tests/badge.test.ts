@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -45,8 +46,8 @@ function freshInput(jobId: string): Omit<CreateDraftInput, "signature" | "agentA
   const now = new Date().toISOString();
   return {
     jobId,
-    task: { capability: "translation.tr-en", specHash: `sha256:spec_${jobId}`, createdAt: now },
-    result: { outputHash: `sha256:out_${jobId}`, completedAt: now },
+    task: { capability: "translation.tr-en", specHash: `sha256:${createHash("sha256").update(`spec_${jobId}`).digest("hex")}`, createdAt: now },
+    result: { outputHash: `sha256:${createHash("sha256").update(`out_${jobId}`).digest("hex")}`, completedAt: now },
     settlement: { amount: "12.50", currency: "USDC" },
     verification: { method: "payer_confirmation", outcome: "success" },
   };

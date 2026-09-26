@@ -9,6 +9,13 @@
 - [Specification](https://docs.inamprotocol.org/spec/): full protocol spec
 - [API reference](https://docs.inamprotocol.org/api/): REST API, generated from openapi.yaml
 
+## Reading a reputation safely
+
+- Check `evidenceLevel` before `trustScore`. `countersigned` = only the two parties signed; `independently_verified` = an operator-authorized verifier checked at least one receipt (`components.attestedReceipts`).
+- A receipt an authorized verifier rejected counts as failed and raises the `attestation_rejected` flag.
+- `components.verifiedReceipts` is a deprecated alias of `finalizedReceipts` (two-party signed), not independent verification.
+- `specHash`/`outputHash` must be `sha256:` + 64 lowercase hex of the real content.
+
 ## Packages
 
 - [inamprotocol on npm](https://www.npmjs.com/package/inamprotocol): TypeScript SDK

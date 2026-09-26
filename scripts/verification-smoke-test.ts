@@ -44,8 +44,8 @@ async function finalizeReceipt(requester: Keypair, provider: Keypair) {
   const now = new Date().toISOString();
   const input = {
     jobId: `job_verify_smoke_${Date.now()}`,
-    task: { capability: "x", specHash: "sha256:spec_smoke", createdAt: now },
-    result: { outputHash: "sha256:out_smoke", completedAt: now },
+    task: { capability: "x", specHash: "sha256:4cee9b012cce559f8fd13f466db0e8f50d40440ca332a15bee008164753ff9f4", createdAt: now },
+    result: { outputHash: "sha256:0b9a3f67500dfdd9bd1535247235e97b4304f603b94126d81da9e1d7f8a7a95a", completedAt: now },
     verification: { method: "payer_confirmation" as const, outcome: "success" as const },
   };
   const content = buildSignableContent(requester.did, provider.did, input);

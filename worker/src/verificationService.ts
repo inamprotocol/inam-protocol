@@ -6,6 +6,7 @@ import { buildSignableVerificationContent, type VerificationContentInput } from 
 import * as receiptService from "./receiptService.js";
 import { getAgent } from "./agentService.js";
 import type { Env, VerificationRecord } from "./types.js";
+import { netVerdict, type AttestationVerdict } from "../../sdk-js/src/core/attestation.js";
 
 export type { VerificationContentInput };
 
@@ -158,7 +159,8 @@ export async function listByReceipt(env: Env, receiptId: string): Promise<Verifi
 // the full doc comment: also requires the verifier to be *currently*
 // operator-authorized, not just authorized at submission time, so revoking a
 // verifier stops its past `verified` records from still boosting reputation.
-export async function hasVerifiedAttestation(env: Env, receiptId: string): Promise<boolean> {
+// v0.32: returns the net verdict rather than a boolean — see the Node helper.
+export async function attestationVerdict(env: Env, receiptId: string): Promise<AttestationVerdict> {
   const records = await listByReceipt(env, receiptId);
   const authorizedRecords: typeof records = [];
   for (const v of records) {
@@ -178,5 +180,5 @@ export async function hasVerifiedAttestation(env: Env, receiptId: string): Promi
   }
   const verifiedCount = authorizedRecords.filter((v) => v.result === "verified").length;
   const rejectedCount = authorizedRecords.filter((v) => v.result === "rejected").length;
-  return verifiedCount > rejectedCount;
+  return netVerdict(verifiedCount, rejectedCount);
 }

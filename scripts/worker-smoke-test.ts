@@ -64,16 +64,16 @@ async function main() {
   await expectError("self-dealing -> SELF_DEALING", "SELF_DEALING", () =>
     a.submitWork(a.did, {
       jobId: "job_self",
-      task: { capability: "x", specHash: "sha256:s", createdAt: new Date().toISOString() },
-      result: { outputHash: "sha256:o", completedAt: new Date().toISOString() },
+      task: { capability: "x", specHash: "sha256:043a718774c572bd8a25adbeb1bfcd5c0256ae11cecf9f9c3f925d0e52beaf89", createdAt: new Date().toISOString() },
+      result: { outputHash: "sha256:65c74c15a686187bb6bbf9958f494fc6b80068034a659a9ad44991b08c58f2d2", completedAt: new Date().toISOString() },
       verification: { method: "payer_confirmation", outcome: "success" },
     }),
   );
 
   const draft = await b.submitWork(a.did, {
     jobId: "job_smoke_1",
-    task: { capability: "document-extraction", specHash: "sha256:s1", createdAt: new Date().toISOString() },
-    result: { outputHash: "sha256:o1", completedAt: new Date().toISOString() },
+    task: { capability: "document-extraction", specHash: "sha256:e8bc163c82eee18733288c7d4ac636db3a6deb013ef2d37b68322be20edc45cc", createdAt: new Date().toISOString() },
+    result: { outputHash: "sha256:2352da7280f1decc3acf1ba84eb945c9fc2b7b541094e1d0992dbffd1b6664cc", completedAt: new Date().toISOString() },
     settlement: { amount: "5.00", currency: "USDC" },
     verification: { method: "payer_confirmation", outcome: "success" },
   });
@@ -135,7 +135,7 @@ async function main() {
   await jobPoster.registerAgent(["job.posting"]);
   await jobWorker.registerAgent(["translation.tr-en"]);
 
-  const postedJob = await jobPoster.postJob({ capability: "translation.tr-en", specHash: "sha256:spec_worker_smoke" });
+  const postedJob = await jobPoster.postJob({ capability: "translation.tr-en", specHash: "sha256:356864885eaa7652e1eb3a5f0bf441fa575797dd9cae617f4e8aee0129f48592" });
   check("job posted -> open", postedJob.status === "open");
 
   const searchResult = await jobPoster.searchJobs({ capability: "translation.tr-en", status: "open" });
@@ -149,8 +149,8 @@ async function main() {
 
   const jobDraft = await jobWorker.submitWork(jobPoster.did, {
     jobId: postedJob.jobId,
-    task: { capability: "translation.tr-en", specHash: "sha256:spec_worker_smoke", createdAt: new Date().toISOString() },
-    result: { outputHash: "sha256:out_worker_smoke", completedAt: new Date().toISOString() },
+    task: { capability: "translation.tr-en", specHash: "sha256:356864885eaa7652e1eb3a5f0bf441fa575797dd9cae617f4e8aee0129f48592", createdAt: new Date().toISOString() },
+    result: { outputHash: "sha256:ea7e3b800106a00fb9fa7ac123dcc511396979215d6baf1da47f25723e33a787", completedAt: new Date().toISOString() },
     verification: { method: "payer_confirmation", outcome: "success" },
   });
   const jobFinalized = await jobPoster.acceptWork(jobDraft);

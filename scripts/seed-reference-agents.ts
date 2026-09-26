@@ -13,7 +13,7 @@
  *     npx tsx scripts/seed-reference-agents.ts
  */
 import { writeFileSync } from "node:fs";
-import { generateKeypair, sign, toBase64, fromHex } from "../sdk-js/src/crypto/keys.js";
+import { generateKeypair, sign, toBase64, fromHex, sha256Hex } from "../sdk-js/src/crypto/keys.js";
 import { InamClient } from "../sdk-js/src/client.js";
 
 const BASE_URL = process.env.INAM_URL ?? "http://localhost:4021";
@@ -51,7 +51,9 @@ async function main() {
 
   // One real end-to-end engagement so reputation numbers are non-zero and the
   // explorer's receipt view has something in it.
-  const specHash = "sha256:reference_review_spec_v1";
+  // Real content hashes of the spec and the review actually produced, not labels.
+  const specHash = `sha256:${sha256Hex("Review the extraction pipeline for correctness and error handling.")}`;
+  const outputHash = `sha256:${sha256Hex("Reference review notes: no blocking issues; add retries around the fetch step.")}`;
   const job = await extractor.postJob({ capability: "code-review", specHash });
   log("Extractor posts a code-review job", job);
 
@@ -62,11 +64,11 @@ async function main() {
   const draft = await reviewer.submitWork(extractor.did, {
     jobId: job.jobId,
     task: { capability: "code-review", specHash, createdAt: now },
-    result: { outputHash: "sha256:reference_review_notes_v1", completedAt: now },
+    result: { outputHash, completedAt: now },
     settlement: { amount: "40.00", currency: "USDC", paymentRef: "x402:reference_1" },
     verification: { method: "payer_confirmation", outcome: "success" },
   });
-  const finalized = await extractor.acceptWork(draft);
+  const finalized = await extractor.acceptWork(draft, { jobId: job.jobId, outputHash });
   log("Receipt finalized", finalized);
 
   const [extractorRep, reviewerRep] = await Promise.all([

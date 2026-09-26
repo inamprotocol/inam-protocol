@@ -92,7 +92,7 @@ describe("replay guard: base64 non-canonical re-encoding", () => {
       body: JSON.stringify({ capabilities: ["x"] }),
     });
 
-    const body = JSON.stringify({ capability: "x", specHash: "sha256:b64_replay_spec" });
+    const body = JSON.stringify({ capability: "x", specHash: "sha256:07aef5ce1dddbab931c9b6187806babe1183aa0068efc9e13b91eaf5cfcb7ad5" });
     const headers = signedHeaders(kp, "POST", "/v1/jobs", body);
     const mutatedSig = mutateBase64Tail(headers["inam-signature"]);
     expect(mutatedSig).not.toBe(headers["inam-signature"]);
@@ -120,8 +120,8 @@ function finalizeReceipt(
   const now = new Date().toISOString();
   const input: Omit<CreateDraftInput, "signature" | "agentAId"> = {
     jobId,
-    task: { capability: "x", specHash: "sha256:spec", createdAt: now },
-    result: { outputHash: "sha256:out", completedAt: now },
+    task: { capability: "x", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", createdAt: now },
+    result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: now },
     verification: { method: "payer_confirmation", outcome: "success" },
     visibility,
   };
@@ -169,12 +169,12 @@ describe("countersign-blind-signing guard (sdk-js InamClient.acceptWork)", () =>
   function fixtureReceipt(overrides: Partial<ExecutionReceipt> = {}): ExecutionReceipt {
     return {
       receiptVersion: "1.0",
-      receiptId: "sha256:fixture",
+      receiptId: "sha256:f16d05ec6b29248d2c61adb1e9263f78e4f7bace1b955014a2d17872cfe4064d",
       jobId: "job_fixture",
       agentA: { id: "did:key:zAgentA", role: "requester" },
       agentB: { id: "did:key:zAgentB", role: "worker" },
-      task: { capability: "x", specHash: "sha256:spec", createdAt: new Date().toISOString() },
-      result: { outputHash: "sha256:out", completedAt: new Date().toISOString() },
+      task: { capability: "x", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", createdAt: new Date().toISOString() },
+      result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: new Date().toISOString() },
       verification: { method: "payer_confirmation", outcome: "success" },
       dispute: { status: "none", windowClosesAt: null },
       signatures: { agentB: "sig" },
@@ -197,7 +197,7 @@ describe("countersign-blind-signing guard (sdk-js InamClient.acceptWork)", () =>
     const receipt = fixtureReceipt({ agentA: { id: requester.did, role: "requester" } });
 
     await expect(client.acceptWork(receipt, { jobId: "job_other" })).rejects.toThrow(/expected jobId/);
-    await expect(client.acceptWork(receipt, { outputHash: "sha256:different" })).rejects.toThrow(/expected result.outputHash/);
+    await expect(client.acceptWork(receipt, { outputHash: "sha256:9d6f965ac832e40a5df6c06afe983e3b449c07b843ff51ce76204de05c690d11" })).rejects.toThrow(/expected result.outputHash/);
   });
 });
 
@@ -210,7 +210,7 @@ describe("participants_only job record leak via GET /jobs", () => {
     registerAgent(provider.did, { capabilities: ["x"] });
     registerAgent(stranger.did, { capabilities: ["y"] });
 
-    const job = jobService.postJob(requester.did, { capability: "x", specHash: "sha256:spec" });
+    const job = jobService.postJob(requester.did, { capability: "x", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19" });
     jobService.submitOffer(job.jobId, provider.did, "on it");
     jobService.acceptOffer(job.jobId, requester.did, provider.did);
 

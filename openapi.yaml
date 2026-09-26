@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: INAM Protocol Registry API
-  version: "0.5.0"
+  version: "0.32.0"
   description: >
     The open reputation, verification, and economic-history layer for the agent
     economy. See SPEC.md in this repository for the full protocol specification
@@ -23,6 +23,10 @@ tags:
     description: Optional pre-work resource — capability discovery, offers, acceptance
   - name: receipts
     description: Execution Receipt lifecycle — draft, countersign, dispute
+  - name: verifications
+    description: Independent, operator-authorized attestations about a finalized receipt (SPEC.md §12)
+  - name: transparency
+    description: Append-only Merkle log of the receipt lifecycle (SPEC.md §13)
 
 paths:
   /health:
@@ -207,6 +211,38 @@ paths:
                 properties: { receipts: { type: array, items: { $ref: "#/components/schemas/Receipt" } } }
         "404": { $ref: "#/components/responses/Error" }
 
+  /agents/{id}/verifier-status:
+    post:
+      operationId: setVerifierStatus
+      summary: Grant or revoke an agent's verifier status (operator only, SPEC.md §12.6)
+      description: >-
+        Signed by the registry's configured operator identity, never by the
+        target agent. Any other caller gets 403 NOT_OPERATOR; a registry with
+        no operator configured rejects every call.
+      tags: [agents]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/AgentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [authorized]
+              properties: { authorized: { type: boolean } }
+      responses:
+        "200":
+          description: Updated agent record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Agent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+
   /agents/{id}/revoke:
     post:
       operationId: revokeAgent
@@ -217,6 +253,7 @@ paths:
         AGENT_REVOKED), drops out of search, and is flagged `revoked` in its
         reputation. One-way — no un-revoke.
       tags: [agents]
+      security: [{ inamSignature: [] }]
       parameters:
         - { $ref: "#/components/parameters/AgentId" }
         - { $ref: "#/components/parameters/IdempotencyKey" }
@@ -318,7 +355,7 @@ paths:
               required: [capability, specHash]
               properties:
                 capability: { type: string }
-                specHash: { type: string }
+                specHash: { type: string, pattern: "^sha256:[0-9a-f]{64}$", description: "sha256 of the real content, lowercase hex (SPEC.md §4.1, v0.32)" }
                 budget:
                   type: object
                   properties: { amount: { type: string, pattern: '^\d+(\.\d+)?$' }, currency: { type: string, pattern: '^[A-Za-z0-9]{1,16}$' } }
@@ -657,7 +694,7 @@ paths:
                 receiptId: { type: string }
                 verifier: { type: string, description: "Must equal the caller's own INAM ID" }
                 method: { type: string, enum: [deterministic, agent_attestation], description: "How this verifier actually checked the work (SPEC.md §12). Not the receipt's own verification.method (§4.1), which is a differently-valued, unenforced self-declared claim." }
-                outputHash: { type: string, description: "MUST match the referenced receipt's result.outputHash" }
+                outputHash: { type: string, pattern: "^sha256:[0-9a-f]{64}$", description: "MUST match the referenced receipt's result.outputHash" }
                 result: { type: string, enum: [verified, rejected] }
                 score: { type: number, minimum: 0, maximum: 1 }
                 evidenceUri: { type: string }
@@ -688,6 +725,102 @@ paths:
             application/json:
               schema: { $ref: "#/components/schemas/Verification" }
         "404": { $ref: "#/components/responses/Error" }
+
+  /transparency/sth:
+    get:
+      operationId: getTransparencySTH
+      summary: Current transparency-log tree head (unsigned, SPEC.md §13)
+      tags: [transparency]
+      security: []
+      responses:
+        "200":
+          description: Tree head
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  treeSize: { type: integer }
+                  rootHash: { type: string }
+                  timestamp: { type: string, format: date-time }
+
+  /transparency/entries:
+    get:
+      operationId: listTransparencyEntries
+      summary: Raw log entries, oldest first
+      tags: [transparency]
+      security: []
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: A page of entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  hasMore: { type: boolean }
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        leafIndex: { type: integer }
+                        entryType: { type: string, enum: [receipt_finalized, dispute_opened, dispute_resolved, nonperformance_reported] }
+                        refId: { type: string }
+                        createdAt: { type: string, format: date-time }
+                        data: { type: string, description: "Canonical JSON of the logged event" }
+                        leafHash: { type: string }
+
+  /transparency/proof/inclusion:
+    get:
+      operationId: getInclusionProof
+      summary: Merkle audit path proving a leaf is in the tree
+      tags: [transparency]
+      security: []
+      parameters:
+        - { name: leafIndex, in: query, required: true, schema: { type: integer } }
+        - { name: treeSize, in: query, schema: { type: integer }, description: "Defaults to the current size" }
+      responses:
+        "200":
+          description: Inclusion proof
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  leafIndex: { type: integer }
+                  treeSize: { type: integer }
+                  leafHash: { type: string }
+                  rootHash: { type: string }
+                  proof: { type: array, items: { type: string } }
+        "400": { $ref: "#/components/responses/Error" }
+
+  /transparency/proof/consistency:
+    get:
+      operationId: getConsistencyProof
+      summary: Proves the tree at size `first` is a prefix of the tree at size `second`
+      tags: [transparency]
+      security: []
+      parameters:
+        - { name: first, in: query, required: true, schema: { type: integer } }
+        - { name: second, in: query, schema: { type: integer }, description: "Defaults to the current size" }
+      responses:
+        "200":
+          description: Consistency proof
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  firstSize: { type: integer }
+                  firstRootHash: { type: string }
+                  secondSize: { type: integer }
+                  secondRootHash: { type: string }
+                  proof: { type: array, items: { type: string } }
+        "400": { $ref: "#/components/responses/Error" }
 
 components:
   securitySchemes:
@@ -814,11 +947,16 @@ components:
       type: object
       properties:
         trustScore: { type: number, minimum: 0, maximum: 100 }
+        evidenceLevel:
+          type: string
+          enum: [none, countersigned, independently_verified]
+          description: "Strongest evidence behind this history (SPEC.md §5.3, v0.32). Read this before relying on trustScore: 'countersigned' means only the two parties vouched for the work."
         components:
           type: object
           properties:
             eigenWeight: { type: number, description: "Confidence — how much trust-weighted history backs this score" }
-            verifiedReceipts: { type: integer }
+            finalizedReceipts: { type: integer, description: "Receipts both parties signed — not independently verified (see attestedReceipts)" }
+            verifiedReceipts: { type: integer, deprecated: true, description: "Deprecated alias of finalizedReceipts" }
             rawReceipts: { type: integer }
             successRate: { type: number }
             volumeUsd: { type: number, description: "Self-reported settlement volume in USD only (the 'USD' bucket of volumeByCurrency); INAM verifies no payment and does no FX (SPEC.md §5.3, §10)" }
@@ -828,11 +966,12 @@ components:
               description: "Settlement volume bucketed by normalized settlement.currency (upper-cased; untagged -> 'USD'), never converted or cross-summed"
             stakeUsd: { type: number }
             decayHalfLifeDays: { type: number }
-            attestedReceipts: { type: integer, description: "Finalized receipts backed by at least one verified Verification (SPEC.md §12.5)" }
+            attestedReceipts: { type: integer, description: "Finalized receipts whose authorized Verifications net out to verified (SPEC.md §12.5)" }
+            rejectedAttestations: { type: integer, description: "Finalized receipts whose authorized Verifications net out to rejected; each is scored as a failed outcome (SPEC.md §12.5, v0.32)" }
             nonPerformanceReports: { type: integer, description: "Jobs where this agent was the accepted worker and the poster later reported non-performance (SPEC.md §3.3)" }
             asProvider: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
             asRequester: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
-        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>, nonperformance_reported" }
+        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>, nonperformance_reported, attestation_rejected, unanchored_counterparty_volume, revoked" }
 
     ReputationRoleBreakdown:
       type: object
@@ -869,7 +1008,7 @@ components:
         jobId: { type: string }
         postedBy: { type: string }
         capability: { type: string }
-        specHash: { type: string }
+        specHash: { type: string, pattern: "^sha256:[0-9a-f]{64}$", description: "sha256 of the real content, lowercase hex (SPEC.md §4.1, v0.32)" }
         budget:
           type: object
           properties: { amount: { type: string }, currency: { type: string } }
@@ -898,7 +1037,7 @@ components:
         provider: { type: string, description: "The referenced receipt's agentB.id — derived, not client-supplied" }
         verifier: { type: string }
         method: { type: string, enum: [deterministic, agent_attestation], description: "How this verifier actually checked the work (SPEC.md §12). Not the receipt's own verification.method (§4.1), which is a differently-valued, unenforced self-declared claim." }
-        outputHash: { type: string }
+        outputHash: { type: string, pattern: "^sha256:[0-9a-f]{64}$", description: "sha256 of the real content, lowercase hex (SPEC.md §4.1, v0.32)" }
         result: { type: string, enum: [verified, rejected] }
         score: { type: ["number", "null"] }
         evidenceUri: { type: ["string", "null"] }
@@ -916,13 +1055,13 @@ components:
           required: [capability, specHash, createdAt]
           properties:
             capability: { type: string }
-            specHash: { type: string }
+            specHash: { type: string, pattern: "^sha256:[0-9a-f]{64}$", description: "sha256 of the real content, lowercase hex (SPEC.md §4.1, v0.32)" }
             createdAt: { type: string, format: date-time }
         result:
           type: object
           required: [outputHash, completedAt]
           properties:
-            outputHash: { type: string }
+            outputHash: { type: string, pattern: "^sha256:[0-9a-f]{64}$", description: "sha256 of the real content, lowercase hex (SPEC.md §4.1, v0.32)" }
             outputUri: { type: string }
             completedAt: { type: string, format: date-time }
         settlement:
@@ -964,7 +1103,7 @@ components:
           properties:
             status: { type: string, enum: [none, open, resolved] }
             reason: { type: string }
-            windowClosesAt: { type: string, format: date-time, nullable: true, description: "null while the receipt is a draft; set when it is countersigned (SPEC.md §4.3, v0.31)" }
+            windowClosesAt: { type: [string, "null"], format: date-time, description: "null while the receipt is a draft; set when it is countersigned (SPEC.md §4.3, v0.31)" }
             openedBy: { type: string, description: "INAM ID of the party that opened the dispute (SPEC.md §4.3); absent until disputed" }
             resolvedAt: { type: string, format: date-time, description: "set when the opener withdrew the dispute" }
             resolution: { type: string, description: "optional note the opener left on withdrawal" }

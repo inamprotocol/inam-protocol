@@ -63,7 +63,7 @@ async function seedFinalizedReceipt(): Promise<ExecutionReceipt> {
   await worker.registerAgent(["summarize"], { name: "Worker" });
   await requester.registerAgent(["orchestrate"], { name: "Requester" });
 
-  const specHash = "sha256:summarize_spec_v1";
+  const specHash = "sha256:a8807a674437ce8541013435b91e2c46262c8a84af4447528655f6f02c9d79af";
   const job = await requester.postJob({ capability: "summarize", specHash });
   await worker.submitOffer(job.jobId, "on it");
   await requester.acceptOffer(job.jobId, worker.did);

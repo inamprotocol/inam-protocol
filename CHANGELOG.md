@@ -4,6 +4,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.32 (Draft) — 2026-09-26
+- **A rejected Verification now counts against the work (§12.5).** An external evaluation had an authorized verifier reject a receipt's output, then watched the provider's `trustScore` rise 8.0 → 10.6 with `successRate` still at 100% — through v0.31 a rejection was scoring-neutral by rule. A receipt whose counted Verifications net out to rejected (same strict-majority tiebreak and currently-authorized/non-revoked filter as the boost) now scores as a failed outcome, whatever the parties self-declared. New `components.rejectedAttestations`, flag `attestation_rejected`.
+- **`specHash`/`outputHash` must be `sha256:` + 64 lowercase hex (§4.1).** The live seed receipt carried `sha256:review_notes_v1`, a label rather than a checkable hash. All four hash fields now reject anything else with `VALIDATION_ERROR`. Stored records are untouched. **Wire-breaking** for clients sending placeholder hashes.
+- **`evidenceLevel` (§5.3).** New top-level reputation field: `none` / `countersigned` / `independently_verified`. `components.finalizedReceipts` added as the honest name for `verifiedReceipts`, which stays as a deprecated alias.
+- **API-reference drift closed.** `openapi.yaml` now lists the `/transparency/*` endpoints and `POST /agents/:id/verifier-status`; §6 now lists `/health`, the badge endpoints, and `report-nonperformance`. `tests/apiSurfaceDrift.test.ts` fails CI if the Worker's routes, §6, and `openapi.yaml` disagree.
+
 ### v0.31 (Draft) — 2026-09-23
 - **Draft `dispute.windowClosesAt` is `null`, not `""` (§4.3).** `""` isn't a valid `date-time`, so it contradicted the OpenAPI schema. It's now `null` until countersigning sets it, and the schema marks the field `nullable`. `dispute` is outside the signed content and the `receiptId` hash, so no signature or ID changes. Existing drafts are migrated in place (Node on startup, Worker via `worker/migration-draft-window-null.sql`).
 
@@ -175,6 +181,17 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.10.0 — 2026-09-26
+- `ReputationResult` gains `evidenceLevel` and `components.finalizedReceipts`/`rejectedAttestations`; `verifiedReceipts` is marked `@deprecated` (SPEC.md v0.32).
+- New shared `core/attestation.ts` (`netVerdict`, `evidenceLevel`, both runtimes import it) and exported types `AttestationVerdict`, `EvidenceLevel`.
+- Shared schemas require `specHash`/`outputHash` to match `^sha256:[0-9a-f]{64}$`. Hash real content with the existing `sha256Hex` export: `` `sha256:${sha256Hex(text)}` ``.
+
+## MCP server (`mcp`)
+
+### 0.4.0 — 2026-09-26
+- New keyless tool `inam_hash_content`: returns the `sha256:<64 hex>` hash of given text, so an agent can produce the hash format SPEC.md v0.32 requires without a shell.
+- `inam_check_reputation`'s description now tells the calling model to read `evidenceLevel` before `trustScore` and to treat `attestation_rejected` as a strong negative.
+
 ### 0.9.0 — 2026-09-23
 - `ExecutionReceipt.dispute.windowClosesAt` is typed `string | null` (SPEC.md v0.31). The `buildSignableContent` placeholder now carries `null`; it is stripped before signing, so signatures are unaffected.
 - New exports `disputeWindowClosesAt(receipt): Date | null` and `isDisputeWindowOpen(receipt, now?)`. They return "no window" for `null`, missing, or unparseable values, where `new Date(null)` would give 1970-01-01, and they also accept the `""` that pre-v0.31 registries return. Both runtimes' dispute gates now use `isDisputeWindowOpen`, so there's one definition of an open window. Minor bump: new public API.
@@ -244,6 +261,12 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.9.0 (Node) / 0.8.0 (Worker) — 2026-09-26
+- SPEC.md v0.32, identically in both runtimes: `attestationVerdict()` replaces `hasVerifiedAttestation()`; a net-rejected receipt scores `outcomeScore` 0; reputation responses gain `evidenceLevel`, `finalizedReceipts`, `rejectedAttestations`, and the `attestation_rejected` flag; hash fields are format-validated. No D1 migration.
+- Explorer shows the evidence level next to the trust score, renames "Verified receipts" to "Finalized receipts (both parties signed)", and adds a "Rejected by a verifier" row.
+- Seed/example/smoke scripts, the quickstart, and the plugin demo hash real content instead of placeholder labels.
+- Tests: rejected-scoring regression in both runtimes (`tests/verificationFlow.test.ts`, `worker/tests/api.test.ts`), hash-format cases (`tests/schemas.test.ts`), API-surface drift (`tests/apiSurfaceDrift.test.ts`).
 
 ### 0.8.1 (Node) / 0.7.1 (Worker) — 2026-09-23
 - Draft receipts return `dispute.windowClosesAt: null` instead of `""` (SPEC.md v0.31). `openDispute` now gates on the shared `isDisputeWindowOpen` (`sdk-js/src/core/disputeLifecycle.ts`), which treats a missing window as closed.

@@ -117,7 +117,7 @@ async function runRound(
 ) {
   console.log(`\n=== Round: ${label} ===`);
 
-  const specHash = "sha256:spec_isPalindrome_v1";
+  const specHash = "sha256:31fe5f272bebe743525c8398a8300eda6e16093af00515a438d757409bede0c8";
   const job = await orchestrator.postJob({ capability: "code-generation", specHash });
   await coder.submitOffer(job.jobId, "on it");
   await orchestrator.acceptOffer(job.jobId, coder.did);

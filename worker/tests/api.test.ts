@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -104,8 +105,8 @@ function job(overrides?: Partial<Record<string, unknown>>) {
   const now = new Date().toISOString();
   return {
     jobId: `job_${Math.random().toString(36).slice(2)}`,
-    task: { capability: "test.capability", specHash: "sha256:spec", createdAt: now },
-    result: { outputHash: "sha256:out", completedAt: now },
+    task: { capability: "test.capability", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", createdAt: now },
+    result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: now },
     settlement: { amount: "10.00", currency: "USDC" },
     verification: { method: "payer_confirmation", outcome: "success" },
     ...overrides,
@@ -198,7 +199,7 @@ describe("agent registration", () => {
     const poster = generateKeypair();
     await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["job.posting"] } });
 
-    const body = JSON.stringify({ capability: "translation.tr-en", specHash: "sha256:replay_worker" });
+    const body = JSON.stringify({ capability: "translation.tr-en", specHash: "sha256:62398ecdc21b4d0fbf8dba8b4c39cf7477c8cecffd5b11cbb7ef94f53fd985f3" });
     const path = "/v1/jobs";
     const timestamp = Date.now().toString();
     const signingString = `POST\n${path}\n${timestamp}\n${sha256Hex(body)}`;
@@ -318,7 +319,7 @@ describe("execution receipt lifecycle", () => {
     const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
 
     const future = new Date(Date.now() + 60 * 24 * 3600_000).toISOString(); // 60 days from now
-    const input = job({ task: { capability: "test.capability", specHash: "sha256:spec", createdAt: future }, result: { outputHash: "sha256:out", completedAt: future } });
+    const input = job({ task: { capability: "test.capability", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", createdAt: future }, result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: future } });
     const content = buildSignableContent(requester.did, worker_.did, input);
     const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
 
@@ -343,7 +344,7 @@ describe("execution receipt lifecycle", () => {
     const now = new Date();
     const created = now.toISOString();
     const completedBeforeCreated = new Date(now.getTime() - 3600_000).toISOString(); // 1 hour earlier
-    const input = job({ task: { capability: "test.capability", specHash: "sha256:spec", createdAt: created }, result: { outputHash: "sha256:out", completedAt: completedBeforeCreated } });
+    const input = job({ task: { capability: "test.capability", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", createdAt: created }, result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: completedBeforeCreated } });
     const content = buildSignableContent(requester.did, worker_.did, input);
     const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
 
@@ -365,7 +366,7 @@ describe("execution receipt lifecycle", () => {
     const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
     const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
 
-    const input = job({ result: { outputHash: "sha256:out", completedAt: "not-a-real-date" } });
+    const input = job({ result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: "not-a-real-date" } });
     const content = buildSignableContent(requester.did, worker_.did, input);
     const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
 
@@ -713,7 +714,7 @@ describe("job lifecycle", () => {
     const postRes = await call("POST", "/v1/jobs", {
       keypair: poster,
       idempotencyKey: `job:${Date.now()}`,
-      body: { capability: "translation.tr-en", specHash: "sha256:spec_job" },
+      body: { capability: "translation.tr-en", specHash: "sha256:abfd02c647d742abf0e56bb6270dce4622bbeb88f34a50ca72986f4eb94cc067" },
     });
     expect(postRes.status).toBe(201);
     const jobId = (postRes.json as { jobId: string }).jobId;
@@ -761,8 +762,8 @@ describe("job lifecycle", () => {
     const now = new Date().toISOString();
     const receiptInput = {
       jobId,
-      task: { capability: "translation.tr-en", specHash: "sha256:spec_job", createdAt: now },
-      result: { outputHash: "sha256:out_job", completedAt: now },
+      task: { capability: "translation.tr-en", specHash: "sha256:abfd02c647d742abf0e56bb6270dce4622bbeb88f34a50ca72986f4eb94cc067", createdAt: now },
+      result: { outputHash: "sha256:8d622de6a18baa89e713f45aaf2919ea1f6672600d2d84dc6ffc636e46f4fe21", completedAt: now },
       verification: { method: "payer_confirmation", outcome: "success" },
     };
     const content = buildSignableContent(poster.did, worker_.did, receiptInput);
@@ -799,7 +800,7 @@ describe("job lifecycle", () => {
     const postRes = await call("POST", "/v1/jobs", {
       keypair: poster,
       idempotencyKey: `job:${Date.now()}`,
-      body: { capability: "x", specHash: "sha256:spec_open" },
+      body: { capability: "x", specHash: "sha256:7243232bbe12c42b564e4bd078f5aa14d9f8ed9c3a6d372f6e9a48d88d2084cb" },
     });
     const jobId = (postRes.json as { jobId: string }).jobId;
 
@@ -808,8 +809,8 @@ describe("job lifecycle", () => {
     const now = new Date().toISOString();
     const receiptInput = {
       jobId,
-      task: { capability: "x", specHash: "sha256:spec_open", createdAt: now },
-      result: { outputHash: "sha256:out_open", completedAt: now },
+      task: { capability: "x", specHash: "sha256:7243232bbe12c42b564e4bd078f5aa14d9f8ed9c3a6d372f6e9a48d88d2084cb", createdAt: now },
+      result: { outputHash: "sha256:e5a23395f2f52f50d4e37a248138024444284689212544cb437bfff79da9c0a2", completedAt: now },
       verification: { method: "payer_confirmation", outcome: "success" },
     };
 
@@ -848,7 +849,7 @@ describe("job lifecycle", () => {
     const postRes = await call("POST", "/v1/jobs", {
       keypair: poster,
       idempotencyKey: `job:${Date.now()}`,
-      body: { capability: "x", specHash: "sha256:spec_cancel" },
+      body: { capability: "x", specHash: "sha256:e8b34cc6419ac5c791c0bb28e24c0aee997b8f51d92dc57a3db55f158ce60ce2" },
     });
     const jobId = (postRes.json as { jobId: string }).jobId;
 
@@ -875,7 +876,7 @@ describe("job lifecycle", () => {
     const postRes = await call("POST", "/v1/jobs", {
       keypair: poster,
       idempotencyKey: `job:${Date.now()}`,
-      body: { capability: "x", specHash: "sha256:spec_race" },
+      body: { capability: "x", specHash: "sha256:9086fc1eea50fc0265440c2f1af1d7cc792cdb9ed34bca9f97b2325fd3b4d1f9" },
     });
     const jobId = (postRes.json as { jobId: string }).jobId;
     await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: workerA, idempotencyKey: `oa:${Date.now()}`, body: {} });
@@ -897,7 +898,7 @@ describe("job lifecycle", () => {
     await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
     await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["x"] } });
 
-    const postRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:spec_np" } });
+    const postRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:9022f0185cec9c225a63f4960cd790f54f95b65cac5208afc2ae574a528cd8c3" } });
     const jobId = (postRes.json as { jobId: string }).jobId;
 
     const tooEarlyOpen = await call("POST", `/v1/jobs/${jobId}/report-nonperformance`, { keypair: poster, idempotencyKey: `np:${Date.now()}`, body: {} });
@@ -938,7 +939,7 @@ describe("job lifecycle", () => {
     const before = (await call("GET", `/v1/agents/${encodeURIComponent(worker_.did)}/reputation`)).json as { components: { nonPerformanceReports: number } };
     expect(before.components.nonPerformanceReports).toBe(0);
 
-    const postRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:spec_np2" } });
+    const postRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:835f1bd8a61aafe09605fc54bf0bffe5e754140954e2530c757344693dba4bab" } });
     const jobId = (postRes.json as { jobId: string }).jobId;
     await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: worker_, idempotencyKey: `o:${Date.now()}`, body: {} });
     await call("POST", `/v1/jobs/${jobId}/accept`, { keypair: poster, idempotencyKey: `accept:${Date.now()}`, body: { agentId: worker_.did } });
@@ -1153,7 +1154,7 @@ describe("agent identity revocation (SPEC.md §2.2, audit #10)", () => {
     expect(rev.status).toBe(200);
     expect((rev.json as { revokedAt: string }).revokedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/);
 
-    const job = await call("POST", "/v1/jobs", { keypair: kp, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:s" } });
+    const job = await call("POST", "/v1/jobs", { keypair: kp, idempotencyKey: `job:${Date.now()}`, body: { capability: "x", specHash: "sha256:043a718774c572bd8a25adbeb1bfcd5c0256ae11cecf9f9c3f925d0e52beaf89" } });
     expect(job.status).toBe(403);
     expect((job.json as { error: { code: string } }).error.code).toBe("AGENT_REVOKED");
 
@@ -1296,7 +1297,7 @@ describe("dispute + job state machine (SPEC.md §3.2/§4.3, audit #11)", () => {
     await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
 
     const past = new Date(Date.now() - 60_000).toISOString();
-    const jobRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `j:${Date.now()}`, body: { capability: "x", specHash: "sha256:s", expiresAt: past } });
+    const jobRes = await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `j:${Date.now()}`, body: { capability: "x", specHash: "sha256:043a718774c572bd8a25adbeb1bfcd5c0256ae11cecf9f9c3f925d0e52beaf89", expiresAt: past } });
     const jobId = (jobRes.json as { jobId: string }).jobId;
 
     const offer = await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: worker_, idempotencyKey: `o:${Date.now()}`, body: {} });
@@ -1502,7 +1503,7 @@ describe("independent verification (SPEC.md §12)", () => {
     await authorizeVerifier(verifier);
     const receipt = await finalizeReceipt(requester, provider);
 
-    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: "sha256:not_the_real_output", result: "verified" };
+    const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: "sha256:85d63db4a44d979fa331156182eb08f7f13b84b24057063efa5d15e8eef6a35d", result: "verified" };
     const { signature } = await signVerification(verifier, input);
     const res = await call("POST", "/v1/verifications", {
       keypair: verifier,
@@ -1627,7 +1628,7 @@ describe("independent verification (SPEC.md §12)", () => {
     expect((res.json as { error: { code: string } }).error.code).toBe("DUPLICATE_VERIFICATION");
   });
 
-  it("records a rejected verification without any reputation boost", async () => {
+  it("scores a net-rejected receipt as failed, whatever outcome the parties declared (v0.32)", async () => {
     const requester = generateKeypair();
     const provider = generateKeypair();
     const verifier = generateKeypair();
@@ -1644,8 +1645,13 @@ describe("independent verification (SPEC.md §12)", () => {
     });
     expect((res.json as { result: string }).result).toBe("rejected");
 
-    const rep = await call("GET", `/v1/agents/${provider.did}/reputation`);
-    expect((rep.json as { components: { attestedReceipts: number } }).components.attestedReceipts).toBe(0);
+    type Rep = { trustScore: number; evidenceLevel: string; flags: string[]; components: { attestedReceipts: number; rejectedAttestations: number; successRate: number } };
+    const rep = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as Rep;
+    expect(rep.components.attestedReceipts).toBe(0);
+    expect(rep.components.rejectedAttestations).toBe(1);
+    expect(rep.components.successRate).toBe(0);
+    expect(rep.flags).toContain("attestation_rejected");
+    expect(rep.evidenceLevel).toBe("countersigned");
   });
 
   it("does not let a verified attestation resurrect a since-disputed receipt's reputation contribution", async () => {
@@ -2159,7 +2165,7 @@ describe("replay guard: base64 non-canonical re-encoding", () => {
     const kp = generateKeypair();
     await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: ["x"] } });
 
-    const body = { capability: "x", specHash: "sha256:b64_replay_spec_worker" };
+    const body = { capability: "x", specHash: "sha256:b9a686dae075af290db7e8c552d2cdbe96668ce898410b0f6a3481d5ba564ad9" };
     const rawBody = JSON.stringify(body);
     const timestamp = Date.now().toString();
     const signingString = `POST\n/v1/jobs\n${timestamp}\n${sha256Hex(rawBody)}`;
@@ -2246,7 +2252,7 @@ describe("participants_only job record leak via GET /jobs", () => {
     const postRes = await call("POST", "/v1/jobs", {
       keypair: requester,
       idempotencyKey: `job:${Date.now()}`,
-      body: { capability: "x", specHash: "sha256:spec_leak" },
+      body: { capability: "x", specHash: "sha256:2b0bb48679302941d7fe0b9242a45075a13f97ff2d6b75df878079748de9c971" },
     });
     const jobId = (postRes.json as { jobId: string }).jobId;
     await call("POST", `/v1/jobs/${jobId}/offers`, { keypair: provider, idempotencyKey: `offer:${jobId}`, body: { message: "on it" } });
@@ -2298,7 +2304,7 @@ describe("search pagination", () => {
     const poster = generateKeypair();
     await call("POST", "/v1/agents", { keypair: poster, idempotencyKey: `reg:${poster.did}`, body: { capabilities: ["job.posting"] } });
     for (let i = 0; i < 55; i++) {
-      await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${capability}:${i}`, body: { capability, specHash: `sha256:${i}` } });
+      await call("POST", "/v1/jobs", { keypair: poster, idempotencyKey: `job:${capability}:${i}`, body: { capability, specHash: `sha256:${createHash("sha256").update(`${i}`).digest("hex")}` } });
     }
 
     const first = await call("GET", `/v1/jobs/search?capability=${capability}`);

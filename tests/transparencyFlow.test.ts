@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
@@ -35,8 +36,8 @@ function freshInput(jobId: string): Omit<CreateDraftInput, "signature" | "agentA
   const now = new Date().toISOString();
   return {
     jobId,
-    task: { capability: "translation.tr-en", specHash: `sha256:spec_${jobId}`, createdAt: now },
-    result: { outputHash: `sha256:out_${jobId}`, completedAt: now },
+    task: { capability: "translation.tr-en", specHash: `sha256:${createHash("sha256").update(`spec_${jobId}`).digest("hex")}`, createdAt: now },
+    result: { outputHash: `sha256:${createHash("sha256").update(`out_${jobId}`).digest("hex")}`, completedAt: now },
     settlement: { amount: "12.50", currency: "USDC" },
     verification: { method: "payer_confirmation", outcome: "success" },
   };
@@ -61,7 +62,7 @@ describe("transparency log lifecycle wiring", () => {
     resolveDispute(finalized.receiptId, requester.did, "resolved off-band");
 
     // 4: nonperformance_reported
-    const job = jobService.postJob(requester.did, { capability: "x", specHash: "sha256:spec_tlog_np" });
+    const job = jobService.postJob(requester.did, { capability: "x", specHash: "sha256:cd4c4cc125fb0d5bae1627b1561c1b936a64f24daa4da746d94ec90fd6bdcff5" });
     jobService.submitOffer(job.jobId, worker.did);
     jobService.acceptOffer(job.jobId, requester.did, worker.did);
     try {

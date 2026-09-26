@@ -22,7 +22,7 @@
  *   npx tsx examples/starter-agents.ts   # terminal 2
  */
 
-import { InamClient, generateKeypair, type Keypair } from "../sdk-js/src/index.js";
+import { InamClient, generateKeypair, sha256Hex, type Keypair } from "../sdk-js/src/index.js";
 
 const BASE_URL = process.env.INAM_URL ?? "http://localhost:4021";
 
@@ -61,7 +61,10 @@ async function main() {
   // there are two parties to put in a receipt. Submitting a receipt directly
   // only makes sense once both sides already know and agree who's doing the
   // work; postJob is what gets you there in an open marketplace.
-  const specHash = "sha256:review_spec_extraction_pipeline_v1";
+  // Hashes are of the real spec/output content (SPEC v0.32 requires the
+  // "sha256:" + 64-hex form), so anyone holding the content can check them.
+  const specHash = `sha256:${sha256Hex("Review the extraction pipeline for correctness and error handling.")}`;
+  const outputHash = `sha256:${sha256Hex("Review notes: no blocking issues; add retries around the fetch step.")}`;
   const job = await extractor.postJob({ capability: "code-review", specHash });
   log("Extractor posts a job needing code review", job);
 
@@ -94,7 +97,7 @@ async function main() {
   const draft = await reviewer.submitWork(extractor.did, {
     jobId: job.jobId,
     task: { capability: "code-review", specHash, createdAt: now },
-    result: { outputHash: "sha256:review_notes_v1", completedAt: now },
+    result: { outputHash, completedAt: now },
     settlement: { amount: "40.00", currency: "USDC", paymentRef: "x402:tx_starter_1" },
     verification: { method: "payer_confirmation", outcome: "success" },
   });
@@ -106,7 +109,7 @@ async function main() {
   // the work happened; the requester's countersignature is what proves the
   // requester agrees it happened as described. Two independent signatures
   // over the same content, not a single party's unilateral claim.
-  const finalized = await extractor.acceptWork(draft);
+  const finalized = await extractor.acceptWork(draft, { jobId: job.jobId, outputHash });
   log("Extractor countersigns -- receipt is now finalized", finalized);
 
   // --- Step 5: an independent third party attests to the work (SPEC.md §12) ---

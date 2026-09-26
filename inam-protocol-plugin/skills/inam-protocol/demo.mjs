@@ -19,7 +19,7 @@
 //   node demo.mjs                                        # against local dev server (default)
 //   INAM_URL=https://api.inamprotocol.org INAM_CONFIRM=yes node demo.mjs
 //                                                         # opt-in: real registry, real signal
-import { InamClient, generateKeypair } from "inamprotocol";
+import { InamClient, generateKeypair, sha256Hex } from "inamprotocol";
 
 const BASE_URL = process.env.INAM_URL ?? "http://localhost:4021";
 const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(BASE_URL);
@@ -48,7 +48,9 @@ try {
   await requester.registerAgent(["job.posting"], { name: "Skill demo requester" });
   requesterRegistered = true;
 
-  const job = await requester.postJob({ capability: "demo.skill-trial", specHash: "sha256:skill_demo_spec" });
+  const specHash = `sha256:${sha256Hex("Say hello from the INAM skill demo.")}`;
+  const outputHash = `sha256:${sha256Hex("hello from the INAM skill demo")}`;
+  const job = await requester.postJob({ capability: "demo.skill-trial", specHash });
   console.log("job posted:", job.jobId);
 
   await provider.submitOffer(job.jobId, "trying out the INAM skill");
@@ -58,13 +60,13 @@ try {
   const now = new Date().toISOString();
   const draft = await provider.submitWork(requester.did, {
     jobId: job.jobId,
-    task: { capability: "demo.skill-trial", specHash: "sha256:skill_demo_spec", createdAt: now },
-    result: { outputHash: "sha256:skill_demo_output", completedAt: now },
+    task: { capability: "demo.skill-trial", specHash, createdAt: now },
+    result: { outputHash, completedAt: now },
     verification: { method: "payer_confirmation", outcome: "success" },
   });
   console.log("draft receipt:", draft.receiptId);
 
-  const final = await requester.acceptWork(draft, { jobId: job.jobId, outputHash: "sha256:skill_demo_output" });
+  const final = await requester.acceptWork(draft, { jobId: job.jobId, outputHash });
   console.log("finalized:", final.status);
 
   const rep = await provider.getReputation(provider.did);

@@ -1,3 +1,4 @@
+import type { EvidenceLevel } from "../sdk-js/src/core/attestation.js";
 export interface LinkedIdentities {
   agentpass_id?: string;
   aitp_id?: string;
@@ -141,6 +142,11 @@ export interface ReputationRoleBreakdown {
 
 export interface ReputationComponents {
   eigenWeight: number;
+  /** v0.32: count of two-party finalized receipts (not independently
+   * verified — see `attestedReceipts`). */
+  finalizedReceipts: number;
+  /** @deprecated same value as `finalizedReceipts`; misleading name kept
+   * for existing consumers. */
   verifiedReceipts: number;
   rawReceipts: number;
   successRate: number;
@@ -158,6 +164,9 @@ export interface ReputationComponents {
    * (SPEC.md §12.5) — distinct from `verifiedReceipts` above, which really
    * means "two-party finalized," not independently attested. */
   attestedReceipts: number;
+  /** v0.32: finalized receipts whose Verification evidence nets out to
+   * rejected — each scored as a failed outcome (SPEC.md §12.5). */
+  rejectedAttestations: number;
   /** Count of jobs where this agent was the accepted worker and the
    * poster later reported non-performance (SPEC.md §3.3). */
   nonPerformanceReports: number;
@@ -171,6 +180,9 @@ export interface ReputationComponents {
 
 export interface ReputationResult {
   trustScore: number;
+  /** v0.32 (SPEC.md §5.3): strongest evidence behind this history — read
+   * this, not `trustScore` alone, before relying on the score. */
+  evidenceLevel: EvidenceLevel;
   components: ReputationComponents;
   flags: string[];
 }

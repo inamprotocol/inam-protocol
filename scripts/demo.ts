@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { generateKeypair, sign, toBase64, fromHex } from "../sdk-js/src/crypto/keys.js";
 import { InamClient } from "../sdk-js/src/client.js";
 
@@ -40,8 +41,8 @@ async function main() {
     const jobId = `job_demo_${i}`;
     const draft = await worker.submitWork(requester.did, {
       jobId,
-      task: { capability: "translation.tr-en", specHash: `sha256:spec_${i}`, createdAt: new Date().toISOString() },
-      result: { outputHash: `sha256:out_${i}`, completedAt: new Date().toISOString() },
+      task: { capability: "translation.tr-en", specHash: `sha256:${createHash("sha256").update(`spec_${i}`).digest("hex")}`, createdAt: new Date().toISOString() },
+      result: { outputHash: `sha256:${createHash("sha256").update(`out_${i}`).digest("hex")}`, completedAt: new Date().toISOString() },
       settlement: { amount: "12.50", currency: "USDC", paymentRef: `x402:tx_demo_${i}` },
       verification: { method: "payer_confirmation", outcome: "success" },
     });

@@ -51,8 +51,8 @@ function finalizeReceipt(
   const now = new Date().toISOString();
   const input: Omit<CreateDraftInput, "signature" | "agentAId"> = {
     jobId,
-    task: { capability: "x", specHash: "sha256:spec", createdAt: now },
-    result: { outputHash: "sha256:out", completedAt: now },
+    task: { capability: "x", specHash: "sha256:d4f02eaafd1a9e9de7d10972ca8e47fa7a985825c3c9c1e249c72683cb3e4f19", createdAt: now },
+    result: { outputHash: "sha256:762069bc07a6e1b5df123a5ae7bd91c10daa04694fbaa17fba0cd6a8dcce8f22", completedAt: now },
     verification: { method: "payer_confirmation", outcome: "success" },
     visibility,
   };

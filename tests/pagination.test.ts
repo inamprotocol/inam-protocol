@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -31,7 +32,7 @@ describe("GET /jobs/search pagination", () => {
     const poster = generateKeypair();
     registerAgent(poster.did, { capabilities: ["job.posting"] });
     for (let i = 0; i < 55; i++) {
-      jobService.postJob(poster.did, { capability, specHash: `sha256:job${i}` });
+      jobService.postJob(poster.did, { capability, specHash: `sha256:${createHash("sha256").update(`job${i}`).digest("hex")}` });
     }
   });
 

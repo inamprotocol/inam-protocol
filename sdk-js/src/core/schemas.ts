@@ -52,9 +52,14 @@ const moneyAmount = z.string().regex(/^\d+(\.\d+)?$/, "must be a non-negative de
 const currencyCode = z.string().regex(/^[A-Za-z0-9]{1,16}$/, "must be a short currency code");
 const moneyFields = { amount: moneyAmount.optional(), currency: currencyCode.optional() };
 
+// SPEC.md §4.1 (v0.32): a content hash is "sha256:" + 64 lowercase hex chars.
+// An external test found live receipts carrying labels like
+// "sha256:review_notes_v1" — signed, but committing to no checkable content.
+const contentHash = z.string().regex(/^sha256:[0-9a-f]{64}$/, 'must be "sha256:" followed by 64 lowercase hex characters');
+
 export const postJobSchema = z.object({
   capability: z.string().min(1),
-  specHash: z.string().min(1),
+  specHash: contentHash,
   budget: z.object({ ...moneyFields }).optional(),
   expiresAt: z.string().optional(),
 });
@@ -78,11 +83,11 @@ export const draftReceiptSchema = z.object({
   agentAId: z.string().min(1),
   task: z.object({
     capability: z.string().min(1),
-    specHash: z.string().min(1),
+    specHash: contentHash,
     createdAt: isoDateTime,
   }),
   result: z.object({
-    outputHash: z.string().min(1),
+    outputHash: contentHash,
     outputUri: z.string().optional(),
     completedAt: isoDateTime,
   }),
@@ -116,7 +121,7 @@ export const submitVerificationSchema = z.object({
   receiptId: z.string().min(1),
   verifier: z.string().min(1),
   method: z.enum(["deterministic", "agent_attestation"]),
-  outputHash: z.string().min(1),
+  outputHash: contentHash,
   result: z.enum(["verified", "rejected"]),
   score: z.number().min(0).max(1).optional(),
   evidenceUri: z.string().optional(),

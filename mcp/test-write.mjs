@@ -39,7 +39,7 @@ await c2.connect(t2);
 await c2.callTool({ name: "inam_register_agent", arguments: { capabilities: ["job.posting"] } });
 const job = await c2.callTool({
   name: "inam_post_job",
-  arguments: { capability: "code-review", specHash: "sha256:write_smoke_spec" },
+  arguments: { capability: "code-review", specHash: "sha256:2fd7dff51ee482b31f4e22da61007cfa4ac69a7ad6947bbf305516b7e9787db0" },
 });
 assert(!job.isError, `post_job failed: ${job.content[0].text}`);
 const jobId = JSON.parse(job.content[0].text).jobId;
@@ -57,8 +57,8 @@ const receipt = await client.callTool({
     requesterId: kp2.did,
     jobId,
     capability: "code-review",
-    specHash: "sha256:write_smoke_spec",
-    outputHash: "sha256:write_smoke_output",
+    specHash: "sha256:2fd7dff51ee482b31f4e22da61007cfa4ac69a7ad6947bbf305516b7e9787db0",
+    outputHash: "sha256:c545b78d8dd39e42805780ec79dcdd68d0f19bb14642453a07e9433842d28149",
     amount: "10.00",
     currency: "USDC",
   },
@@ -69,7 +69,7 @@ console.log("draft receipt:", receiptId, JSON.parse(receipt.content[0].text).sta
 
 const fin = await c2.callTool({
   name: "inam_countersign_receipt",
-  arguments: { receiptId, expectedJobId: jobId, expectedOutputHash: "sha256:write_smoke_output" },
+  arguments: { receiptId, expectedJobId: jobId, expectedOutputHash: "sha256:c545b78d8dd39e42805780ec79dcdd68d0f19bb14642453a07e9433842d28149" },
 });
 assert(!fin.isError, `countersign failed: ${fin.content[0].text}`);
 assert(JSON.parse(fin.content[0].text).status === "finalized", "receipt not finalized");

@@ -43,6 +43,7 @@ export { computeVerificationId, buildSignableVerificationContent, type Verificat
 // trusting the registry's own arithmetic.
 export { verifyInclusion, verifyConsistency } from "./core/merkleLog.js";
 export { type TransparencyEntryType } from "./core/transparencyLog.js";
+export { type AttestationVerdict, type EvidenceLevel } from "./core/attestation.js";
 
 // Request-body validation schemas — shared by the Node reference server and
 // the Cloudflare Worker so both accept/reject the exact same requests (see

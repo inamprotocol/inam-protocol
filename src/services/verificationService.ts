@@ -6,6 +6,7 @@ import { buildSignableVerificationContent, type VerificationContentInput } from 
 import * as receiptService from "./receiptService.js";
 import { getAgent } from "./agentService.js";
 import type { VerificationRecord } from "../types.js";
+import { netVerdict, type AttestationVerdict } from "../../sdk-js/src/core/attestation.js";
 
 export type { VerificationContentInput } from "../../sdk-js/src/core/verificationContent.js";
 export { computeVerificationId, buildSignableVerificationContent } from "../../sdk-js/src/core/verificationContent.js";
@@ -153,7 +154,9 @@ export function listByReceipt(receiptId: string): VerificationRecord[] {
 // records consistently, the same conservative-default philosophy the
 // protocol already applies elsewhere (a disputed receipt is excluded from
 // reputation regardless of who was at fault).
-export function hasVerifiedAttestation(receiptId: string): boolean {
+// v0.32: returns the net verdict rather than a boolean, so a net-`rejected`
+// receipt can be scored as failed (SPEC.md §12.5) instead of merely unboosted.
+export function attestationVerdict(receiptId: string): AttestationVerdict {
   const records = listByReceipt(receiptId).filter((v) => {
     try {
       const agent = getAgent(v.verifier);
@@ -170,5 +173,5 @@ export function hasVerifiedAttestation(receiptId: string): boolean {
   });
   const verifiedCount = records.filter((v) => v.result === "verified").length;
   const rejectedCount = records.filter((v) => v.result === "rejected").length;
-  return verifiedCount > rejectedCount;
+  return netVerdict(verifiedCount, rejectedCount);
 }
