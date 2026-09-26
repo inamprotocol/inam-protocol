@@ -199,6 +199,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## MCP server (`mcp`)
 
 ### 0.4.0 — 2026-09-26
+- Depends on `inamprotocol@^0.11.0` (was `^0.6.0`, which on a 0.x caret pinned it to 0.6.x and kept every later SDK fix out of the MCP server).
 - New keyless tool `inam_hash_content`: returns the `sha256:<64 hex>` hash of given text, so an agent can produce the hash format SPEC.md v0.32 requires without a shell.
 - `inam_check_reputation`'s description now tells the calling model to read `evidenceLevel` before `trustScore` and to treat `attestation_rejected` as a strong negative.
 
