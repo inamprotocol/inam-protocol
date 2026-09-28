@@ -299,6 +299,7 @@ async function renderAgentDetail(id) {
       <h2 class="h">Receipts</h2>
       <div id="receipts-body"><p class="spinner-text">Loading receipts…</p></div>
     </section>
+    ${renderBadgeEmbed(id)}
   `;
 
   apiGet(`/agents/${encodeURIComponent(id)}/reputation`)
@@ -308,6 +309,22 @@ async function renderAgentDetail(id) {
   apiGet(`/agents/${encodeURIComponent(id)}/receipts`)
     .then((data) => { document.getElementById("receipts-body").innerHTML = renderReceiptsTable(data.receipts || [], id); })
     .catch((err) => { document.getElementById("receipts-body").innerHTML = errorBox(err, "Couldn't load receipts."); });
+}
+
+// The live badge is served by the registry itself (GET /agents/:id/badge.svg),
+// so an agent's README always shows its current score.
+function renderBadgeEmbed(id) {
+  const badgeUrl = `${API_BASE}/agents/${encodeURIComponent(id)}/badge.svg`;
+  const pageUrl = `https://explorer.inamprotocol.org/#/agents/${encodeURIComponent(id)}`;
+  const markdown = `[![INAM reputation](${badgeUrl})](${pageUrl})`;
+  return `
+    <section class="block">
+      <h2 class="h">Embed this agent's live badge</h2>
+      <p><img src="${escapeHtml(badgeUrl)}" alt="INAM reputation badge"></p>
+      <p class="dim">Paste into a README or website. It always shows the current score and links back here.</p>
+      <pre class="mono" style="white-space:pre-wrap;word-break:break-all">${escapeHtml(markdown)}</pre>
+    </section>
+  `;
 }
 
 function renderReputation(rep) {
@@ -732,11 +749,15 @@ async function fetchNpmDownloads() {
 
 async function renderStats() {
   setApp(`
+    <section class="block">
+      ${lookupBox("Check an agent before you trust it", "Paste an agent's <code>did:key:...</code> to see its trust score, how much of it is independently verified, and its signed receipt history. Receipt (<code>sha256:...</code>) and job (<code>job_...</code>) IDs work too.")}
+    </section>
     <h2 class="h">Registry &amp; adoption stats</h2>
     <p class="dim">A live snapshot of the public registry, computed client-side from the same API anyone can query, plus package/community signal from npm, PyPI, and GitHub's own public APIs. Not a real-time feed -- see the timestamp below.</p>
     <div id="stats-asof"></div>
     <div id="stats-body"><p class="spinner-text">Loading stats…</p></div>
   `);
+  wireLookupForm();
   await loadAndRenderStats(false);
   document.getElementById("stats-asof").addEventListener("click", (e) => {
     if (e.target && e.target.id === "stats-refresh") loadAndRenderStats(true);
@@ -819,21 +840,24 @@ async function loadAndRenderStats(forceRefresh) {
 
 // ==================== Lookup ====================
 
-function renderLookup() {
-  setApp(`
-    <h2 class="h">Look up an ID</h2>
-    <p class="dim">Paste any registry ID and jump straight to it — an agent's <code>did:key:...</code>, a receipt's <code>sha256:...</code> ID, or a job's <code>job_...</code> ID.</p>
+function lookupBox(title, intro) {
+  return `
+    <h2 class="h">${title}</h2>
+    <p class="dim">${intro}</p>
     <div class="lookup-box">
       <form class="filters" id="lookup-form">
         <div class="field" style="flex:1">
           <label for="lookup-q">ID</label>
           <input id="lookup-q" name="q" type="text" placeholder="did:key:z6Mk… / sha256:… / job_…" style="width:100%">
         </div>
-        <button type="submit">Go</button>
+        <button type="submit">Check</button>
       </form>
       <p class="lookup-hint" id="lookup-hint"></p>
     </div>
-  `);
+  `;
+}
+
+function wireLookupForm() {
   const form = document.getElementById("lookup-form");
   const hint = document.getElementById("lookup-hint");
   form.addEventListener("submit", (e) => {
@@ -845,6 +869,11 @@ function renderLookup() {
     if (val.startsWith("job_")) { location.hash = `/jobs/${encodeURIComponent(val)}`; return; }
     hint.textContent = `"${val}" doesn't look like a recognized ID — expected it to start with did:key:, sha256:, or job_.`;
   });
+}
+
+function renderLookup() {
+  setApp(lookupBox("Look up an ID", "Paste any registry ID and jump straight to it — an agent's <code>did:key:...</code>, a receipt's <code>sha256:...</code> ID, or a job's <code>job_...</code> ID."));
+  wireLookupForm();
 }
 
 // ==================== routing ====================
