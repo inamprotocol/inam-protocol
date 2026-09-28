@@ -29,7 +29,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { InamClient, generateKeypair, keypairFromPrivateKey, fromHex, sha256Hex, type Keypair } from "inamprotocol";
+import { InamClient, generateKeypair, keypairFromPrivateKey, fromHex, type Keypair } from "inamprotocol";
+import { readTools, ok, fail } from "./readTools.js";
 
 const INAM_URL = process.env.INAM_URL ?? "https://api.inamprotocol.org";
 
@@ -49,70 +50,11 @@ if (rawKey) {
 }
 
 const inam = new InamClient(INAM_URL, keypair);
-const server = new McpServer({ name: "inam-mcp", version: "0.4.0" });
+const server = new McpServer({ name: "inam-mcp", version: "0.5.0" });
 
-const ok = (data: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] });
-const fail = (err: unknown) => ({
-  isError: true,
-  content: [{ type: "text" as const, text: `INAM error: ${(err as Error).message}` }],
-});
+// --- read tools (always available; shared with the hosted endpoint) --------
 
-// --- read tools (always available) -----------------------------------------
-
-server.tool(
-  "inam_check_reputation",
-  "Look up an agent's INAM reputation (trust score, finalized-receipt count, success rate, dispute flags) before deciding whether to trust or transact with it. Takes a did:key agent id. " +
-    "Do not decide on trustScore alone: check evidenceLevel first. 'countersigned' means only the two parties vouched for the work; " +
-    "'independently_verified' (components.attestedReceipts > 0) means an operator-authorized verifier checked it. Treat any 'attestation_rejected' flag as a strong negative.",
-  { agentId: z.string().describe("did:key:... id of the agent to check") },
-  async ({ agentId }) => {
-    try {
-      return ok(await inam.getReputation(agentId));
-    } catch (err) {
-      return fail(err);
-    }
-  },
-);
-
-server.tool(
-  "inam_search_agents",
-  "Find INAM-registered agents by declared capability and/or minimum reputation. Use this to discover a counterparty for a task and see how trusted they are.",
-  {
-    capability: z.string().optional().describe("e.g. 'translation.tr-en', 'code-review'"),
-    minReputation: z.number().optional().describe("only return agents with at least this trust score"),
-  },
-  async ({ capability, minReputation }) => {
-    try {
-      return ok(await inam.searchAgents({ capability, minReputation }));
-    } catch (err) {
-      return fail(err);
-    }
-  },
-);
-
-server.tool(
-  "inam_hash_content",
-  "Compute the 'sha256:<64 hex>' content hash INAM requires for specHash/outputHash. Pass the exact spec or output text; anyone holding that text can recompute and check the hash.",
-  { content: z.string().describe("the exact spec or output text to hash") },
-  async ({ content }) => ok({ hash: `sha256:${sha256Hex(content)}` }),
-);
-
-server.tool(
-  "inam_get_receipt",
-  "Fetch a single execution receipt by id and its verification records. Use this to check a specific claim — 'agent X says it did job Y' — against the signed, countersigned record.",
-  { receiptId: z.string().describe("sha256:... receipt id") },
-  async ({ receiptId }) => {
-    try {
-      const [receipt, verifications] = await Promise.all([
-        inam.getReceipt(receiptId),
-        inam.listReceiptVerifications(receiptId).catch(() => ({ verifications: [] })),
-      ]);
-      return ok({ receipt, ...verifications });
-    } catch (err) {
-      return fail(err);
-    }
-  },
-);
+for (const t of readTools(inam)) server.tool(t.name, t.description, t.shape, t.handler);
 
 server.tool(
   "inam_whoami",

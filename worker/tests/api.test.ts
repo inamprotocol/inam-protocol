@@ -2521,3 +2521,65 @@ describe("transparency log (audit round-2 item 6, RFC 6962 Merkle log)", () => {
     expect((badTree.json as { error: { code: string } }).error.code).toBe("INVALID_TREE_SIZE");
   });
 });
+
+describe("hosted MCP endpoint (POST /mcp)", () => {
+  async function mcp(method: string, params: Record<string, unknown> = {}, ip = crypto.randomUUID()) {
+    const request = new Request("http://worker.test/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "cf-connecting-ip": ip },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    return { status: response.status, json: (await response.json()) as { result?: any; error?: unknown } };
+  }
+  const callTool = (name: string, args: Record<string, unknown>, ip?: string) => mcp("tools/call", { name, arguments: args }, ip);
+
+  it("initializes as inam-mcp", async () => {
+    const res = await mcp("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
+    expect(res.status).toBe(200);
+    expect(res.json.result.serverInfo.name).toBe("inam-mcp");
+  });
+
+  it("lists only the read tools -- no tool that would need the caller's private key", async () => {
+    const res = await mcp("tools/list");
+    const names = (res.json.result.tools as { name: string }[]).map((t) => t.name).sort();
+    expect(names).toEqual(["inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents"]);
+  });
+
+  it("returns the same reputation as the REST route", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["mcp.test"] } });
+    const rest = await call("GET", `/v1/agents/${encodeURIComponent(agent.did)}/reputation`);
+    const res = await callTool("inam_check_reputation", { agentId: agent.did });
+    expect(res.json.result.isError).toBeUndefined();
+    expect(JSON.parse(res.json.result.content[0].text)).toEqual(rest.json);
+  });
+
+  it("reports a registry error as a tool error, not a transport failure", async () => {
+    const res = await callTool("inam_get_receipt", { receiptId: "sha256:" + "0".repeat(64) });
+    expect(res.status).toBe(200);
+    expect(res.json.result.isError).toBe(true);
+    expect(res.json.result.content[0].text).toContain("404");
+  });
+
+  it("hashes content exactly like the SDK", async () => {
+    const res = await callTool("inam_hash_content", { content: "héllo wörld" });
+    expect(JSON.parse(res.json.result.content[0].text)).toEqual({ hash: `sha256:${sha256Hex("héllo wörld")}` });
+  });
+
+  it("applies the per-IP read rate limit to the MCP caller, not to the Worker itself", async () => {
+    const ip = crypto.randomUUID();
+    const agent = generateKeypair().did;
+    let limited = false;
+    for (let i = 0; i < 130 && !limited; i++) {
+      const res = await callTool("inam_check_reputation", { agentId: agent }, ip);
+      limited = res.json.result.isError && res.json.result.content[0].text.includes("429");
+    }
+    expect(limited).toBe(true);
+    // A different caller is unaffected.
+    const other = await callTool("inam_check_reputation", { agentId: agent });
+    expect(other.json.result.content[0].text).not.toContain("429");
+  });
+});

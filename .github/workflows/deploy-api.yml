@@ -33,6 +33,11 @@ jobs:
         working-directory: sdk-js
         run: npm ci
 
+      # The hosted /mcp endpoint bundles mcp/src/readTools.ts.
+      - name: Install mcp dependencies
+        working-directory: mcp
+        run: npm ci
+
       - name: Install worker dependencies
         working-directory: worker
         run: npm ci

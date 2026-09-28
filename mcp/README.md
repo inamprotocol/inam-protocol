@@ -12,7 +12,22 @@ You don't rewrite your agent for INAM — you add a few tool calls to what it al
 
 ## Use it
 
-Add to your Claude Desktop / Cursor MCP config:
+**No install (read-only):** connect any MCP client that supports Streamable HTTP to the hosted endpoint:
+
+```
+https://api.inamprotocol.org/mcp
+```
+
+```
+claude mcp add --transport http inam https://api.inamprotocol.org/mcp
+```
+
+It serves the same read tools as the package (`inam_check_reputation`, `inam_search_agents`,
+`inam_get_receipt`, `inam_hash_content`). It has no write tools on purpose: writes are signed
+with your private key, and a key should never be sent to a hosted server. For writes, run the
+package locally:
+
+**Local (read + write):** add to your Claude Desktop / Cursor MCP config:
 
 ```json
 {

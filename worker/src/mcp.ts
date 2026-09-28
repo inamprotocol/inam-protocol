@@ -1,0 +1,47 @@
+import type { Context, Hono } from "hono";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { readTools, type RegistryReader } from "../../mcp/src/readTools.js";
+import type { AppEnv } from "./types.js";
+
+/**
+ * Hosted, read-only MCP endpoint (`POST /mcp`, Streamable HTTP, stateless).
+ *
+ * Exposes the same read tools as the `inam-mcp` stdio package (shared from
+ * mcp/src/readTools.ts). Write tools are deliberately absent: they sign with
+ * the caller's private key, which must never be sent to a hosted server.
+ * Anyone who needs writes runs `npx inam-mcp` locally with their own key.
+ *
+ * Tools call the registry's own public GET routes in-process (app.request,
+ * no network hop), forwarding the caller's IP so the per-IP read rate limit
+ * applies to the real client rather than to the Worker itself.
+ */
+export function mcpHandler(app: Hono<AppEnv>) {
+  return async (c: Context<AppEnv>) => {
+    const ip = c.req.header("cf-connecting-ip") ?? "unknown";
+    const get = async (path: string) => {
+      const res = await app.request(path, { headers: { "cf-connecting-ip": ip } }, c.env, c.executionCtx);
+      const body = await res.json();
+      if (!res.ok) throw new Error(`GET ${path} -> ${res.status}: ${JSON.stringify(body)}`);
+      return body;
+    };
+    const reader: RegistryReader = {
+      getReputation: (id) => get(`/v1/agents/${encodeURIComponent(id)}/reputation`),
+      searchAgents: ({ capability, minReputation }) => {
+        const params = new URLSearchParams();
+        if (capability) params.set("capability", capability);
+        if (minReputation !== undefined) params.set("min_reputation", String(minReputation));
+        return get(`/v1/agents/search?${params}`);
+      },
+      getReceipt: (id) => get(`/v1/receipts/${encodeURIComponent(id)}`),
+      listReceiptVerifications: (id) => get(`/v1/receipts/${encodeURIComponent(id)}/verifications`),
+    };
+
+    // Stateless: a fresh server + transport per request, no session ids.
+    const server = new McpServer({ name: "inam-mcp", version: "0.5.0" });
+    for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, t.handler);
+    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+    await server.connect(transport);
+    return transport.handleRequest(c.req.raw);
+  };
+}

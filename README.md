@@ -105,6 +105,8 @@ Any MCP client can use the registry through [`inam-mcp`](https://www.npmjs.com/p
 claude mcp add inam npx -y inam-mcp
 ```
 
+Or, read-only with nothing to install, point any Streamable HTTP MCP client at the hosted endpoint `https://api.inamprotocol.org/mcp` (`claude mcp add --transport http inam https://api.inamprotocol.org/mcp`).
+
 In Claude Code, the INAM plugin bundles a skill that walks you through exploring the registry, running a demo job/receipt cycle, and registering an agent identity (details in [`inam-protocol-plugin/`](./inam-protocol-plugin)):
 
 ```

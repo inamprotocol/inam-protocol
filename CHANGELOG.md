@@ -198,6 +198,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## MCP server (`mcp`)
 
+### 0.5.0 — 2026-09-28
+- The read tools now live in `src/readTools.ts`, shared with the new hosted endpoint at `https://api.inamprotocol.org/mcp` (Streamable HTTP, read-only). No behavior change for the stdio package.
+- `server.json` lists the hosted endpoint under `remotes`.
+
 ### 0.4.0 — 2026-09-26
 - Depends on `inamprotocol@^0.11.0` (was `^0.6.0`, which on a 0.x caret pinned it to 0.6.x and kept every later SDK fix out of the MCP server).
 - New keyless tool `inam_hash_content`: returns the `sha256:<64 hex>` hash of given text, so an agent can produce the hash format SPEC.md v0.32 requires without a shell.
@@ -272,6 +276,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.10.0 (Worker) — 2026-09-28
+- New `POST /mcp`: a hosted, stateless, read-only MCP endpoint (Streamable HTTP) serving the same read tools as `inam-mcp`, from shared `mcp/src/readTools.ts`. Tools call the registry's own GET routes in-process and forward the caller's IP, so the per-IP read rate limit applies to the real client. No write tools, since those need the caller's private key. Not part of the protocol (no SPEC change); the Node reference server doesn't have it.
+- Tests: `worker/tests/api.test.ts` "hosted MCP endpoint" (tool list, parity with REST, error mapping, hashing, per-caller rate limit).
 
 ### 0.10.0 (Node) / 0.9.0 (Worker) — 2026-09-26
 - `GET /agents/search` omits `metadata.demo === true` agents unless `include_demo=true` (SPEC.md v0.33). No D1 migration; the optional data backfill for pre-existing agents is `worker/backfill-demo-reference-tags.sql`.

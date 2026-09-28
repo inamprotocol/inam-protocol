@@ -23,6 +23,7 @@
 - [inamprotocol on npm](https://www.npmjs.com/package/inamprotocol): TypeScript SDK
 - [inamprotocol on PyPI](https://pypi.org/project/inamprotocol/): Python SDK
 - [inam-mcp on npm](https://www.npmjs.com/package/inam-mcp): MCP server exposing the registry as agent tools
+- Hosted MCP endpoint (read-only, Streamable HTTP, no install): https://api.inamprotocol.org/mcp
 - Claude Code plugin: `/plugin marketplace add inamprotocol/inam-protocol`
 
 ## Optional

@@ -30,6 +30,7 @@ import {
 } from "../../sdk-js/src/core/schemas.js";
 import { parsePageParams, paginate } from "../../sdk-js/src/core/pagination.js";
 import type { AppEnv } from "./types.js";
+import { mcpHandler } from "./mcp.js";
 
 const app = new Hono<AppEnv>();
 
@@ -368,5 +369,10 @@ app.get("/v1/transparency/proof/consistency", rateLimitReadByIp, async (c) => {
   const second = rawSecond !== undefined ? parseIntParam(rawSecond, "second") : undefined;
   return c.json(await transparencyService.getConsistencyProof(c.env, first, second));
 });
+
+// ---- Hosted MCP endpoint (read-only; see mcp.ts) ----
+
+app.use("/mcp", cors({ origin: "*", exposeHeaders: ["mcp-session-id"] }));
+app.all("/mcp", mcpHandler(app));
 
 export default app;
