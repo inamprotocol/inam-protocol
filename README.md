@@ -8,6 +8,21 @@
 
 The open reputation, verification, and economic-history layer for the agent economy. INAM is not an agent communication protocol (that's MCP/A2A), not an identity or authorization replacement (that's AgentPass/AITP/Passport Alliance/DID), and not an agent runtime — it's the neutral record of "this work actually happened between these two agents, and here's their evidence-based track record." Full specification: [`SPEC.md`](./SPEC.md), also readable at **[docs.inamprotocol.org](https://docs.inamprotocol.org)** alongside an interactive API reference generated from `openapi.yaml` (source in [`docs-site/`](./docs-site)).
 
+## Why this exists
+
+A 2026 empirical study of ERC-8004, the Ethereum agent-reputation standard ([arXiv 2606.26028](https://arxiv.org/abs/2606.26028)), found that 95–100% of its feedback was tied to no task and no payment, and that 59–91% of reviewers showed coordinated Sybil behavior. Its conclusion was that the registry "cannot function as a reliable trust signal." Anyone can post a score, so scores mean little.
+
+INAM has no free-standing score to post. Every trust signal is built from evidence:
+
+1. **Two-party signed receipts.** An agent's reputation comes only from Execution Receipts that *both* parties signed, each naming a job, a spec hash, and an output hash. The receipt ID is the hash of its content, so it can't be edited afterward.
+2. **Sybil-discounted scoring.** Counterparties are weighted by their own trust, repeat pairs count sub-linearly, and old history decays. Throwaway identities vouching for each other don't move the score.
+3. **Operator-authorized verifiers.** Independent attestations count only from verifiers the registry operator explicitly granted (no self-service). A `rejected` verdict scores as a failure. Every reputation reports its `evidenceLevel`: `none`, `countersigned`, or `independently_verified`. The maintainers run a [live integrity verifier](./scripts/integrity-verifier.ts) against the public registry every hour.
+4. **Tamper-evident history.** Every finalized receipt is appended to an RFC 6962-style Merkle transparency log. An [external monitor](./scripts/sth-monitor.ts) checks each new tree head for consistency every hour, and its history is public on the [`monitor-state`](https://github.com/inamprotocol/inam-protocol/tree/monitor-state) branch.
+
+INAM composes with ERC-8004 rather than competing with it at the identity layer: an ERC-8004 identity can be linked to an INAM ID with a standard wallet signature (SPEC [§11.1](./SPEC.md#111-inam-and-erc-8004)).
+
+## This repository
+
 This directory is the Node/TypeScript reference implementation: Express registry server, `did:key` identity, sybil-resistant reputation engine, and the `InamClient` SDK. The SDK itself is published standalone as [`inamprotocol`](https://www.npmjs.com/package/inamprotocol) (source in [`sdk-js/`](./sdk-js) — the exact code this server and the Worker deployment import, not a separate build). A parity Python SDK is published as [`inamprotocol`](https://pypi.org/project/inamprotocol/) on PyPI (source in [`sdk-python/`](./sdk-python)). Node 22 — zero native dependencies (pure-JS crypto and the built-in `node:sqlite` store), so `npm install` never needs a C++ toolchain.
 
 ## Run it
@@ -124,9 +139,9 @@ GET  /agents/:id/reputation
 GET  /agents/:id/badge.svg        embeddable shields.io-style trust-score badge (unsigned, public)
 GET  /agents/:id/badge.json       same badge data as JSON, for a custom renderer
 GET  /agents/:id/receipts
-GET  /agents/search?capability=&min_reputation=&supports=&include_revoked=
+GET  /agents/search?capability=&min_reputation=&supports=&include_revoked=&include_demo=&limit=&offset=
 POST /agents/:id/link/challenge   request a proof-of-control challenge (signed)
-POST /agents/:id/link            (signed; agentpass_id/aitp_id/passport_id require a completed challenge)
+POST /agents/:id/link            (signed; agentpass_id/aitp_id/passport_id/erc8004_id require a completed challenge)
 POST /agents/:id/revoke          one-way retire this INAM ID (signed, self)
 POST /agents/:id/verifier-status grant/revoke verifier authorization (signed, operator only)
 
@@ -147,6 +162,11 @@ POST /receipts/:id/dispute/resolve  the opener withdraws it: disputed -> finaliz
 
 POST /verifications                independent attestation of a finalized receipt (signed)
 GET  /verifications/:id
+
+GET  /transparency/sth             current Merkle tree size + root hash
+GET  /transparency/entries?limit=&offset=
+GET  /transparency/proof/inclusion?leafIndex=&treeSize=
+GET  /transparency/proof/consistency?first=&second=
 ```
 
 `(signed)` = requires `inam-agent` / `inam-timestamp` / `inam-signature` headers and an `Idempotency-Key` header.
@@ -163,11 +183,11 @@ Read-only, unsigned, and open to any origin — no INAM account or API key neede
 
 This is a reference implementation, not a production deployment. Every simplification below is a known, documented gap, not an oversight:
 
-- **Storage**: a JSON file behind an in-memory `Map` (`src/storage/jsonStore.ts`), single-process only. Swap point: implement the same `get/set/all` interface against Postgres/SQLite; nothing above that layer changes.
-- **Request signing**: a simplified scheme inspired by RFC 9421 / Web Bot Auth, not the full structured-field spec. Fine for this reference server; a production one should adopt a compliant library once one matures for Node.
+- **Storage**: SQLite via the built-in `node:sqlite` (`src/storage/db.ts`), single-process. The live deployment uses Cloudflare D1. A multi-instance self-host would need a shared database behind the same queries.
+- **Request signing**: a simplified scheme inspired by RFC 9421 / Web Bot Auth, bound to the target host (v2, SPEC §7), not the full structured-field spec. Fine for this reference server; a production one should adopt a compliant library once one matures for Node.
 - **External identity linking** (`POST /agents/:id/link`): `agentpass_id`/`aitp_id`/`passport_id` now require a signed challenge proving control of the claimed external key (SPEC.md §2.1; wire format aligned with ATTP, the protocol AgentPass is built on) before the registry stores the link — no longer a bare self-signed claim. What it does **not** yet do: call out to AgentPass/AITP/Passport Alliance's own registries to confirm that key is still the one each system currently recognizes as authoritative (a rotated or revoked external key wouldn't be caught) — that live cross-registry resolution is the next real increment.
 - **Reputation math**: a single-pass weighted score using each counterparty's independently-computed `baseTrust` as a one-step relaxation, not a full iterative EigenTrust fixed-point solve over the whole interaction graph. The concentrated-counterparty check is a threshold heuristic, not real graph clustering (Leiden/Louvain). Both are the documented seed of the fuller sybil-resistance design; they need real transaction volume to be worth the extra complexity.
-- **Verification method**: `payer_confirmation` is a party's own claim, unenforced beyond the request signature. `independent_validator`/`test_suite_pass` now have a real backing mechanism — the Verification resource (SPEC.md §12: `POST /verifications`, a single independent verifier's signed attestation, `provider != verifier` enforced) — but it's deliberately narrow (one verifier, no multi-verifier consensus, no human/external-registry attestation methods, no verifier-side reputation yet; see SPEC.md §12.7 for the full explicitly-deferred v0.2 backlog).
+- **Verification method**: `payer_confirmation` is a party's own claim, unenforced beyond the request signature. `independent_validator`/`test_suite_pass` now have a real backing mechanism — the Verification resource (SPEC.md §12: `POST /verifications`, a single independent verifier's signed attestation, `provider != verifier` enforced) — The one verifier running live today (`scripts/integrity-verifier.ts`) checks output *integrity* (the bytes at `outputUri` hash to `outputHash`), not correctness. The design is deliberately narrow (one verifier, no multi-verifier consensus, no human/external-registry attestation methods, no verifier-side reputation yet; see SPEC.md §12.7 for the full explicitly-deferred v0.2 backlog).
 - **Stake**: `stakeUsd` exists in the data model and feeds the reputation formula, but there's no endpoint to actually post or slash a stake — that arrives with the payments phase (x402/AP2 bridge), intentionally out of scope here.
 - **Idempotency cache**: in-memory, resets on restart, not shared across instances.
 

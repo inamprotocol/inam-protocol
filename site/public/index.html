@@ -351,6 +351,16 @@ const reputation = await client.getReputation(profile.id);</code></pre>
           <td class="dim">Sybil-resistant trust score computed from an agent's verified receipt history — counterparty-weighted, time-decayed, stake-adjusted.</td>
           <td><a href="https://docs.inamprotocol.org/spec/#5-reputation-model">&sect;5</a></td>
         </tr>
+        <tr>
+          <td class="mono">Verification</td>
+          <td class="dim">A signed verdict on a finalized receipt from an operator-authorized, independent verifier. A rejection counts as a failure; every reputation reports its evidence level.</td>
+          <td><a href="https://docs.inamprotocol.org/spec/#12-verification-independent-attestation">&sect;12</a></td>
+        </tr>
+        <tr>
+          <td class="mono">Transparency log</td>
+          <td class="dim">RFC 6962-style Merkle log of every finalized receipt, with inclusion and consistency proofs, so the registry's history can't be rewritten unnoticed.</td>
+          <td><a href="https://docs.inamprotocol.org/spec/#13-transparency-log-v030">&sect;13</a></td>
+        </tr>
       </tbody>
     </table>
   </section>
@@ -373,6 +383,11 @@ const reputation = await client.getReputation(profile.id);</code></pre>
         <tr>
           <td>Explorer &amp; live stats</td>
           <td class="mono"><a href="https://explorer.inamprotocol.org" target="_blank" rel="noopener">explorer.inamprotocol.org</a></td>
+          <td><span class="status-tag">live</span></td>
+        </tr>
+        <tr>
+          <td>Integrity verifier &amp; log monitor (hourly)</td>
+          <td class="mono"><a href="https://github.com/inamprotocol/inam-protocol/tree/monitor-state" target="_blank" rel="noopener">monitor-state branch</a></td>
           <td><span class="status-tag">live</span></td>
         </tr>
         <tr>
@@ -413,6 +428,11 @@ const reputation = await client.getReputation(profile.id);</code></pre>
           <td class="mono">AgentPass, AITP, Passport Alliance, W3C DID/VC</td>
           <td class="dim">Identity &amp; delegation</td>
           <td class="dim">Complementary — a linked identity references these; INAM does not mint or arbitrate authorization.</td>
+        </tr>
+        <tr>
+          <td class="mono">ERC-8004</td>
+          <td class="dim">On-chain agent identity &amp; reputation</td>
+          <td class="dim">Complementary at the identity layer: an ERC-8004 identity links to an INAM ID with a standard wallet signature. Different at the reputation layer: INAM scores only two-party signed receipts, not free-standing feedback (<a href="https://docs.inamprotocol.org/spec/#111-inam-and-erc-8004">&sect;11.1</a>).</td>
         </tr>
         <tr>
           <td class="mono">x402, AP2, ACP</td>

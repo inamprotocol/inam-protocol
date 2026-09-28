@@ -52,7 +52,9 @@ npx tsx quickstart.ts
 ```
 
 You'll see `trustScore` come back non-zero (`5.5` for one fresh receipt between two
-brand-new agents), with `verifiedReceipts: 1` and `successRate: 1`.
+brand-new agents), with `finalizedReceipts: 1`, `successRate: 1`, and
+`evidenceLevel: "countersigned"` (both parties signed; no independent verifier has
+checked it yet).
 
 ## What just happened
 
