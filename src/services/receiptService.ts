@@ -127,7 +127,7 @@ export function countersign(receiptId: string, callerDid: string, signature: str
   };
   receipts.set(receiptId, finalized);
   jobService.markCompletedByReceipt(finalized.jobId, receiptId);
-  transparencyService.appendEntry("receipt_finalized", receiptId, finalized);
+  transparencyService.appendEntry("receipt_finalized", receiptId, finalized, finalized.visibility !== "participants_only");
   return finalized;
 }
 
@@ -164,7 +164,7 @@ export function openDispute(receiptId: string, callerDid: string, reason: string
     dispute: { ...receipt.dispute, status: "open", reason, openedBy: callerDid, resolutionDeadline },
   };
   receipts.set(receiptId, disputed);
-  transparencyService.appendEntry("dispute_opened", receiptId, disputed.dispute);
+  transparencyService.appendEntry("dispute_opened", receiptId, disputed.dispute, disputed.visibility !== "participants_only");
   return disputed;
 }
 
@@ -197,6 +197,6 @@ export function resolveDispute(receiptId: string, callerDid: string, note?: stri
     },
   };
   receipts.set(receiptId, resolved);
-  transparencyService.appendEntry("dispute_resolved", receiptId, resolved.dispute);
+  transparencyService.appendEntry("dispute_resolved", receiptId, resolved.dispute, resolved.visibility !== "participants_only");
   return resolved;
 }

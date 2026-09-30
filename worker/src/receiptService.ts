@@ -120,7 +120,7 @@ export async function countersign(env: Env, receiptId: string, callerDid: string
     throw conflict("NOT_DRAFT", "Receipt was concurrently modified and is no longer in draft state");
   }
   await jobService.markCompletedByReceipt(env, finalized.jobId, receiptId);
-  await transparencyService.appendEntry(env, "receipt_finalized", receiptId, finalized);
+  await transparencyService.appendEntry(env, "receipt_finalized", receiptId, finalized, finalized.visibility !== "participants_only");
   return finalized;
 }
 
@@ -157,7 +157,7 @@ export async function openDispute(env: Env, receiptId: string, callerDid: string
   if (!applied) {
     throw conflict("NOT_FINALIZED", "Receipt was concurrently modified and is no longer finalized");
   }
-  await transparencyService.appendEntry(env, "dispute_opened", receiptId, disputed.dispute);
+  await transparencyService.appendEntry(env, "dispute_opened", receiptId, disputed.dispute, disputed.visibility !== "participants_only");
   return disputed;
 }
 
@@ -190,6 +190,6 @@ export async function resolveDispute(env: Env, receiptId: string, callerDid: str
   if (!applied) {
     throw conflict("NOT_DISPUTED", "Receipt was concurrently modified and is no longer disputed");
   }
-  await transparencyService.appendEntry(env, "dispute_resolved", receiptId, resolved.dispute);
+  await transparencyService.appendEntry(env, "dispute_resolved", receiptId, resolved.dispute, resolved.visibility !== "participants_only");
   return resolved;
 }

@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, appendFileSync } from "node:fs";
 import { InamClient, generateKeypair } from "../sdk-js/src/index.js";
 import { leafHash, verifyConsistency, verifyInclusion } from "../sdk-js/src/core/merkleLog.js";
+import { payloadHash } from "../sdk-js/src/core/transparencyLog.js";
 
 /** External monitor for the transparency log (SPEC.md §13, v0.33).
  *
@@ -56,6 +57,8 @@ for (let offset = prev?.treeSize ?? 0; offset < cur.treeSize; ) {
   for (const e of entries) {
     if (e.leafIndex >= cur.treeSize) break;
     if (leafHash(new TextEncoder().encode(e.data)) !== e.leafHash) fail(`entry ${e.leafIndex}: data does not hash to its leafHash`);
+    // v0.34: a published payload must match the hash its entry commits to (a withheld one is null).
+    if (e.payload != null && payloadHash(e.payload) !== JSON.parse(e.data).dataHash) fail(`entry ${e.leafIndex}: payload does not match its dataHash`);
     const inc = await client.getInclusionProof(e.leafIndex, cur.treeSize);
     if (!verifyInclusion(e.leafHash, e.leafIndex, cur.treeSize, inc.proof, cur.rootHash)) fail(`entry ${e.leafIndex}: not included in root ${cur.rootHash}`);
   }

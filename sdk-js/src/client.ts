@@ -343,7 +343,7 @@ export class InamClient {
   getTransparencyEntries(query?: {
     limit?: number;
     offset?: number;
-  }): Promise<{ entries: { leafIndex: number; entryType: string; refId: string; createdAt: string; data: string; leafHash: string }[]; hasMore: boolean }> {
+  }): Promise<{ entries: { leafIndex: number; entryType: string; refId: string; createdAt: string; data: string; leafHash: string; payload: string | null }[]; hasMore: boolean }> {
     const params = new URLSearchParams();
     if (query?.limit !== undefined) params.set("limit", String(query.limit));
     if (query?.offset !== undefined) params.set("offset", String(query.offset));

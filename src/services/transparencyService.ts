@@ -3,10 +3,10 @@ import { buildLogEntry, type TransparencyEntryType } from "../../sdk-js/src/core
 import { rootHash, inclusionProof, consistencyProof } from "../../sdk-js/src/core/merkleLog.js";
 import { badRequest } from "../middleware/errors.js";
 
-export function appendEntry(entryType: TransparencyEntryType, refId: string, data: unknown): void {
+export function appendEntry(entryType: TransparencyEntryType, refId: string, data: unknown, publish = true): void {
   const timestamp = new Date().toISOString();
-  const { canonicalEntry, leafHash } = buildLogEntry({ entryType, refId, timestamp, data });
-  transparencyLog.append(entryType, refId, timestamp, canonicalEntry, leafHash);
+  const { canonicalEntry, leafHash, payload } = buildLogEntry({ entryType, refId, timestamp, data });
+  transparencyLog.append(entryType, refId, timestamp, canonicalEntry, leafHash, publish ? payload : null);
 }
 
 export interface SignedTreeHead {

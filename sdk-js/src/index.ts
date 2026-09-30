@@ -42,7 +42,7 @@ export { computeVerificationId, buildSignableVerificationContent, type Verificat
 // proof returned by InamClient's transparency methods itself, without
 // trusting the registry's own arithmetic.
 export { verifyInclusion, verifyConsistency } from "./core/merkleLog.js";
-export { type TransparencyEntryType } from "./core/transparencyLog.js";
+export { type TransparencyEntryType, payloadHash } from "./core/transparencyLog.js";
 export { type AttestationVerdict, type EvidenceLevel } from "./core/attestation.js";
 
 // Request-body validation schemas — shared by the Node reference server and

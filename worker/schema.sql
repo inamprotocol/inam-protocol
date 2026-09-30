@@ -140,5 +140,6 @@ CREATE TABLE IF NOT EXISTS transparency_log (
   ref_id TEXT NOT NULL,
   created_at TEXT NOT NULL,
   data TEXT NOT NULL,       -- canonical entry JSON that leaf_hash was computed over
-  leaf_hash TEXT NOT NULL
+  leaf_hash TEXT NOT NULL,
+  payload TEXT              -- v0.34: payload the entry's dataHash commits to; NULL = withheld or erased
 );

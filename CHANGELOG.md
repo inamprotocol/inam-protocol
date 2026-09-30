@@ -4,6 +4,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.34 (Draft) — 2026-09-30
+- **Transparency-log leaves commit to payloads by hash (§13.1, §13.3).** Each entry is now `{ entryType, refId, timestamp, dataHash }`. The payload is stored beside the leaf in a nullable column and served as `payload` on `GET /transparency/entries`. Fixes two problems from a data-protection review: `participants_only` receipts were fully readable through the log, and free text (dispute reasons, notes) sat in permanent leaves where it could never be erased. Payloads are now withheld for `participants_only` receipts and erasable by the operator, and every proof stays valid. Pre-v0.34 leaves are unchanged.
+- Dispute `reason` is capped at 500 characters, like the other free-text fields.
+
 ### v0.33 (Draft) — 2026-09-26
 - **Demo agents out of discovery (§2, §6).** New reserved metadata keys: `demo: true` hides an agent from `GET /agents/search` unless `include_demo=true`; `reference: true` labels maintainer-seeded agents. Self-declared, display/discovery only. Nothing else about the agent changes.
 - **Maintainers' integrity verifier (§12.8).** `scripts/integrity-verifier.ts`, hourly from GitHub Actions under its own operator-granted key: `rejected` when the bytes at `outputUri` don't hash to `outputHash`, `verified` on a match (`full` mode) or nothing (`reject-only`). Integrity only, not correctness, and its profile says so. Capability-specific correctness checks are a planned follow-up.
@@ -187,6 +191,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.12.0 — 2026-09-30
+- `getTransparencyEntries()` entries include `payload` (SPEC.md v0.34). New export `payloadHash(canonicalPayload)`: check that a payload matches its entry's `dataHash`.
+
 ### 0.11.0 — 2026-09-26
 - `searchAgents({ includeDemo })` (SPEC.md v0.33). Demo agents are omitted by default.
 - Sends `user-agent: inamprotocol-js-sdk`, matching the Python SDK. A non-JSON response (e.g. an edge bot-challenge page) now throws a clear `expected JSON, got ...` error instead of a `JSON.parse` `SyntaxError`.
@@ -276,6 +283,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.11.0 (Node) / 0.11.0 (Worker) — 2026-09-30
+- SPEC.md v0.34 transparency-log payload commitments. **Worker deploy needs `worker/migration-add-log-payload.sql` run first.** Node adds the column on startup. `scripts/sth-monitor.ts` also checks each published payload against its `dataHash`.
+- Tests: payload commitment, free text kept out of leaves, `participants_only` payload withheld (`tests/transparencyFlow.test.ts`, `worker/tests/api.test.ts`).
 
 ### 0.10.0 (Worker) — 2026-09-28
 - New `POST /mcp`: a hosted, stateless, read-only MCP endpoint (Streamable HTTP) serving the same read tools as `inam-mcp`, from shared `mcp/src/readTools.ts`. Tools call the registry's own GET routes in-process and forward the caller's IP, so the per-IP read rate limit applies to the real client. No write tools, since those need the caller's private key. Not part of the protocol (no SPEC change); the Node reference server doesn't have it.

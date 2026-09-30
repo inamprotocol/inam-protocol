@@ -109,7 +109,7 @@ export const draftReceiptSchema = z.object({
 
 export const countersignSchema = z.object({ signature: z.string().min(1) });
 
-export const disputeSchema = z.object({ reason: z.string().min(1) });
+export const disputeSchema = z.object({ reason: z.string().min(1).max(500) });
 
 export const resolveDisputeSchema = z.object({ note: z.string().max(500).optional() });
 

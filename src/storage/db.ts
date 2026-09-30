@@ -60,9 +60,16 @@ conn.exec(`
     ref_id TEXT NOT NULL,
     created_at TEXT NOT NULL,
     data TEXT NOT NULL,
-    leaf_hash TEXT NOT NULL
+    leaf_hash TEXT NOT NULL,
+    payload TEXT
   );
 `);
+
+// SPEC v0.34: payload column for databases created before it existed.
+// Idempotent; the Worker's D1 equivalent is worker/migration-add-log-payload.sql.
+if (!(conn.prepare("PRAGMA table_info(transparency_log)").all() as Array<{ name: string }>).some((c) => c.name === "payload")) {
+  conn.exec("ALTER TABLE transparency_log ADD COLUMN payload TEXT");
+}
 
 // SPEC v0.31: drafts used to store dispute.windowClosesAt as "" instead of
 // null. Idempotent, so it runs on every start and upgrades older databases
@@ -222,8 +229,9 @@ export interface TransparencyLogEntry {
   entryType: string;
   refId: string;
   createdAt: string;
-  data: string;
+  data: string; // the canonical entry bytes leafHash is computed over
   leafHash: string;
+  payload: string | null; // v0.34: canonical payload the entry's dataHash commits to; null if withheld/erased or a pre-v0.34 entry
 }
 
 /** Append-only by construction: no `set`/update method exists, only
@@ -232,13 +240,13 @@ export interface TransparencyLogEntry {
  *  always the next contiguous 0-based index — single-process reference
  *  implementation, no concurrent-writer race to guard against here. */
 class TransparencyLogRepo {
-  append(entryType: string, refId: string, createdAt: string, data: string, leafHash: string): number {
+  append(entryType: string, refId: string, createdAt: string, data: string, leafHash: string, payload: string | null): number {
     conn.exec("BEGIN");
     try {
       const { n } = conn.prepare("SELECT COUNT(*) AS n FROM transparency_log").get() as { n: number };
       conn
-        .prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash) VALUES (?, ?, ?, ?, ?, ?)")
-        .run(n, entryType, refId, createdAt, data, leafHash);
+        .prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .run(n, entryType, refId, createdAt, data, leafHash, payload);
       conn.exec("COMMIT");
       return n;
     } catch (err) {
@@ -261,9 +269,9 @@ class TransparencyLogRepo {
 
   entries(limit: number, offset: number): TransparencyLogEntry[] {
     const rows = conn
-      .prepare("SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?")
-      .all(limit, offset) as Array<{ leaf_index: number; entry_type: string; ref_id: string; created_at: string; data: string; leaf_hash: string }>;
-    return rows.map((r) => ({ leafIndex: r.leaf_index, entryType: r.entry_type, refId: r.ref_id, createdAt: r.created_at, data: r.data, leafHash: r.leaf_hash }));
+      .prepare("SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?")
+      .all(limit, offset) as Array<{ leaf_index: number; entry_type: string; ref_id: string; created_at: string; data: string; leaf_hash: string; payload: string | null }>;
+    return rows.map((r) => ({ leafIndex: r.leaf_index, entryType: r.entry_type, refId: r.ref_id, createdAt: r.created_at, data: r.data, leafHash: r.leaf_hash, payload: r.payload }));
   }
 }
 

@@ -4,10 +4,10 @@ import { rootHash, inclusionProof, consistencyProof } from "../../sdk-js/src/cor
 import { badRequest } from "./errors.js";
 import type { Env } from "./types.js";
 
-export async function appendEntry(env: Env, entryType: TransparencyEntryType, refId: string, data: unknown): Promise<void> {
+export async function appendEntry(env: Env, entryType: TransparencyEntryType, refId: string, data: unknown, publish = true): Promise<void> {
   const timestamp = new Date().toISOString();
-  const { canonicalEntry, leafHash } = buildLogEntry({ entryType, refId, timestamp, data });
-  await db.appendTransparencyLog(env, entryType, refId, timestamp, canonicalEntry, leafHash);
+  const { canonicalEntry, leafHash, payload } = buildLogEntry({ entryType, refId, timestamp, data });
+  await db.appendTransparencyLog(env, entryType, refId, timestamp, canonicalEntry, leafHash, publish ? payload : null);
 }
 
 export interface SignedTreeHead {

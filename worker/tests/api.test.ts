@@ -32,7 +32,7 @@ const SCHEMA_STATEMENTS = [
   "CREATE TABLE IF NOT EXISTS link_challenges (challenge_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id), protocol TEXT NOT NULL, external_public_key TEXT NOT NULL, key_type TEXT NOT NULL, challenge TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS verifications (verification_id TEXT PRIMARY KEY, receipt_id TEXT NOT NULL REFERENCES receipts(receipt_id), provider TEXT NOT NULL, verifier TEXT NOT NULL, result TEXT NOT NULL, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_verifications_receipt ON verifications(receipt_id)",
-  "CREATE TABLE IF NOT EXISTS transparency_log (leaf_index INTEGER PRIMARY KEY, entry_type TEXT NOT NULL, ref_id TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL, leaf_hash TEXT NOT NULL)",
+  "CREATE TABLE IF NOT EXISTS transparency_log (leaf_index INTEGER PRIMARY KEY, entry_type TEXT NOT NULL, ref_id TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL, leaf_hash TEXT NOT NULL, payload TEXT)",
 ];
 
 beforeAll(async () => {
@@ -2450,6 +2450,7 @@ describe("host-binding signing string (v1/v2)", () => {
 describe("transparency log (audit round-2 item 6, RFC 6962 Merkle log)", () => {
   it("appends one leaf per receipt lifecycle event, all independently verifiable via the proof endpoints", async () => {
     const { verifyInclusion, verifyConsistency } = await import("../../sdk-js/src/core/merkleLog.js");
+    const { payloadHash } = await import("../../sdk-js/src/core/transparencyLog.js");
     const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
     const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
 
@@ -2493,9 +2494,13 @@ describe("transparency log (audit round-2 item 6, RFC 6962 Merkle log)", () => {
     expect(after.rootHash).not.toBe(before.rootHash);
 
     const entriesRes = await call("GET", `/v1/transparency/entries?limit=10&offset=${before.treeSize}`);
-    const { entries } = entriesRes.json as { entries: { entryType: string; refId: string }[] };
+    const { entries } = entriesRes.json as { entries: { entryType: string; refId: string; data: string; payload: string | null }[] };
     expect(entries.map((e) => e.entryType)).toEqual(["receipt_finalized", "dispute_opened", "dispute_resolved"]);
     expect(entries.every((e) => e.refId === draft.receiptId)).toBe(true);
+    // v0.34: leaves commit to payloads by hash; free text lives only in the erasable payload.
+    expect(entries.every((e) => payloadHash(e.payload!) === JSON.parse(e.data).dataHash)).toBe(true);
+    expect(entries[1].data).not.toContain("output was wrong");
+    expect(entries[1].payload).toContain("output was wrong");
 
     for (let leafIndex = before.treeSize; leafIndex < after.treeSize; leafIndex++) {
       const proofRes = await call("GET", `/v1/transparency/proof/inclusion?leafIndex=${leafIndex}&treeSize=${after.treeSize}`);

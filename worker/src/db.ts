@@ -413,8 +413,9 @@ export interface TransparencyLogEntryRow {
   entryType: string;
   refId: string;
   createdAt: string;
-  data: string;
+  data: string; // the canonical entry bytes leafHash is computed over
   leafHash: string;
+  payload: string | null; // v0.34: canonical payload the entry's dataHash commits to; null if withheld/erased or a pre-v0.34 entry
 }
 
 /** Append-only: leaf_index is assigned as COUNT(*), then a plain INSERT on
@@ -428,18 +429,18 @@ export interface TransparencyLogEntryRow {
  *  lifecycle transition) this race is vanishingly rare; if it ever bites,
  *  the fix is D1's session/transaction API once broadly available, not a
  *  redesign here. */
-export async function appendTransparencyLog(env: Env, entryType: string, refId: string, createdAt: string, data: string, leafHash: string): Promise<void> {
+export async function appendTransparencyLog(env: Env, entryType: string, refId: string, createdAt: string, data: string, leafHash: string, payload: string | null): Promise<void> {
   const { count } = (await env.DB.prepare("SELECT COUNT(*) AS count FROM transparency_log").first()) as { count: number };
   try {
-    await env.DB.prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash) VALUES (?, ?, ?, ?, ?, ?)")
-      .bind(count, entryType, refId, createdAt, data, leafHash)
+    await env.DB.prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload) VALUES (?, ?, ?, ?, ?, ?, ?)")
+      .bind(count, entryType, refId, createdAt, data, leafHash, payload)
       .run();
   } catch (err) {
     if (err instanceof Error && err.message.includes(UNIQUE_VIOLATION)) {
       // Lost the race for this leaf_index -- retry once against the now-current count.
       const { count: retryCount } = (await env.DB.prepare("SELECT COUNT(*) AS count FROM transparency_log").first()) as { count: number };
-      await env.DB.prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash) VALUES (?, ?, ?, ?, ?, ?)")
-        .bind(retryCount, entryType, refId, createdAt, data, leafHash)
+      await env.DB.prepare("INSERT INTO transparency_log (leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload) VALUES (?, ?, ?, ?, ?, ?, ?)")
+        .bind(retryCount, entryType, refId, createdAt, data, leafHash, payload)
         .run();
       return;
     }
@@ -462,11 +463,11 @@ export async function transparencyLeafHashes(env: Env, upTo?: number): Promise<s
 
 export async function transparencyEntries(env: Env, limit: number, offset: number): Promise<TransparencyLogEntryRow[]> {
   const { results } = await env.DB.prepare(
-    "SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?",
+    "SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?",
   )
     .bind(limit, offset)
-    .all<{ leaf_index: number; entry_type: string; ref_id: string; created_at: string; data: string; leaf_hash: string }>();
-  return results.map((r) => ({ leafIndex: r.leaf_index, entryType: r.entry_type, refId: r.ref_id, createdAt: r.created_at, data: r.data, leafHash: r.leaf_hash }));
+    .all<{ leaf_index: number; entry_type: string; ref_id: string; created_at: string; data: string; leaf_hash: string; payload: string | null }>();
+  return results.map((r) => ({ leafIndex: r.leaf_index, entryType: r.entry_type, refId: r.ref_id, createdAt: r.created_at, data: r.data, leafHash: r.leaf_hash, payload: r.payload }));
 }
 
 function rowToOffer(row: Record<string, unknown>): JobOffer {

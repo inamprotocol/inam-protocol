@@ -783,8 +783,9 @@ paths:
                         entryType: { type: string, enum: [receipt_finalized, dispute_opened, dispute_resolved, nonperformance_reported] }
                         refId: { type: string }
                         createdAt: { type: string, format: date-time }
-                        data: { type: string, description: "Canonical JSON of the logged event" }
+                        data: { type: string, description: "Canonical JSON entry the leafHash covers. Since v0.34 it holds dataHash, not the payload" }
                         leafHash: { type: string }
+                        payload: { type: string, nullable: true, description: "Canonical JSON payload committed to by the entry's dataHash; null if withheld (participants_only receipt), erased, or a pre-v0.34 entry" }
 
   /transparency/proof/inclusion:
     get:

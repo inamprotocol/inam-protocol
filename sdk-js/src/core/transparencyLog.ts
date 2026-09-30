@@ -1,4 +1,5 @@
 import { canonicalize } from "../crypto/canonical.js";
+import { sha256Hex } from "../crypto/keys.js";
 import { leafHash } from "./merkleLog.js";
 
 /**
@@ -11,6 +12,11 @@ import { leafHash } from "./merkleLog.js";
  * merkleLog.ts's leafHash), so the same event logged by either runtime
  * produces byte-identical leaves -- the same "one source of truth across
  * runtimes" discipline as every other shared core module.
+ *
+ * v0.34: the entry commits to its payload by hash (`dataHash`) instead of
+ * embedding it. The leaf can never be deleted, but the payload is stored
+ * beside it and can be withheld (a participants_only receipt) or erased (a
+ * data-protection request) without breaking any proof.
  */
 export type TransparencyEntryType = "receipt_finalized" | "dispute_opened" | "dispute_resolved" | "nonperformance_reported";
 
@@ -21,7 +27,14 @@ export interface TransparencyEntryInput {
   data: unknown; // the relevant record snapshot at event time (e.g. the finalized receipt, or the dispute sub-object)
 }
 
-export function buildLogEntry(input: TransparencyEntryInput): { canonicalEntry: string; leafHash: string } {
-  const canonicalEntry = canonicalize(input);
-  return { canonicalEntry, leafHash: leafHash(new TextEncoder().encode(canonicalEntry)) };
+/** `sha256:<hex>` over a payload's canonical JSON, the value an entry's `dataHash` commits to. */
+export function payloadHash(canonicalPayload: string): string {
+  return `sha256:${sha256Hex(canonicalPayload)}`;
+}
+
+export function buildLogEntry(input: TransparencyEntryInput): { canonicalEntry: string; leafHash: string; payload: string } {
+  const { data, ...rest } = input;
+  const payload = canonicalize(data);
+  const canonicalEntry = canonicalize({ ...rest, dataHash: payloadHash(payload) });
+  return { canonicalEntry, leafHash: leafHash(new TextEncoder().encode(canonicalEntry)), payload };
 }

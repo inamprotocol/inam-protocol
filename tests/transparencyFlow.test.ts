@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 import { verifyInclusion, verifyConsistency } from "../sdk-js/src/core/merkleLog.js";
+import { payloadHash } from "../sdk-js/src/core/transparencyLog.js";
 import { registerAgent } from "../src/services/agentService.js";
 import { buildSignableContent, createDraft, countersign, openDispute, resolveDispute } from "../src/services/receiptService.js";
 import * as jobService from "../src/services/jobService.js";
@@ -94,6 +95,32 @@ describe("transparency log lifecycle wiring", () => {
     expect(consistency.firstRootHash).toBe(before.rootHash);
     expect(consistency.secondRootHash).toBe(after.rootHash);
     expect(verifyConsistency(before.treeSize, before.rootHash, after.treeSize, after.rootHash, consistency.proof)).toBe(true);
+  });
+
+  it("commits to payloads by hash, keeps free text out of the leaf, and withholds participants_only payloads (v0.34)", () => {
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+    const before = transparencyService.getSTH();
+
+    const pubInput = freshInput("job_tlog_payload_public");
+    const pubDraft = createDraft(worker.did, { ...pubInput, agentAId: requester.did, signature: signDraft(requester.did, worker.privateKey, worker.did, pubInput) });
+    const pub = countersign(pubDraft.receiptId, requester.did, signCountersign(pubDraft, requester.privateKey));
+    openDispute(pub.receiptId, requester.did, "contact jane.doe@example.com about this");
+
+    const privInput = { ...freshInput("job_tlog_payload_private"), visibility: "participants_only" as const };
+    const privDraft = createDraft(worker.did, { ...privInput, agentAId: requester.did, signature: signDraft(requester.did, worker.privateKey, worker.did, privInput) });
+    countersign(privDraft.receiptId, requester.did, signCountersign(privDraft, requester.privateKey));
+
+    const [finalizedEntry, disputeEntry, privateEntry] = transparencyService.getEntries(10, before.treeSize).entries;
+    for (const e of [finalizedEntry, disputeEntry]) {
+      expect(payloadHash(e.payload!)).toBe(JSON.parse(e.data).dataHash);
+    }
+    expect(disputeEntry.data).not.toContain("jane.doe");
+    expect(disputeEntry.payload).toContain("jane.doe");
+    expect(privateEntry.payload).toBeNull();
+    expect(privateEntry.data).not.toContain(privInput.result.outputHash);
   });
 
   it("rejects out-of-range leafIndex/treeSize on the proof endpoints", () => {
