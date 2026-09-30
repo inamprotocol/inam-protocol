@@ -16,6 +16,18 @@ intentional scope decisions with a documented upgrade path, not gaps
 waiting to be filled. If you're planning a change in one of those areas,
 open an issue first to check it's actually in scope before writing code.
 
+## Sign-off (DCO)
+
+Every commit must be signed off, certifying the [Developer Certificate of
+Origin](https://developercertificate.org/): that you wrote the change or
+otherwise have the right to submit it under this project's Apache-2.0
+license. Add `-s` when committing:
+
+    git commit -s -m "Describe the change"
+
+That adds a `Signed-off-by: Your Name <you@example.com>` line. Pull
+requests with unsigned commits can't be merged.
+
 ## Local setup
 
 There are three independently-runnable pieces: the root Node reference

@@ -4,7 +4,7 @@
 // package versions, while this page kept showing v0.17/0.6.9/0.3.6/0.4.4 --
 // audit #15, doc/version drift). Same fix as docs-site/scripts/build.mjs,
 // applied here since this page hardcoded its own separate copies.
-import { readFileSync, writeFileSync, mkdirSync, cpSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, cpSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -44,5 +44,11 @@ cpSync(path.join(SITE_ROOT, "public"), DIST, {
   recursive: true,
   filter: (src) => path.basename(src) !== "index.html",
 });
+
+// A leftover {{PLACEHOLDER}} (e.g. the legal pages' operator name) must never ship.
+for (const f of readdirSync(DIST).filter((n) => n.endsWith(".html"))) {
+  const left = readFileSync(path.join(DIST, f), "utf-8").match(/\{\{[A-Z_]+\}\}/);
+  if (left) throw new Error(`${f} still contains ${left[0]}`);
+}
 
 console.log(`Built site/dist — spec ${SPEC_VERSION} ${SPEC_STATUS}, registry ${REGISTRY_VERSION}, js ${JS_VERSION}, py ${PY_VERSION}`);
