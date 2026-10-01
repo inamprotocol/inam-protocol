@@ -56,3 +56,5 @@ The Python-side counterpart to `mcp-tool-wrapper.ts` for a different, very widel
 ## `x402-verify-before-pay.ts`
 
 SPEC.md §11.2 end to end, no real money: a seller links its payment wallet to its INAM ID and finishes one job, then three x402 v2 endpoints ask the buyer to pay. The buyer's `fetch` is wrapped with `withInamX402Gate`, so it pays the honest seller, refuses an endpoint that names the seller's ID but routes the money to another wallet, and refuses a newcomer with no countersigned work. Swap the stand-in `fakePay` for `@x402/fetch`'s `wrapFetchWithPayment` in real use; the gate goes inside it. Local registry only (`npm run dev`), since it writes receipts.
+
+![x402 verify-before-pay demo](https://inamprotocol.org/demo/x402-verify-before-pay.svg)

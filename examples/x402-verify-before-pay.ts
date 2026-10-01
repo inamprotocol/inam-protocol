@@ -75,7 +75,7 @@ const fakePay = (f: typeof fetch): typeof fetch => async (input, init) => {
   const res = await f(input, init);
   if (res.status !== 402) return res;
   const { accepts } = JSON.parse(Buffer.from(res.headers.get("payment-required")!, "base64").toString());
-  console.log(`   paying ${accepts[0].amount} ${accepts[0].asset} to ${accepts[0].payTo}`);
+  console.log(`   paying ${Number(accepts[0].amount) / 1e6} USDC to ${accepts[0].payTo}`); // amount is in atomic units (6 decimals)
   return f(input, { ...init, headers: { "payment-signature": "demo" } });
 };
 const paidFetch = fakePay(withInamX402Gate(fetch, buyer, { minEvidence: "countersigned" }));
