@@ -13,7 +13,7 @@ function registry(opts: { endpoint?: string; evidenceLevel?: string; revokedAt?:
     getReputation: opts.missing ? fail : async () => ({ trustScore: 30, evidenceLevel: opts.evidenceLevel ?? "countersigned" }),
   } as unknown as InamClient;
 }
-const v1Card = (url = EP, ext: object[] = [inamA2AExtension(DID)]) => ({ name: "a", supportedInterfaces: [{ url, protocolBinding: "JSONRPC" }], capabilities: { extensions: ext } });
+const v1Card = (url = EP, ext: ReturnType<typeof inamA2AExtension>[] = [inamA2AExtension(DID)]) => ({ name: "a", supportedInterfaces: [{ url, protocolBinding: "JSONRPC" }], capabilities: { extensions: ext } });
 
 describe("A2A Agent Card extension (SPEC.md §11.3)", () => {
   it("is data-only, never required", () => {
