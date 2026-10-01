@@ -8,3 +8,7 @@ Written only by `.github/workflows/registry-monitors.yml` on `main`. Not code.
   `scripts/sth-monitor.ts` yourself against a copy of this file to check the
   registry independently of us.
 - `verifier-state.json` — the integrity verifier's resume point in the log.
+- `anchors/<treeSize>.json` + `.ots` — each new tree head (the exact
+  `sth.jsonl` line), timestamped in Bitcoin via OpenTimestamps. Proofs start
+  pending and are upgraded on later runs. Check with
+  `pip install opentimestamps-client && ots verify anchors/<n>.json.ots`.
