@@ -156,8 +156,9 @@ export function listByReceipt(receiptId: string): VerificationRecord[] {
 // reputation regardless of who was at fault).
 // v0.32: returns the net verdict rather than a boolean, so a net-`rejected`
 // receipt can be scored as failed (SPEC.md §12.5) instead of merely unboosted.
-export function attestationVerdict(receiptId: string): AttestationVerdict {
-  const records = listByReceipt(receiptId).filter((v) => {
+export function attestationVerdict(receiptId: string): { verdict: AttestationVerdict; excluded: number } {
+  const all = listByReceipt(receiptId);
+  const records = all.filter((v) => {
     try {
       const agent = getAgent(v.verifier);
       // A self-revoked verifier's isAuthorizedVerifier flag is frozen at
@@ -173,5 +174,5 @@ export function attestationVerdict(receiptId: string): AttestationVerdict {
   });
   const verifiedCount = records.filter((v) => v.result === "verified").length;
   const rejectedCount = records.filter((v) => v.result === "rejected").length;
-  return netVerdict(verifiedCount, rejectedCount);
+  return { verdict: netVerdict(verifiedCount, rejectedCount), excluded: all.length - records.length };
 }

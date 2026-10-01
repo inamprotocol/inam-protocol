@@ -1,4 +1,4 @@
-import type { EvidenceLevel } from "./core/attestation.js";
+import type { EvidenceLevel, EvidenceDimensions } from "./core/attestation.js";
 /**
  * Wire-format types for the INAM Protocol REST API. This is the JS/TS SDK's
  * own copy — parity with `sdk-python/inamprotocol/types` and the registry
@@ -189,6 +189,8 @@ export interface ReputationResult {
   /** v0.32 (SPEC.md §5.3): strongest evidence behind this history — read
    * this, not `trustScore` alone, before relying on the score. */
   evidenceLevel: EvidenceLevel;
+  /** v0.35 (SPEC.md §5.3): the same evidence as separate dimensions; a registry hint (§5.4). */
+  evidence: EvidenceDimensions;
   components: ReputationComponents;
   flags: string[];
 }

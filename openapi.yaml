@@ -973,6 +973,25 @@ components:
           type: string
           enum: [none, countersigned, independently_verified]
           description: "Strongest evidence behind this history (SPEC.md §5.3, v0.32). Read this before relying on trustScore: 'countersigned' means only the two parties vouched for the work."
+        evidence:
+          type: object
+          description: "The same evidence as separate, unranked counts (SPEC.md §5.3, v0.35). Like evidenceLevel, a registry hint a relying party can re-derive (§5.4)."
+          properties:
+            source:
+              type: object
+              properties:
+                declared: { type: integer, description: "Draft receipts signed only by the provider; never counted" }
+                corroborated: { type: integer, description: "Countersigned receipts that count toward reputation" }
+                independentlyVerified: { type: integer, description: "Of those, receipts whose counted Verifications net out to verified" }
+            construction:
+              type: object
+              properties:
+                anchored: { type: integer, description: "Counted receipts with a transparency-log leaf (SPEC.md §13)" }
+            freshness:
+              type: object
+              properties:
+                evaluatedAt: { type: string, format: date-time }
+                excludedAttestations: { type: integer, description: "Verifications ignored because their verifier is no longer authorized or was revoked" }
         components:
           type: object
           properties:

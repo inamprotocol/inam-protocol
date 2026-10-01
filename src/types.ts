@@ -1,4 +1,4 @@
-import type { EvidenceLevel } from "../sdk-js/src/core/attestation.js";
+import type { EvidenceLevel, EvidenceDimensions } from "../sdk-js/src/core/attestation.js";
 export interface LinkedIdentities {
   agentpass_id?: string;
   aitp_id?: string;
@@ -183,6 +183,8 @@ export interface ReputationResult {
   /** v0.32 (SPEC.md §5.3): strongest evidence behind this history — read
    * this, not `trustScore` alone, before relying on the score. */
   evidenceLevel: EvidenceLevel;
+  /** v0.35 (SPEC.md §5.3): the same evidence as separate dimensions; a registry hint (§5.4). */
+  evidence: EvidenceDimensions;
   components: ReputationComponents;
   flags: string[];
 }

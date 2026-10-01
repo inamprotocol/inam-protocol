@@ -4,6 +4,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.35 (Draft) — 2026-10-01
+- **Evidence reported as separate dimensions (§5.3).** New top-level `evidence` on reputation responses: `source` (`declared` / `corroborated` / `independentlyVerified`), `construction` (`anchored`), and `freshness` (`evaluatedAt`, `excludedAttestations`). This follows the evidence-strength vocabulary proposed in aaif/wg-identity-and-trust#5. `evidenceLevel` is unchanged.
+- **New §5.4:** the registry's appraisal is a hint. It lists how a relying party re-derives each dimension from signed receipts, Verifications, and log inclusion proofs, and says it must never record more than it checked.
+
 ### v0.34 (Draft) — 2026-09-30
 - **Transparency-log leaves commit to payloads by hash (§13.1, §13.3).** Each entry is now `{ entryType, refId, timestamp, dataHash }`. The payload is stored beside the leaf in a nullable column and served as `payload` on `GET /transparency/entries`. Fixes two problems from a data-protection review: `participants_only` receipts were fully readable through the log, and free text (dispute reasons, notes) sat in permanent leaves where it could never be erased. Payloads are now withheld for `participants_only` receipts and erasable by the operator, and every proof stays valid. Pre-v0.34 leaves are unchanged.
 - Dispute `reason` is capped at 500 characters, like the other free-text fields.
@@ -191,6 +195,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.13.0 — 2026-10-01
+- `ReputationResult.evidence` and exported type `EvidenceDimensions` (SPEC.md v0.35).
+
 ### 0.12.0 — 2026-09-30
 - `getTransparencyEntries()` entries include `payload` (SPEC.md v0.34). New export `payloadHash(canonicalPayload)`: check that a payload matches its entry's `dataHash`.
 
@@ -283,6 +290,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.12.0 (Node) / 0.12.0 (Worker) — 2026-10-01
+- Reputation responses carry `evidence` (SPEC.md v0.35). No migration: `anchored` is read from the existing transparency log.
+- Tests: evidence dimensions, including a de-authorized verifier's attestation reported in `excludedAttestations` (`tests/verificationFlow.test.ts`, `worker/tests/api.test.ts`).
 
 ### 0.11.0 (Node) / 0.11.0 (Worker) — 2026-09-30
 - SPEC.md v0.34 transparency-log payload commitments. **Worker deploy needs `worker/migration-add-log-payload.sql` run first.** Node adds the column on startup. `scripts/sth-monitor.ts` also checks each published payload against its `dataHash`.

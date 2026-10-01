@@ -160,6 +160,7 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   }
 
   let attestedCount = 0;
+  let excludedAttestations = 0;
   let rejectedAttestationCount = 0;
   for (const r of finalized) {
     const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
@@ -181,7 +182,8 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     // only ever sees `finalized` receipts (disputed ones already excluded by
     // the filter above), so a verified attestation on a since-disputed
     // receipt never reaches here — no separate dispute check needed.
-    const verdict = await attestationVerdict(env, r.receiptId);
+    const { verdict, excluded } = await attestationVerdict(env, r.receiptId);
+    excludedAttestations += excluded;
     const isAttested = verdict === "verified";
     if (isAttested) attestedCount++;
     if (verdict === "rejected") rejectedAttestationCount++;
@@ -284,6 +286,11 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   return {
     trustScore: Math.round(trustScore * 10) / 10,
     evidenceLevel: evidenceLevel(finalized.length, attestedCount),
+    evidence: {
+      source: { declared: all.filter((r) => r.status === "draft").length, corroborated: finalized.length, independentlyVerified: attestedCount },
+      construction: { anchored: (await db.loggedRefIds(env, "receipt_finalized", finalized.map((r) => r.receiptId))).size },
+      freshness: { evaluatedAt: new Date().toISOString(), excludedAttestations },
+    },
     components: {
       eigenWeight: Math.round(confidence * 1000) / 1000,
       // v0.32: `finalizedReceipts` is the honest name; `verifiedReceipts`

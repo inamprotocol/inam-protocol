@@ -267,6 +267,14 @@ class TransparencyLogRepo {
     return rows.map((r) => r.leaf_hash);
   }
 
+  /** SPEC v0.35: which of `refIds` have a leaf of `entryType` (receipts finalized before v0.30 have none). */
+  loggedRefIds(entryType: string, refIds: string[]): Set<string> {
+    const rows = conn
+      .prepare("SELECT DISTINCT ref_id FROM transparency_log WHERE entry_type = ? AND ref_id IN (SELECT value FROM json_each(?))")
+      .all(entryType, JSON.stringify(refIds)) as Array<{ ref_id: string }>;
+    return new Set(rows.map((r) => r.ref_id));
+  }
+
   entries(limit: number, offset: number): TransparencyLogEntry[] {
     const rows = conn
       .prepare("SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?")

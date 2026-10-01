@@ -3,6 +3,7 @@ import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
 import { listNonPerformanceAgainst } from "./jobService.js";
 import { attestationVerdict } from "./verificationService.js";
+import { transparencyLog } from "../storage/db.js";
 import { evidenceLevel } from "../../sdk-js/src/core/attestation.js";
 import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
 import { isDisputeActive, type DisputeCheckable } from "../../sdk-js/src/core/disputeLifecycle.js";
@@ -178,6 +179,7 @@ export function computeReputation(agentId: string): ReputationResult {
   }
 
   let attestedCount = 0;
+  let excludedAttestations = 0;
   let rejectedAttestationCount = 0;
   for (const r of finalized) {
     const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
@@ -202,7 +204,8 @@ export function computeReputation(agentId: string): ReputationResult {
     // only ever sees `finalized` receipts (disputed ones already excluded by
     // the filter above), so a verified attestation on a since-disputed
     // receipt never reaches here — no separate dispute check needed.
-    const verdict = attestationVerdict(r.receiptId);
+    const { verdict, excluded } = attestationVerdict(r.receiptId);
+    excludedAttestations += excluded;
     const isAttested = verdict === "verified";
     if (isAttested) attestedCount++;
     if (verdict === "rejected") rejectedAttestationCount++;
@@ -309,6 +312,11 @@ export function computeReputation(agentId: string): ReputationResult {
   return {
     trustScore: Math.round(trustScore * 10) / 10,
     evidenceLevel: evidenceLevel(finalized.length, attestedCount),
+    evidence: {
+      source: { declared: all.filter((r) => r.status === "draft").length, corroborated: finalized.length, independentlyVerified: attestedCount },
+      construction: { anchored: transparencyLog.loggedRefIds("receipt_finalized", finalized.map((r) => r.receiptId)).size },
+      freshness: { evaluatedAt: new Date().toISOString(), excludedAttestations },
+    },
     components: {
       eigenWeight: Math.round(confidence * 1000) / 1000,
       // v0.32: `finalizedReceipts` is the honest name; `verifiedReceipts`

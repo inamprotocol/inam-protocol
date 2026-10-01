@@ -1660,8 +1660,18 @@ describe("independent verification (SPEC.md §12)", () => {
     });
     expect((res.json as { result: string }).result).toBe("rejected");
 
-    type Rep = { trustScore: number; evidenceLevel: string; flags: string[]; components: { attestedReceipts: number; rejectedAttestations: number; successRate: number } };
+    type Rep = {
+      trustScore: number;
+      evidenceLevel: string;
+      flags: string[];
+      components: { attestedReceipts: number; rejectedAttestations: number; successRate: number };
+      evidence: { source: { declared: number; corroborated: number; independentlyVerified: number }; construction: { anchored: number }; freshness: { excludedAttestations: number } };
+    };
     const rep = (await call("GET", `/v1/agents/${provider.did}/reputation`)).json as Rep;
+    // v0.35: the same evidence as separate dimensions (a rejection is still corroboration, just not verification).
+    expect(rep.evidence.source).toEqual({ declared: 0, corroborated: 1, independentlyVerified: 0 });
+    expect(rep.evidence.construction.anchored).toBe(1);
+    expect(rep.evidence.freshness.excludedAttestations).toBe(0);
     expect(rep.components.attestedReceipts).toBe(0);
     expect(rep.components.rejectedAttestations).toBe(1);
     expect(rep.components.successRate).toBe(0);
@@ -2559,7 +2569,9 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     const rest = await call("GET", `/v1/agents/${encodeURIComponent(agent.did)}/reputation`);
     const res = await callTool("inam_check_reputation", { agentId: agent.did });
     expect(res.json.result.isError).toBeUndefined();
-    expect(JSON.parse(res.json.result.content[0].text)).toEqual(rest.json);
+    // evaluatedAt is the moment each call computed it, so it differs between the two calls.
+    const withoutClock = (r: { evidence: { freshness: { evaluatedAt?: string } } }) => ({ ...r, evidence: { ...r.evidence, freshness: { ...r.evidence.freshness, evaluatedAt: undefined } } });
+    expect(withoutClock(JSON.parse(res.json.result.content[0].text))).toEqual(withoutClock(rest.json as never));
   });
 
   it("reports a registry error as a tool error, not a transport failure", async () => {

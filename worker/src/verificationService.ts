@@ -160,7 +160,7 @@ export async function listByReceipt(env: Env, receiptId: string): Promise<Verifi
 // operator-authorized, not just authorized at submission time, so revoking a
 // verifier stops its past `verified` records from still boosting reputation.
 // v0.32: returns the net verdict rather than a boolean — see the Node helper.
-export async function attestationVerdict(env: Env, receiptId: string): Promise<AttestationVerdict> {
+export async function attestationVerdict(env: Env, receiptId: string): Promise<{ verdict: AttestationVerdict; excluded: number }> {
   const records = await listByReceipt(env, receiptId);
   const authorizedRecords: typeof records = [];
   for (const v of records) {
@@ -180,5 +180,5 @@ export async function attestationVerdict(env: Env, receiptId: string): Promise<A
   }
   const verifiedCount = authorizedRecords.filter((v) => v.result === "verified").length;
   const rejectedCount = authorizedRecords.filter((v) => v.result === "rejected").length;
-  return netVerdict(verifiedCount, rejectedCount);
+  return { verdict: netVerdict(verifiedCount, rejectedCount), excluded: records.length - authorizedRecords.length };
 }

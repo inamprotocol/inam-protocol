@@ -461,6 +461,16 @@ export async function transparencyLeafHashes(env: Env, upTo?: number): Promise<s
   return results.map((r) => r.leaf_hash);
 }
 
+/** SPEC v0.35: which of `refIds` have a leaf of `entryType` (receipts finalized before v0.30 have none). */
+export async function loggedRefIds(env: Env, entryType: string, refIds: string[]): Promise<Set<string>> {
+  const { results } = await env.DB.prepare(
+    "SELECT DISTINCT ref_id FROM transparency_log WHERE entry_type = ? AND ref_id IN (SELECT value FROM json_each(?))",
+  )
+    .bind(entryType, JSON.stringify(refIds))
+    .all<{ ref_id: string }>();
+  return new Set(results.map((r) => r.ref_id));
+}
+
 export async function transparencyEntries(env: Env, limit: number, offset: number): Promise<TransparencyLogEntryRow[]> {
   const { results } = await env.DB.prepare(
     "SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?",

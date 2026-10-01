@@ -25,3 +25,28 @@ export function evidenceLevel(finalizedReceipts: number, attestedReceipts: numbe
   if (attestedReceipts > 0) return "independently_verified";
   return finalizedReceipts > 0 ? "countersigned" : "none";
 }
+
+/**
+ * SPEC.md §5.3 (v0.35) — the evidence behind a reputation, reported along
+ * separate dimensions instead of one ordered scale (the AAIF Identity & Trust
+ * WG's evidence-strength vocabulary). Counts, not a verdict: this is the
+ * registry's appraisal, a hint a relying party can re-derive itself (§5.4).
+ */
+export interface EvidenceDimensions {
+  /** Who asserts the work happened. */
+  source: {
+    /** Drafts signed only by the provider; never counted toward reputation. */
+    declared: number;
+    /** Countersigned by the counterparty and counted. */
+    corroborated: number;
+    /** Of those, receipts whose counted Verifications net out to verified. */
+    independentlyVerified: number;
+  };
+  /** How the record is held: counted receipts with a transparency-log leaf (§13). */
+  construction: { anchored: number };
+  freshness: {
+    evaluatedAt: string;
+    /** Verifications ignored because their verifier is no longer authorized or was revoked. */
+    excludedAttestations: number;
+  };
+}

@@ -81,6 +81,51 @@ describe("independent verification (SPEC.md §12)", () => {
     expect(after.components.finalizedReceipts).toBe(after.components.verifiedReceipts);
   });
 
+  it("reports evidence as separate source, construction and freshness dimensions (v0.35)", () => {
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(provider.did, { capabilities: ["x"] });
+    registerAgent(verifier.did, { capabilities: ["verification"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
+
+    const receipt = finalizeReceipt(requester, provider, `job_${Math.random()}`);
+    // A provider-only draft is declared evidence: reported, never counted.
+    const now = new Date().toISOString();
+    const draftInput: Omit<CreateDraftInput, "signature" | "agentAId"> = {
+      jobId: `job_${Math.random()}`,
+      task: { capability: "x", specHash: receipt.task.specHash, createdAt: now },
+      result: { outputHash: receipt.result.outputHash, completedAt: now },
+      verification: { method: "payer_confirmation", outcome: "success" },
+    };
+    const draftContent = buildSignableContent(requester.did, provider.did, draftInput);
+    createDraft(provider.did, { ...draftInput, agentAId: requester.did, signature: toBase64(sign(new TextEncoder().encode(canonicalize({ ...draftContent, dispute: undefined })), provider.privateKey)) });
+
+    const input: VerificationContentInput = {
+      receiptId: receipt.receiptId,
+      jobId: receipt.jobId,
+      provider: provider.did,
+      verifier: verifier.did,
+      method: "deterministic",
+      outputHash: receipt.result.outputHash,
+      result: "verified",
+    };
+    submitVerification(verifier.did, { ...input, signature: signVerification(verifier, input).signature });
+
+    const verified = computeReputation(provider.did).evidence;
+    expect(verified.source).toEqual({ declared: 1, corroborated: 1, independentlyVerified: 1 });
+    expect(verified.construction.anchored).toBe(1);
+    expect(verified.freshness.excludedAttestations).toBe(0);
+
+    // De-authorizing the verifier drops its attestation, and the drop is reported, not hidden.
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, false);
+    const after = computeReputation(provider.did);
+    expect(after.evidence.source.independentlyVerified).toBe(0);
+    expect(after.evidence.freshness.excludedAttestations).toBe(1);
+    expect(after.evidenceLevel).toBe("countersigned");
+  });
+
   it("rejects self-verification", async () => {
     const requester = generateKeypair();
     const provider = generateKeypair();
