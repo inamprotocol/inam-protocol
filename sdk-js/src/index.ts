@@ -85,3 +85,5 @@ export type {
   VerificationResult,
   VerificationRecord,
 } from "./types.js";
+export { INAM_X402_EXTENSION, inamX402Extension, decideX402, withInamX402Gate, X402PaymentBlocked } from "./x402.js";
+export type { X402Policy, X402Decision } from "./x402.js";

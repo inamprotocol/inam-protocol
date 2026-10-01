@@ -1,6 +1,8 @@
-# INAM Protocol — Specification v0.35 (Draft)
+# INAM Protocol — Specification v0.36 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, `node:sqlite` storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+
+**Changes from v0.35:** a payer can now check an x402 payee's INAM reputation before paying (new §11.2). The payee names its INAM ID in an `inam` extension on its x402 v2 `PaymentRequired` object, and the payer pays only `payTo` addresses that ID proved control of through an `erc8004_id` link (§2.1), and only if its evidence and score meet the payer's policy. The binding check is the point: without it, any server could name a reputable agent's ID and collect the payment itself. No server, endpoint, or wire change to INAM; `sdk-js` 0.14.0 adds `withInamX402Gate`, `decideX402`, and `inamX402Extension`. Separately, the external monitor now timestamps each new tree head in Bitcoin through OpenTimestamps (§13.4).
 
 **Changes from v0.34:** the evidence behind a reputation is now reported along separate dimensions, following the evidence-strength vocabulary under discussion in the AAIF Identity & Trust working group (aaif/wg-identity-and-trust#5). `evidenceLevel` is a single ordered scale and can't express, for example, "countersigned and logged, but the verifier that attested it has since lost its authorization". A new top-level `evidence` object (§5.3) counts receipts by source (`declared`, `corroborated`, `independentlyVerified`), by construction (`anchored`: has a transparency-log leaf), and by freshness (`evaluatedAt`, and `excludedAttestations`: Verifications ignored because their verifier is no longer authorized). `evidenceLevel` stays, unchanged. New §5.4 states what both fields always were: the registry's own appraisal, a hint. A relying party that needs a finding re-derives it from signed records, and §5.4 says how.
 
@@ -556,6 +558,22 @@ INAM's design targets exactly these failure modes:
 | "Independent validator" is self-declared | A Verification (§12) only contributes if its `verifier` was explicitly granted verifier status by the registry operator (§12.3 rule 4) — there is no self-service path. |
 
 This is not a claim that INAM's model is trustless — it is explicitly **not** (it has a registry operator, §0). It is a different trade: INAM gives up chain-native permissionlessness to get task-linked, bilaterally-signed, Sybil-discounted reputation. An agent can hold both an ERC-8004 identity (for on-chain discovery) and an INAM reputation (for "did this specific job actually happen, and did both sides agree").
+
+### 11.2 x402: verify before paying (v0.36)
+
+An x402 v2 payee **MAY** name its INAM ID in its `PaymentRequired` object as the extension `inam`:
+
+```json
+"extensions": { "inam": { "info": { "did": "did:key:z6Mk..." }, "schema": { ... } } }
+```
+
+A payer that wants to pay only agents with a track record checks, before it signs any payment:
+
+1. The named ID resolves in the registry and is not revoked (§2.2).
+2. **Binding.** Every `accepts[].payTo` it may pay equals (case-insensitively) the ID's `linked.erc8004_id`, the EVM address the ID proved control of (§2.1). Without this check, a server could name a reputable agent's ID and route the money to its own wallet. A payer **MUST** narrow `accepts` to the bound entries, and **MUST NOT** pay if none remain.
+3. **Policy.** The ID's `evidenceLevel` and `trustScore` (§5.3) meet the payer's own thresholds. These are the registry's hint (§5.4); a payer that wants a finding re-derives them first.
+
+The extension is advisory metadata, so a payee that omits it is simply unknown to INAM, not invalid. The registry takes no part in the payment and needs no new endpoint. `sdk-js` ships this as `withInamX402Gate(fetch, client, policy)`, composed inside an x402 payment wrapper so a blocked payee throws before anything is signed, plus `inamX402Extension(did)` for payees; `examples/x402-verify-before-pay.ts` runs it end to end against a local registry. Only EVM `payTo` addresses can be bound today, because `erc8004_id` is the only linked identity that is a payment address.
 
 ## 12. Verification (independent attestation)
 

@@ -52,3 +52,7 @@ INAM_OPERATOR_KEY=./operator-key.json \
 ## `langchain-tools.py`
 
 The Python-side counterpart to `mcp-tool-wrapper.ts` for a different, very widely-used integration point: [LangChain](https://python.langchain.com/)'s tool-calling. Wraps four `sdk-python` `InamClient` methods (`register_agent`, `search_agents`, `submit_work`, `get_reputation`) as LangChain tools using the `@tool` decorator from `langchain_core.tools`. Like `mcp-tool-wrapper.ts`, it does **not** depend on the real `langchain`/`langchain-core` package being installed -- it falls back to a tiny local stand-in decorator so the file stays importable on its own, and uses the real decorator automatically if `langchain-core` is present. All four wrapped functions were smoke-tested against a local `npm run dev` server to confirm the request/response wiring is correct.
+
+## `x402-verify-before-pay.ts`
+
+SPEC.md §11.2 end to end, no real money: a seller links its payment wallet to its INAM ID and finishes one job, then three x402 v2 endpoints ask the buyer to pay. The buyer's `fetch` is wrapped with `withInamX402Gate`, so it pays the honest seller, refuses an endpoint that names the seller's ID but routes the money to another wallet, and refuses a newcomer with no countersigned work. Swap the stand-in `fakePay` for `@x402/fetch`'s `wrapFetchWithPayment` in real use; the gate goes inside it. Local registry only (`npm run dev`), since it writes receipts.

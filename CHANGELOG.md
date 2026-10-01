@@ -4,10 +4,13 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.36 (Draft) — 2026-10-01
+- **x402: verify before paying (new §11.2).** An x402 v2 payee may name its INAM ID in an `inam` extension. A payer pays only `payTo` addresses that ID proved control of (`erc8004_id` link, §2.1), and only if its evidence and score meet the payer's policy. No INAM server or wire change. `sdk-js` 0.14.0: `withInamX402Gate`, `decideX402`, `inamX402Extension`, `X402PaymentBlocked`; runnable `examples/x402-verify-before-pay.ts`.
+- **Tree heads anchored in Bitcoin (§13.4).** The hourly monitor now timestamps each new tree head through OpenTimestamps. Proofs live under `anchors/` on the `monitor-state` branch and are upgraded to full Bitcoin attestations on later runs.
+
 ### v0.35 (Draft) — 2026-10-01
 - **Evidence reported as separate dimensions (§5.3).** New top-level `evidence` on reputation responses: `source` (`declared` / `corroborated` / `independentlyVerified`), `construction` (`anchored`), and `freshness` (`evaluatedAt`, `excludedAttestations`). This follows the evidence-strength vocabulary proposed in aaif/wg-identity-and-trust#5. `evidenceLevel` is unchanged.
 - **New §5.4:** the registry's appraisal is a hint. It lists how a relying party re-derives each dimension from signed receipts, Verifications, and log inclusion proofs, and says it must never record more than it checked.
-- **Tree heads anchored in Bitcoin (§13.4).** The hourly monitor now timestamps each new tree head through OpenTimestamps. Proofs live under `anchors/` on the `monitor-state` branch and are upgraded to full Bitcoin attestations on later runs.
 
 ### v0.34 (Draft) — 2026-09-30
 - **Transparency-log leaves commit to payloads by hash (§13.1, §13.3).** Each entry is now `{ entryType, refId, timestamp, dataHash }`. The payload is stored beside the leaf in a nullable column and served as `payload` on `GET /transparency/entries`. Fixes two problems from a data-protection review: `participants_only` receipts were fully readable through the log, and free text (dispute reasons, notes) sat in permanent leaves where it could never be erased. Payloads are now withheld for `participants_only` receipts and erasable by the operator, and every proof stays valid. Pre-v0.34 leaves are unchanged.
@@ -195,6 +198,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial specification: positioning, INAM ID (`did:key`), Execution Receipt schema/lifecycle, reputation model, REST API, request signing, SDK architecture requirements, explicit non-goals, relationship to other protocols.
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
+
+### 0.14.0 — 2026-10-01
+- x402 "verify before you pay" (SPEC.md v0.36 §11.2): `withInamX402Gate(fetch, client, policy)` wraps fetch inside an x402 payment wrapper and throws `X402PaymentBlocked` before anything is signed when the payee names no INAM ID, its `payTo` isn't the address that ID proved control of, or its evidence/score is below policy. Also `decideX402()` (pure check) and `inamX402Extension(did)` for payees.
 
 ### 0.13.0 — 2026-10-01
 - `ReputationResult.evidence` and exported type `EvidenceDimensions` (SPEC.md v0.35).
