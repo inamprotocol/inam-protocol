@@ -58,3 +58,7 @@ The Python-side counterpart to `mcp-tool-wrapper.ts` for a different, very widel
 SPEC.md §11.2 end to end, no real money: a seller links its payment wallet to its INAM ID and finishes one job, then three x402 v2 endpoints ask the buyer to pay. The buyer's `fetch` is wrapped with `withInamX402Gate`, so it pays the honest seller, refuses an endpoint that names the seller's ID but routes the money to another wallet, and refuses a newcomer with no countersigned work. Swap the stand-in `fakePay` for `@x402/fetch`'s `wrapFetchWithPayment` in real use; the gate goes inside it. Local registry only (`npm run dev`), since it writes receipts.
 
 ![x402 verify-before-pay demo](https://inamprotocol.org/demo/x402-verify-before-pay.svg)
+
+## `a2a-agent-card.ts`
+
+SPEC.md §11.3 end to end: an agent links its A2A endpoint to its INAM ID, finishes one job, and serves an A2A 1.0 Agent Card carrying the `https://inamprotocol.org/ext/a2a/v1` extension. A second card copies the same INAM ID onto a different endpoint. The client fetches both cards and runs `verifyA2ACard`: it delegates to the first and skips the copycat, because the ID never linked that endpoint. Local registry only (`npm run dev`).

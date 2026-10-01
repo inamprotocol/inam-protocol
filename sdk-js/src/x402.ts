@@ -51,14 +51,16 @@ export function decideX402(agent: AgentRecord, reputation: ReputationResult, pay
   if (!bound || !payTo.some((a) => a.toLowerCase() === bound)) {
     return { ...base, allow: false, reason: "payTo is not an address this INAM ID proved control of" };
   }
+  const failed = policyFailure(reputation, policy);
+  return failed ? { ...base, allow: false, reason: failed } : { ...base, allow: true, reason: "ok" };
+}
+
+/** Why `reputation` misses `policy`, or null if it meets it. Shared with the A2A check (§11.3). */
+export function policyFailure(reputation: ReputationResult, policy: X402Policy = {}): string | null {
   const minEvidence = policy.minEvidence ?? "countersigned";
-  if (EVIDENCE_RANK[reputation.evidenceLevel] < EVIDENCE_RANK[minEvidence]) {
-    return { ...base, allow: false, reason: `evidence ${reputation.evidenceLevel} is below ${minEvidence}` };
-  }
-  if (reputation.trustScore < (policy.minTrustScore ?? 0)) {
-    return { ...base, allow: false, reason: `trustScore ${reputation.trustScore} is below ${policy.minTrustScore}` };
-  }
-  return { ...base, allow: true, reason: "ok" };
+  if (EVIDENCE_RANK[reputation.evidenceLevel] < EVIDENCE_RANK[minEvidence]) return `evidence ${reputation.evidenceLevel} is below ${minEvidence}`;
+  if (reputation.trustScore < (policy.minTrustScore ?? 0)) return `trustScore ${reputation.trustScore} is below ${policy.minTrustScore}`;
+  return null;
 }
 
 export class X402PaymentBlocked extends Error {

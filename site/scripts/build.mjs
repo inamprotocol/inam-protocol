@@ -42,7 +42,7 @@ writeFileSync(path.join(DIST, "index.html"), html);
 // Everything else in public/ (use-cases.html, robots.txt, sitemap.xml, llms.txt) ships as-is.
 cpSync(path.join(SITE_ROOT, "public"), DIST, {
   recursive: true,
-  filter: (src) => path.basename(src) !== "index.html",
+  filter: (src) => src !== path.join(SITE_ROOT, "public", "index.html"),
 });
 
 // A leftover {{PLACEHOLDER}} (e.g. the legal pages' operator name) must never ship.

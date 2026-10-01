@@ -1,6 +1,8 @@
-# INAM Protocol — Specification v0.36 (Draft)
+# INAM Protocol — Specification v0.37 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, `node:sqlite` storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+
+**Changes from v0.36:** an A2A agent can carry its INAM reputation on its Agent Card (new §11.3). A data-only A2A extension, `https://inamprotocol.org/ext/a2a/v1`, names the agent's INAM ID; a client accepts it only if that ID linked one of the card's endpoints as its `a2a_endpoint`, so the card and the ID must name each other. No INAM server or wire change; `sdk-js` 0.15.0 adds `inamA2AExtension` and `verifyA2ACard`.
 
 **Changes from v0.35:** a payer can now check an x402 payee's INAM reputation before paying (new §11.2). The payee names its INAM ID in an `inam` extension on its x402 v2 `PaymentRequired` object, and the payer pays only `payTo` addresses that ID proved control of through an `erc8004_id` link (§2.1), and only if its evidence and score meet the payer's policy. The binding check is the point: without it, any server could name a reputable agent's ID and collect the payment itself. No server, endpoint, or wire change to INAM; `sdk-js` 0.14.0 adds `withInamX402Gate`, `decideX402`, and `inamX402Extension`. Separately, the external monitor now timestamps each new tree head in Bitcoin through OpenTimestamps (§13.4).
 
@@ -574,6 +576,22 @@ A payer that wants to pay only agents with a track record checks, before it sign
 3. **Policy.** The ID's `evidenceLevel` and `trustScore` (§5.3) meet the payer's own thresholds. These are the registry's hint (§5.4); a payer that wants a finding re-derives them first.
 
 The extension is advisory metadata, so a payee that omits it is simply unknown to INAM, not invalid. The registry takes no part in the payment and needs no new endpoint. `sdk-js` ships this as `withInamX402Gate(fetch, client, policy)`, composed inside an x402 payment wrapper so a blocked payee throws before anything is signed, plus `inamX402Extension(did)` for payees; `examples/x402-verify-before-pay.ts` runs it end to end against a local registry. Only EVM `payTo` addresses can be bound today, because `erc8004_id` is the only linked identity that is a payment address.
+
+### 11.3 A2A: INAM ID on an Agent Card (v0.37)
+
+An A2A agent **MAY** name its INAM ID on its Agent Card with the data-only extension `https://inamprotocol.org/ext/a2a/v1` (specification published at that URI), as one `capabilities.extensions` entry:
+
+```json
+{ "uri": "https://inamprotocol.org/ext/a2a/v1", "required": false, "params": { "did": "did:key:z6Mk..." } }
+```
+
+The agent **MUST NOT** mark it `required`; it changes no A2A request or response. A client relying on it:
+
+1. Fetches the named ID and its reputation from a registry the client trusts; the card does not choose the registry.
+2. **Binding.** Requires that at least one endpoint on the card (`supportedInterfaces[].url` in A2A 1.0; `url` or `additionalInterfaces[].url` in 0.3) equals the ID's `linked.a2a_endpoint` (§2), ignoring a trailing slash. Otherwise it **MUST** treat the card as naming no INAM ID. The card names the ID, and the ID names the endpoint under its own signature (§7), so neither side can be borrowed alone. This is weaker than a key proof: `a2a_endpoint` is an `unverified_claim` (§2), so an operator who controls both can still link them.
+3. Rejects a revoked ID, then applies its own policy to `evidenceLevel` / `evidence` / `trustScore`, treating them as a hint (§5.4) exactly as in §11.2.
+
+`sdk-js` ships `inamA2AExtension(did)` for agents and `verifyA2ACard(card, client, policy)` for clients; `examples/a2a-agent-card.ts` runs both against a local registry.
 
 ## 12. Verification (independent attestation)
 

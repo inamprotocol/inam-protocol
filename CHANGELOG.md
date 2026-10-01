@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.37 (Draft) — 2026-10-01
+- **A2A: INAM ID on an Agent Card (new §11.3).** Data-only A2A extension `https://inamprotocol.org/ext/a2a/v1` (spec hosted at that URI) with `params.did`. A client accepts it only when one of the card's endpoints equals the ID's `linked.a2a_endpoint`, then applies its reputation policy. No INAM server or wire change. Runnable `examples/a2a-agent-card.ts`.
+
 ### v0.36 (Draft) — 2026-10-01
 - **x402: verify before paying (new §11.2).** An x402 v2 payee may name its INAM ID in an `inam` extension. A payer pays only `payTo` addresses that ID proved control of (`erc8004_id` link, §2.1), and only if its evidence and score meet the payer's policy. No INAM server or wire change. `sdk-js` 0.14.0: `withInamX402Gate`, `decideX402`, `inamX402Extension`, `X402PaymentBlocked`; runnable `examples/x402-verify-before-pay.ts`.
 - **Tree heads anchored in Bitcoin (§13.4).** The hourly monitor now timestamps each new tree head through OpenTimestamps. Proofs live under `anchors/` on the `monitor-state` branch and are upgraded to full Bitcoin attestations on later runs.
@@ -198,6 +201,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial specification: positioning, INAM ID (`did:key`), Execution Receipt schema/lifecycle, reputation model, REST API, request signing, SDK architecture requirements, explicit non-goals, relationship to other protocols.
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
+
+### 0.15.0 — 2026-10-01
+- A2A Agent Card extension (SPEC.md v0.37 §11.3): `inamA2AExtension(did)` for an agent's `capabilities.extensions`, `verifyA2ACard(card, client, policy)` and pure `decideA2A()` for clients, `cardEndpoints(card)`, and `INAM_A2A_EXTENSION_URI`. `policyFailure()` is now shared by the x402 and A2A checks.
 
 ### 0.14.0 — 2026-10-01
 - x402 "verify before you pay" (SPEC.md v0.36 §11.2): `withInamX402Gate(fetch, client, policy)` wraps fetch inside an x402 payment wrapper and throws `X402PaymentBlocked` before anything is signed when the payee names no INAM ID, its `payTo` isn't the address that ID proved control of, or its evidence/score is below policy. Also `decideX402()` (pure check) and `inamX402Extension(did)` for payees.

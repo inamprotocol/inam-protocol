@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>INAM extension for A2A Agent Cards, v1 — INAM Protocol</title>
+<meta name="description" content="A data-only A2A extension that lets an agent name its INAM ID on its Agent Card, and how a client verifies it.">
+<link rel="canonical" href="https://inamprotocol.org/ext/a2a/v1">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="INAM Protocol">
+<meta property="og:title" content="INAM extension for A2A Agent Cards, v1 — INAM Protocol">
+<meta property="og:description" content="A data-only A2A extension that lets an agent name its INAM ID on its Agent Card, and how a client verifies it.">
+<meta property="og:url" content="https://inamprotocol.org/ext/a2a/v1">
+<meta property="og:image" content="https://inamprotocol.org/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://inamprotocol.org/og.png">
+<meta name="twitter:title" content="INAM extension for A2A Agent Cards, v1 — INAM Protocol">
+<meta name="twitter:description" content="A data-only A2A extension that lets an agent name its INAM ID on its Agent Card, and how a client verifies it.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+:root {
+  --bg: #ffffff;
+  --bg-2: #f4f5f7;
+  --bg-3: #ebedf1;
+  --ink: #14161b;
+  --ink-dim: #4a505c;
+  --ink-faint: #7b8290;
+  --line: #dde1e7;
+  --accent: #7a2e2e;
+  --accent-ink: #632424;
+  --accent-soft: #f5e8e8;
+  --code-bg: #f4f5f7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0e11;
+    --bg-2: #16181d;
+    --bg-3: #1d2027;
+    --ink: #e6e8ec;
+    --ink-dim: #a2a8b5;
+    --ink-faint: #6b7280;
+    --line: #262a32;
+    --accent: #d98686;
+    --accent-ink: #e6a3a3;
+    --accent-soft: #241616;
+    --code-bg: #16181d;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Public Sans", -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+code, pre, kbd, .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace; }
+a { color: var(--accent-ink); }
+a:hover { text-decoration-thickness: 2px; }
+h1, h2, h3, h4 { text-wrap: balance; font-weight: 600; }
+p { max-width: 72ch; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 28px; }
+
+.topbar { border-bottom: 1px solid var(--line); background: var(--bg); }
+.topbar-inner {
+  max-width: 880px; margin: 0 auto; padding: 14px 28px;
+  display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap;
+}
+.wordmark {
+  font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 14px;
+  letter-spacing: 0.02em; color: var(--ink); text-decoration: none; white-space: nowrap;
+}
+.wordmark:hover { color: var(--ink); }
+.topnav { display: flex; gap: 20px; flex-wrap: wrap; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.topnav a { color: var(--ink-dim); text-decoration: none; }
+.topnav a:hover { color: var(--accent-ink); }
+.topnav a.current { color: var(--accent-ink); }
+
+.masthead { padding: 44px 0 8px; }
+.status-line {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--accent-ink);
+  display: flex; align-items: center; gap: 9px; margin-bottom: 14px;
+}
+.status-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
+h1.title { font-size: 2.1rem; margin: 0 0 14px; letter-spacing: -0.01em; }
+p.lead { color: var(--ink-dim); font-size: 1.02rem; max-width: 66ch; }
+
+section { padding: 30px 0; border-top: 1px solid var(--line); }
+section:first-of-type { border-top: none; }
+h2.h {
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint); margin: 0 0 6px; font-weight: 600;
+}
+h3.case-title { font-size: 1.15rem; margin: 0 0 8px; }
+p.case-desc { color: var(--ink-dim); margin: 0 0 14px; }
+.case-meta {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint);
+  margin-bottom: 14px;
+}
+.case-meta a { color: var(--ink-faint); }
+.case-meta a:hover { color: var(--accent-ink); }
+
+pre {
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 3px;
+  padding: 13px 15px; overflow-x: auto; margin: 0; font-size: 13.5px; line-height: 1.55;
+}
+code { font-size: 0.92em; }
+.pre-label {
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; display: block;
+}
+.case { margin-bottom: 34px; }
+.case:last-child { margin-bottom: 0; }
+
+footer.site { border-top: 1px solid var(--line); margin-top: 10px; padding: 26px 0 60px; }
+.footer-grid {
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint);
+}
+.footer-grid a { color: var(--ink-faint); }
+.footer-grid a:hover { color: var(--accent-ink); }
+.legal h2 { font-size: 1.1rem; margin: 30px 0 8px; }
+.legal ul { max-width: 72ch; padding-left: 1.2em; }
+.legal li { margin-bottom: 6px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="wordmark" href="/">INAM PROTOCOL</a>
+    <nav class="topnav">
+      <a href="/use-cases">Use Cases</a>
+      <a href="https://docs.inamprotocol.org/spec/">Specification</a>
+      <a href="https://docs.inamprotocol.org/api/">API Reference</a>
+      <a href="https://explorer.inamprotocol.org" target="_blank" rel="noopener">Explorer</a>
+      <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">Source</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap legal">
+
+  <div class="masthead">
+    <div class="status-line"><span class="dot"></span>Extension URI · v1 · 1 October 2026</div>
+    <h1 class="title">INAM extension for A2A Agent Cards</h1>
+  </div>
+
+  <p class="lead">This page is the specification for the A2A extension <code>https://inamprotocol.org/ext/a2a/v1</code>. It lets an agent name its INAM ID on its Agent Card, so a client can look up a reputation built only from work receipts both parties signed. Normative source: <a href="https://docs.inamprotocol.org/spec/">INAM SPEC.md</a> §11.3.</p>
+
+  <h2>1. Declaring it</h2>
+  <p>It is a data-only extension: it adds information to the card and changes no request or response. An agent <strong>MUST NOT</strong> mark it <code>required</code>. The agent adds one entry to <code>capabilities.extensions</code>:</p>
+<pre>{
+  "uri": "https://inamprotocol.org/ext/a2a/v1",
+  "description": "This agent's INAM ID.",
+  "required": false,
+  "params": { "did": "did:key:z6Mk..." }
+}</pre>
+  <p>and, once, links its service endpoint to that ID in the INAM registry. That request is signed by the ID's own key:</p>
+<pre>POST /v1/agents/{did}/link
+{ "protocol": "a2a_endpoint", "value": "https://agent.example/a2a" }</pre>
+
+  <h2>2. Verifying it</h2>
+  <p>A client that relies on the extension:</p>
+  <ol>
+    <li>Reads <code>params.did</code> and fetches that agent and its reputation from a registry the client trusts. The card does not choose the registry.</li>
+    <li><strong>Checks the binding.</strong> At least one endpoint on the card (<code>supportedInterfaces[].url</code> in A2A 1.0, or <code>url</code> / <code>additionalInterfaces[].url</code> in 0.3) <strong>MUST</strong> equal the agent's <code>linked.a2a_endpoint</code>, ignoring a trailing slash. Otherwise the client <strong>MUST</strong> treat the card as naming no INAM ID. The card names the ID and the ID, under its own signature, names the endpoint, so a card can't borrow a reputable agent's ID and an ID can't adopt someone else's endpoint.</li>
+    <li>Rejects a revoked ID, then applies its own policy to <code>evidenceLevel</code>, <code>evidence</code> and <code>trustScore</code>. These are the registry's hint. A client that wants a finding re-derives them from the signed receipts and log inclusion proofs (SPEC.md §5.4).</li>
+  </ol>
+  <p>With the TypeScript SDK (<code>npm i inamprotocol</code>, 0.15.0 or later):</p>
+<pre>import { verifyA2ACard } from "inamprotocol";
+const decision = await verifyA2ACard(card, inamClient, { minEvidence: "countersigned" });
+if (!decision.allow) console.log(decision.reason);</pre>
+
+  <h2>3. What it does not do</h2>
+  <p>It does not authenticate the transport: use the card's own security schemes and, where available, A2A card signatures. It does not move money; for paid calls see the x402 check in SPEC.md §11.2. An endpoint link is an assertion signed by the ID, not a proof that the ID operates the server. It stops borrowing in both directions, but an operator who controls both can still link them.</p>
+
+  <h2>4. Versioning</h2>
+  <p>A breaking change gets a new URI (<code>/v2</code>), as A2A's extension guidance requires. Questions and proposals: <a href="https://github.com/inamprotocol/inam-protocol/issues">GitHub issues</a>.</p>
+
+  <footer class="site">
+    <div class="footer-grid">
+      <div><a href="/">&larr; Back home</a> &middot; <a href="/terms.html">Terms</a> &middot; <a href="/privacy.html">Privacy</a></div>
+      <div>
+        <a href="https://github.com/inamprotocol/inam-protocol/blob/main/LICENSE" target="_blank" rel="noopener">Apache-2.0</a>
+        &middot;
+        <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">github.com/inamprotocol/inam-protocol</a>
+      </div>
+    </div>
+  </footer>
+
+</div>
+</body>
+</html>
