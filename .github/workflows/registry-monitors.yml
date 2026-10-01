@@ -10,7 +10,7 @@
 #    secret exists; VERIFY_MODE repo variable picks `full` (default) or
 #    `reject-only`.
 #
-# State for both lives on the orphan `monitor-state` branch (sth.jsonl,
+# State for both lives on the orphan `monitor-state` branch (sth.jsonl, anchors/,
 # verifier-state.json), so the monitor's history is public and anyone can
 # diff it against their own copy.
 
@@ -52,6 +52,20 @@ jobs:
         run: npx tsx scripts/sth-monitor.ts
         env:
           STATE_FILE: state/sth.jsonl
+
+      # Anchors each new tree head in Bitcoin via OpenTimestamps (free, no
+      # keys). anchors/<treeSize>.json is the exact sth.jsonl line; its .ots
+      # proof starts "pending" and is upgraded on later runs once a block
+      # confirms it. Check with: ots verify anchors/<n>.json.ots
+      - name: Anchor tree head (OpenTimestamps)
+        working-directory: state
+        run: |
+          pip install -q opentimestamps-client
+          mkdir -p anchors
+          line=$(tail -n 1 sth.jsonl)
+          f="anchors/$(echo "$line" | jq -r .treeSize).json"
+          if [ ! -f "$f.ots" ]; then printf '%s\n' "$line" > "$f" && ots stamp "$f"; fi
+          for p in anchors/*.ots; do ots upgrade "$p" || true; done
 
       - name: Output-integrity verifier
         if: always() && env.VERIFIER_PRIVATE_KEY != ''
