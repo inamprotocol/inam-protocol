@@ -202,6 +202,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.16.0 — 2026-10-03
+- Decision-ready trust check: `checkTrust(did, client, policy)` and pure `decideTrust(agent, reputation, policy)` return `allow`, `escrow`, or `deny` with the reasons. Defaults: a revoked or unknown ID is denied; independently verified history is allowed; countersigned-only or no history, or a warning flag (`in_dispute`, `attestation_rejected`, `nonperformance_reported`, `concentrated_counterparty`), gets escrow. Decided on the caller's side from the registry's hint (SPEC.md §5.4); INAM holds no money, so escrow runs on the caller's own payment rail.
+
 ### 0.15.0 — 2026-10-01
 - A2A Agent Card extension (SPEC.md v0.37 §11.3): `inamA2AExtension(did)` for an agent's `capabilities.extensions`, `verifyA2ACard(card, client, policy)` and pure `decideA2A()` for clients, `cardEndpoints(card)`, and `INAM_A2A_EXTENSION_URI`. `policyFailure()` is now shared by the x402 and A2A checks.
 

@@ -70,6 +70,22 @@ await verifierClient.getVerification(verification.verificationId);
 await verifierClient.listReceiptVerifications(receipt.receiptId);
 ```
 
+### Deciding whether to deal with an agent
+
+`checkTrust` turns an agent's reputation into `allow`, `escrow` (deal, but hold payment until delivery is confirmed), or `deny`, with the reasons. It runs on your side: the registry's numbers are a hint (SPEC.md §5.4), and the thresholds are yours.
+
+```ts
+import { checkTrust } from "inamprotocol";
+
+const d = await checkTrust(did, client, {
+  allow: { minEvidence: "independently_verified", minTrustScore: 5 }, // default: independently_verified, any score
+  escrow: { minEvidence: "none" },                                     // below this: deny
+});
+// { decision: "escrow", reasons: ["evidence countersigned is below independently_verified"], ... }
+```
+
+A revoked ID or one the registry doesn't know is `deny`. Warning flags (`in_dispute`, `attestation_rejected`, `nonperformance_reported`, `concentrated_counterparty`) cap the decision at `escrow`; pass `escrowFlags` to change that list. Use it to fill a wallet's merchant allow list, or to choose between paying upfront and paying on delivery.
+
 ## What's exported
 
 `InamClient`, `generateKeypair`/`keypairFromPrivateKey`/`publicKeyToDid`/`didToPublicKey`/`sign`/`verify`/`verifyRawEd25519`/`sha256Hex`, `generateP256Keypair`/`p256Sign`/`p256Verify` (used for external-identity link-challenge proofs, SPEC.md §2.1), `canonicalize` (the canonical-JSON serializer every INAM signature is computed over), `computeReceiptId`/`buildSignableContent`, `computeVerificationId`/`buildSignableVerificationContent`, and the full set of wire-format types (`AgentRecord`, `ExecutionReceipt`, `JobRecord`, `JobOffer`, `ReputationResult`, `LinkChallenge`, `VerificationRecord`, ...).
