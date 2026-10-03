@@ -129,3 +129,31 @@ describe("transparency log lifecycle wiring", () => {
     expectApiError(() => transparencyService.getConsistencyProof(sth.treeSize + 1000, undefined), "INVALID_TREE_SIZE");
   });
 });
+
+describe("verifier grants in the transparency log (SPEC v0.39 §13.1)", () => {
+  it("logs every operator grant and revoke, and nothing for a refused call", async () => {
+    const { setVerifierStatus } = await import("../src/services/agentService.js");
+    const { testOperatorKeypair } = await import("./testOperator.js");
+    const target = generateKeypair();
+    const outsider = generateKeypair();
+    registerAgent(target.did, { capabilities: ["verify.x"] });
+    registerAgent(outsider.did, { capabilities: ["x"] });
+
+    const before = transparencyService.getSTH().treeSize;
+    expectApiError(() => setVerifierStatus(outsider.did, target.did, true), "NOT_OPERATOR");
+    expect(transparencyService.getSTH().treeSize).toBe(before);
+
+    setVerifierStatus(testOperatorKeypair.did, target.did, true);
+    setVerifierStatus(testOperatorKeypair.did, target.did, false);
+    const { entries } = transparencyService.getEntries(10, before);
+    expect(entries.map((e) => [e.entryType, e.refId])).toEqual([
+      ["verifier_status_changed", target.did],
+      ["verifier_status_changed", target.did],
+    ]);
+    expect(entries.map((e) => JSON.parse(e.payload!))).toEqual([
+      { agentId: target.did, authorized: true, operator: testOperatorKeypair.did },
+      { agentId: target.did, authorized: false, operator: testOperatorKeypair.did },
+    ]);
+    expect(entries.every((e) => payloadHash(e.payload!) === JSON.parse(e.data).dataHash)).toBe(true);
+  });
+});

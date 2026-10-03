@@ -1,4 +1,5 @@
 import * as db from "./db.js";
+import * as transparencyService from "./transparencyService.js";
 import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
@@ -57,6 +58,8 @@ export async function setVerifierStatus(env: Env, callerDid: string, targetAgent
   const target = await getAgent(env, targetAgentId); // AGENT_NOT_FOUND if it doesn't exist
   if (target.revokedAt) throw conflict("AGENT_REVOKED", `Agent ${targetAgentId} was revoked at ${target.revokedAt}`);
   await db.updateAgentVerifierStatus(env, targetAgentId, authorized);
+  // SPEC v0.39 §13.1: every grant and revoke is logged, so the operator's choices are tamper-evident too.
+  await transparencyService.appendEntry(env, "verifier_status_changed", targetAgentId, { agentId: targetAgentId, authorized, operator: callerDid });
   return getAgent(env, targetAgentId);
 }
 

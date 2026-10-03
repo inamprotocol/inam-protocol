@@ -1,6 +1,8 @@
-# INAM Protocol — Specification v0.38 (Draft)
+# INAM Protocol — Specification v0.39 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, `node:sqlite` storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+
+**Changes from v0.38:** operator grants and revocations of verifier status are logged (§13.1). Every successful `POST /agents/:id/verifier-status` appends a `verifier_status_changed` leaf naming the agent, the new status, and the operator, so the operator's choices of whom to trust become as tamper-evident as receipt history. A consumer that switches on `entryType` must accept the new value.
 
 **Changes from v0.37:** an INAM receipt can back ERC-8004 feedback (§11.1). The receipt's requester sends `giveFeedback` from the EVM address its INAM ID proved control of, and the feedback file carries the signed receipt, so a reader can tell task-linked, two-party feedback from a bare score sent by any wallet. No INAM server or wire change; `sdk-js` 0.17.0 adds `buildErc8004Feedback` and `verifyErc8004Feedback`.
 
@@ -728,16 +730,17 @@ Receipt-lifecycle records (§4, §12) are stored as mutable rows: `countersign`,
 
 ### 13.1 What gets logged
 
-One leaf per receipt-lifecycle event:
+One leaf per receipt-lifecycle event, plus one per verifier-status change:
 
 - `receipt_finalized` — on `POST /receipts/:id/countersign` (§4.2).
 - `dispute_opened` — on `POST /receipts/:id/dispute` (§4.3).
 - `dispute_resolved` — on `POST /receipts/:id/dispute/resolve` (§4.3).
 - `nonperformance_reported` — on `POST /jobs/:id/report-nonperformance` (§3.3).
+- `verifier_status_changed` (v0.39) — on every successful `POST /agents/:id/verifier-status` (§12.6), whether or not the status actually changed, so a grant made before v0.39 can be brought into the log by repeating it.
 
-A registry **MUST** append exactly one leaf for each of these events, in the order they're applied, and **MUST NOT** append a leaf for an event that failed validation (a rejected countersign, a dispute that failed its window check, etc.). Job postings and offers are out of scope — the Execution Receipt, not the Job resource, is this protocol's trust-bearing artifact (§4).
+A registry **MUST** append exactly one leaf for each of these events, in the order they're applied, and **MUST NOT** append a leaf for an event that failed validation (a rejected countersign, a dispute that failed its window check, etc.). Job postings and offers are out of scope — the Execution Receipt, not the Job resource, is this protocol's trust-bearing artifact (§4). Verifier grants are in scope because they decide which Verifications count toward reputation (§12.5): without a leaf, an operator could grant an accomplice, let it verify, and revoke it, leaving no trace beyond the profile's current flag.
 
-Each leaf's underlying entry is a canonical JSON object `{ entryType, refId, timestamp, dataHash }` (v0.34). `refId` is the receiptId for the three receipt events and the jobId for `nonperformance_reported`. `dataHash` is `"sha256:" + hex(SHA256(canonical JSON of the event's payload))`, where the payload is the finalized receipt, the dispute object, or the non-performance record. The leaf hash is computed over this entry's canonical-JSON bytes, so the leaf commits to the payload without containing it. `payloadHash()` in `sdk-js/src/core/transparencyLog.ts` is the reference. A registry **MUST** store the payload beside the leaf (§13.3) and **MUST NOT** publish it for a `participants_only` receipt (§4.4). Entries appended before v0.34 embed the payload directly as `data` in place of `dataHash`. Verifiers **MUST** accept both shapes, and each is checked the same way: re-hash the entry bytes and compare them to the leaf.
+Each leaf's underlying entry is a canonical JSON object `{ entryType, refId, timestamp, dataHash }` (v0.34). `refId` is the receiptId for the three receipt events, the jobId for `nonperformance_reported`, and the target agent's INAM ID for `verifier_status_changed`. `dataHash` is `"sha256:" + hex(SHA256(canonical JSON of the event's payload))`, where the payload is the finalized receipt, the dispute object, the non-performance record, or `{ agentId, authorized, operator }` for a verifier-status change. The leaf hash is computed over this entry's canonical-JSON bytes, so the leaf commits to the payload without containing it. `payloadHash()` in `sdk-js/src/core/transparencyLog.ts` is the reference. A registry **MUST** store the payload beside the leaf (§13.3) and **MUST NOT** publish it for a `participants_only` receipt (§4.4). Entries appended before v0.34 embed the payload directly as `data` in place of `dataHash`. Verifiers **MUST** accept both shapes, and each is checked the same way: re-hash the entry bytes and compare them to the leaf.
 
 ### 13.2 Hashing
 
