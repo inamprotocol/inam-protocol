@@ -55,7 +55,36 @@ poster.accept_work(receipt)  # finalizes the receipt and auto-completes the job
 
 ### External identity linking (challenge-response)
 
-Linking a key-derived external identity (`agentpass_id` / `aitp_id` / `passport_id`; SPEC.md section 2.1) requires proving control of that external key via a single-use, ~60s challenge. `a2a_endpoint` isn't key-derived, so it skips straight to `link_identity(protocol, value)`. See `examples/interop_worker.py` for this in a full running script.
+Linking a key-derived external identity (`agentpass_id` / `aitp_id` / `passport_id`; SPEC.md section 2.1) requires proving control of that external key via a single-use, ~60s challenge. `a2a_endpoint` isn't key-derived, so it skips straight to `link_identity(protocol, value)`. ### Deciding whether to deal with an agent
+
+`check_trust` turns an agent's reputation into `allow`, `escrow` (deal, but hold payment until delivery is confirmed), or `deny`, with the reasons. It runs on your side; the registry's numbers are a hint (SPEC.md §5.4).
+
+```python
+from inamprotocol import check_trust
+
+d = check_trust(did, client, allow={"min_evidence": "independently_verified", "min_trust_score": 5})
+# {"decision": "escrow", "reasons": ["evidence countersigned is below independently_verified"], ...}
+```
+
+A revoked or unknown ID is `deny`; warning flags (`in_dispute`, `attestation_rejected`, `nonperformance_reported`, `concentrated_counterparty`) cap the decision at `escrow` (change with `escrow_flags`).
+
+### Publishing a receipt as ERC-8004 feedback
+
+The receipt's requester can post it to ERC-8004's Reputation Registry from its linked `erc8004_id` (SPEC.md §11.1). The file carries the signed receipt, so readers can tell it from a bare score:
+
+```python
+from inamprotocol import build_erc8004_feedback, verify_erc8004_feedback
+
+fb = build_erc8004_feedback(receipt, requester_record, "eip155:8453:0x...", agent_id=42)
+# host fb["file_text"] at feedbackURI, then send giveFeedback(**fb["args"], feedbackURI=...)
+
+check = verify_erc8004_feedback(file_text, feedback_hash, client_address, client, value=100)
+# {"valid": ..., "reasons": [...], "receipt_id": ..., "provider_did": ..., "provider_address": ...}
+```
+
+See `examples/erc8004_demo.py`.
+
+See `examples/interop_worker.py` for this in a full running script.
 
 ```python
 # external_keypair stands in for whatever key AgentPass/AITP/Passport

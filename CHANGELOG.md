@@ -502,6 +502,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Python SDK (`sdk-python`)
 
+### 0.12.0 — 2026-10-03
+- `check_trust(did, client, **policy)` and pure `decide_trust()`: allow / escrow / deny with the reasons, same defaults and reason strings as `sdk-js` 0.16.0.
+- ERC-8004 feedback from INAM receipts (SPEC.md v0.38 §11.1): `build_erc8004_feedback()` and `verify_erc8004_feedback()`. Builds byte-identical feedback files to `sdk-js` 0.17.0, checked by a TypeScript-generated vector (`scripts/interop-vectors.ts`). Runnable `examples/erc8004_demo.py`.
+
 ### 0.11.0 — 2026-09-26
 - `search_agents(include_demo=True)` (SPEC.md v0.33). Demo agents are omitted by default. Examples register with `{"demo": True}`.
 

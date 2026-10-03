@@ -16,6 +16,8 @@ from .canonical import canonicalize
 from .client import InamClient
 from .merkle_log import verify_inclusion, verify_consistency
 from .receipt import dispute_window_closes_at, is_dispute_window_open
+from .trust import DEFAULT_ESCROW_FLAGS, check_trust, decide_trust
+from .erc8004 import INAM_FEEDBACK_TAG, build_erc8004_feedback, verify_erc8004_feedback
 
 __all__ = [
     "Keypair",
@@ -39,4 +41,10 @@ __all__ = [
     "verify_consistency",
     "dispute_window_closes_at",
     "is_dispute_window_open",
+    "DEFAULT_ESCROW_FLAGS",
+    "check_trust",
+    "decide_trust",
+    "INAM_FEEDBACK_TAG",
+    "build_erc8004_feedback",
+    "verify_erc8004_feedback",
 ]
