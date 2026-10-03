@@ -86,6 +86,20 @@ const d = await checkTrust(did, client, {
 
 A revoked ID or one the registry doesn't know is `deny`. Warning flags (`in_dispute`, `attestation_rejected`, `nonperformance_reported`, `concentrated_counterparty`) cap the decision at `escrow`; pass `escrowFlags` to change that list. Use it to fill a wallet's merchant allow list, or to choose between paying upfront and paying on delivery.
 
+### Publishing a receipt as ERC-8004 feedback
+
+The receipt's requester can post it to ERC-8004's Reputation Registry (SPEC.md §11.1). The feedback file carries the signed receipt, so readers can tell it from a bare score:
+
+```ts
+import { buildErc8004Feedback, verifyErc8004Feedback } from "inamprotocol";
+
+const fb = buildErc8004Feedback(receipt, requesterRecord, { agentRegistry: "eip155:8453:0x...", agentId: 42 });
+// host fb.fileText at feedbackURI, then send giveFeedback(...fb.args, feedbackURI) from the requester's linked erc8004_id
+
+const check = await verifyErc8004Feedback(fileText, { feedbackHash, clientAddress, value }, client);
+// { valid, reasons, receiptId, providerDid, providerAddress }
+```
+
 ## What's exported
 
 `InamClient`, `generateKeypair`/`keypairFromPrivateKey`/`publicKeyToDid`/`didToPublicKey`/`sign`/`verify`/`verifyRawEd25519`/`sha256Hex`, `generateP256Keypair`/`p256Sign`/`p256Verify` (used for external-identity link-challenge proofs, SPEC.md §2.1), `canonicalize` (the canonical-JSON serializer every INAM signature is computed over), `computeReceiptId`/`buildSignableContent`, `computeVerificationId`/`buildSignableVerificationContent`, and the full set of wire-format types (`AgentRecord`, `ExecutionReceipt`, `JobRecord`, `JobOffer`, `ReputationResult`, `LinkChallenge`, `VerificationRecord`, ...).

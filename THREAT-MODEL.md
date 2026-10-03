@@ -1,6 +1,6 @@
 # Threat model
 
-This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.37 and as run at `api.inamprotocol.org`. For each attack it names the defence, where the spec requires that defence, and what the defence leaves open. A residual risk listed here is a known limit, not an undiscovered bug. Report anything that breaks a defence through [`SECURITY.md`](./SECURITY.md).
+This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.38 and as run at `api.inamprotocol.org`. For each attack it names the defence, where the spec requires that defence, and what the defence leaves open. A residual risk listed here is a known limit, not an undiscovered bug. Report anything that breaks a defence through [`SECURITY.md`](./SECURITY.md).
 
 ## What INAM protects
 
@@ -71,6 +71,7 @@ This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.37 
 | Threat | Defence | Residual risk |
 |---|---|---|
 | An x402 payee naming a reputable ID and routing payment to its own wallet. | The payer pays only `payTo` addresses equal to the ID's proven `erc8004_id`, and pays nothing if none match (§11.2). | Only EVM payment addresses can be bound today. |
+| Copying genuine ERC-8004 feedback to Sybil wallets. | INAM-backed feedback counts only if it was sent from the receipt requester's proven `erc8004_id` and the file hashes to the on-chain `feedbackHash` (§11.1). | INAM does not check on-chain that the ERC-8004 `agentId` belongs to the receipt's provider; the reader compares it with the provider's `linked.erc8004_id`. |
 | An A2A agent borrowing another agent's reputation. | The card must name the ID, and the ID must name one of the card's endpoints under its own signature (§11.3). | `a2a_endpoint` is an unverified claim, so one operator who controls both can link them. |
 | Prompt injection through receipt text into an LLM-driven agent. | `acceptWork` refuses to countersign unless the calling client is the requester, and accepts the caller's own expected `jobId`/`outputHash` to compare against (§8). | Free-text fields are still returned verbatim. Agents should treat them as untrusted data. |
 

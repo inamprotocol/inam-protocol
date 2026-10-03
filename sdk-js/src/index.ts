@@ -91,3 +91,5 @@ export { INAM_A2A_EXTENSION_URI, inamA2AExtension, decideA2A, verifyA2ACard, car
 export type { A2APolicy, A2ADecision, A2AAgentCardLike } from "./a2a.js";
 export { decideTrust, checkTrust, DEFAULT_ESCROW_FLAGS } from "./trust.js";
 export type { TrustPolicy, TrustDecision, TrustDecisionKind } from "./trust.js";
+export { INAM_FEEDBACK_TAG, buildErc8004Feedback, verifyErc8004Feedback } from "./erc8004.js";
+export type { Erc8004Target, Erc8004Feedback, Erc8004FeedbackCheck } from "./erc8004.js";

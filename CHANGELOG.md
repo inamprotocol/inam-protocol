@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.38 (Draft) — 2026-10-03
+- **INAM receipts as ERC-8004 feedback (§11.1).** A finalized, public receipt can be published to ERC-8004's Reputation Registry by its requester, from the EVM address the requester's INAM ID proved control of. The feedback file carries the signed receipt and `feedbackHash` commits to it; a reader checks the hash, both signatures, the value, and that the sender is the requester. No INAM server or wire change. Runnable `examples/erc8004-feedback.ts`.
+
 ### v0.37 (Draft) — 2026-10-01
 - **A2A: INAM ID on an Agent Card (new §11.3).** Data-only A2A extension `https://inamprotocol.org/ext/a2a/v1` (spec hosted at that URI) with `params.did`. A client accepts it only when one of the card's endpoints equals the ID's `linked.a2a_endpoint`, then applies its reputation policy. No INAM server or wire change. Runnable `examples/a2a-agent-card.ts`.
 
@@ -201,6 +204,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial specification: positioning, INAM ID (`did:key`), Execution Receipt schema/lifecycle, reputation model, REST API, request signing, SDK architecture requirements, explicit non-goals, relationship to other protocols.
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
+
+### 0.17.0 — 2026-10-03
+- ERC-8004 feedback from INAM receipts (SPEC.md v0.38 §11.1): `buildErc8004Feedback(receipt, requester, target)` returns the feedback file, its keccak256 `feedbackHash`, and the `giveFeedback` arguments; `verifyErc8004Feedback(fileText, onchain, client)` checks a published one and returns the provider's INAM ID and proven address. `INAM_FEEDBACK_TAG` is `inam-receipt`.
 
 ### 0.16.0 — 2026-10-03
 - Decision-ready trust check: `checkTrust(did, client, policy)` and pure `decideTrust(agent, reputation, policy)` return `allow`, `escrow`, or `deny` with the reasons. Defaults: a revoked or unknown ID is denied; independently verified history is allowed; countersigned-only or no history, or a warning flag (`in_dispute`, `attestation_rejected`, `nonperformance_reported`, `concentrated_counterparty`), gets escrow. Decided on the caller's side from the registry's hint (SPEC.md §5.4); INAM holds no money, so escrow runs on the caller's own payment rail.

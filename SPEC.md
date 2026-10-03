@@ -1,6 +1,8 @@
-# INAM Protocol — Specification v0.37 (Draft)
+# INAM Protocol — Specification v0.38 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, `node:sqlite` storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+
+**Changes from v0.37:** an INAM receipt can back ERC-8004 feedback (§11.1). The receipt's requester sends `giveFeedback` from the EVM address its INAM ID proved control of, and the feedback file carries the signed receipt, so a reader can tell task-linked, two-party feedback from a bare score sent by any wallet. No INAM server or wire change; `sdk-js` 0.17.0 adds `buildErc8004Feedback` and `verifyErc8004Feedback`.
 
 **Changes from v0.36:** an A2A agent can carry its INAM reputation on its Agent Card (new §11.3). A data-only A2A extension, `https://inamprotocol.org/ext/a2a/v1`, names the agent's INAM ID; a client accepts it only if that ID linked one of the card's endpoints as its `a2a_endpoint`, so the card and the ID must name each other. No INAM server or wire change; `sdk-js` 0.15.0 adds `inamA2AExtension` and `verifyA2ACard`.
 
@@ -558,6 +560,15 @@ INAM's design targets exactly these failure modes:
 | One party can post a score unilaterally | A receipt only counts once **both** parties have signed it (draft + countersign, §4.2). |
 | Sybil reviewers inflate reputation for ~$0 | A new counterparty contributes almost nothing: `eigenWeight` (§5.2) discounts receipts from low-reputation identities, so minting throwaway identities to vouch for yourself doesn't move the score. |
 | "Independent validator" is self-declared | A Verification (§12) only contributes if its `verifier` was explicitly granted verifier status by the registry operator (§12.3 rule 4) — there is no self-service path. |
+
+**Publishing a receipt as ERC-8004 feedback (v0.38).** The two models compose: a finalized INAM receipt can be posted to ERC-8004's Reputation Registry as evidence-backed feedback.
+
+1. **Who sends it.** The receipt's requester (`agentA`) calls `giveFeedback` from its `linked.erc8004_id` (§2.1), on the provider's ERC-8004 `agentId`. Only a `finalized`, `public` receipt **MAY** be published: the feedback file is public, so publishing a `participants_only` receipt (§4.4) would expose it.
+2. **Arguments.** `value` is `100`, `50`, or `0` for the receipt's `verification.outcome` of `success`, `partial`, or `failed`, with `valueDecimals` `0`. `tag1` is `inam-receipt`, `tag2` is `task.capability`. `feedbackHash` is the keccak256 of the feedback file's exact bytes.
+3. **Feedback file.** ERC-8004's off-chain feedback file, serialized with `canonical()` (§4.2), plus one field, `inam.receipt`: the receipt's signed content (§4.3) and both signatures, without `status`, `dispute`, or `visibility`. `clientAddress` is the requester's address in CAIP-10 form.
+4. **Checking it.** A reader holding the `NewFeedback` event and the file **MUST** treat the feedback as INAM-backed only if: the file hashes to `feedbackHash`; the receipt's `receiptId` matches its content and both signatures verify; `value` matches the outcome; the event's `clientAddress` equals the requester's `linked.erc8004_id`; and the registry the reader trusts reports the receipt `finalized`. That the ERC-8004 `agentId` belongs to the receipt's provider is checked on-chain against the provider's `linked.erc8004_id`, which INAM does not do.
+
+The sender check is what answers the study's Sybil finding: copying a genuine file to another wallet fails it. `examples/erc8004-feedback.ts` runs this against a local registry without sending a transaction.
 
 This is not a claim that INAM's model is trustless — it is explicitly **not** (it has a registry operator, §0). It is a different trade: INAM gives up chain-native permissionlessness to get task-linked, bilaterally-signed, Sybil-discounted reputation. An agent can hold both an ERC-8004 identity (for on-chain discovery) and an INAM reputation (for "did this specific job actually happen, and did both sides agree").
 
