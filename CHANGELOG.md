@@ -205,6 +205,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.17.1 — 2026-10-03
+- `withInamX402Gate` no longer intercepts the 402 a payee sends back for a request that already carries a payment. The x402 payment wrapper sends its paid retry through the same fetch, so a rejected payment surfaced as "no readable PAYMENT-REQUIRED header" instead of the payee's real error. Found on a real Base Sepolia payment run with `@x402/fetch` 2.28.0 and the x402.org facilitator; three payments settled after the fix.
+
 ### 0.17.0 — 2026-10-03
 - ERC-8004 feedback from INAM receipts (SPEC.md v0.38 §11.1): `buildErc8004Feedback(receipt, requester, target)` returns the feedback file, its keccak256 `feedbackHash`, and the `giveFeedback` arguments; `verifyErc8004Feedback(fileText, onchain, client)` checks a published one and returns the provider's INAM ID and proven address. `INAM_FEEDBACK_TAG` is `inam-receipt`.
 

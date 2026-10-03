@@ -28,6 +28,12 @@ describe("x402 verify-before-pay gate (SPEC.md §11.2)", () => {
     expect(await withInamX402Gate(async () => ok, registry())("https://x")).toBe(ok);
   });
 
+  it("passes a rejected paid retry through so the payment wrapper sees the real error", async () => {
+    const rejected = new Response(null, { status: 402 });
+    const paid = new Request("https://x", { headers: { "PAYMENT-SIGNATURE": "sig" } });
+    expect(await withInamX402Gate(async () => rejected, registry())(paid)).toBe(rejected);
+  });
+
   it("blocks a payee that names no INAM ID", async () => {
     expect(await blockedReason(withInamX402Gate(server402([BOUND], null), registry())("https://x"))).toMatch(/names no INAM ID/);
   });

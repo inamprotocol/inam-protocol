@@ -91,6 +91,10 @@ export function withInamX402Gate(inner: typeof fetch, inam: InamClient, policy: 
   return async (input, init) => {
     const res = await inner(input, init);
     if (res.status !== 402) return res;
+    // A 402 to a request that already carries a payment is the payee rejecting it; the payee was gated before
+    // signing, so pass it through and let the payment wrapper report the real error.
+    const sent = new Headers(init?.headers ?? (input instanceof Request ? input.headers : undefined));
+    if (sent.has("payment-signature") || sent.has("x-payment")) return res;
     const header = res.headers.get("payment-required");
     let required: PaymentRequired;
     try {
