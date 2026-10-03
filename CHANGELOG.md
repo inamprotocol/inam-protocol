@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.39 (Draft) — 2026-10-03
+- **Verifier grants are logged (§13.1).** Every successful `POST /agents/:id/verifier-status` appends a `verifier_status_changed` leaf with `{ agentId, authorized, operator }`. Grants made earlier enter the log when the operator repeats them. Consumers that switch on `entryType` must accept the new value; proofs and the monitor are unaffected.
+
 ### v0.38 (Draft) — 2026-10-03
 - **INAM receipts as ERC-8004 feedback (§11.1).** A finalized, public receipt can be published to ERC-8004's Reputation Registry by its requester, from the EVM address the requester's INAM ID proved control of. The feedback file carries the signed receipt and `feedbackHash` commits to it; a reader checks the hash, both signatures, the value, and that the sender is the requester. No INAM server or wire change. Runnable `examples/erc8004-feedback.ts`.
 
@@ -312,6 +315,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.13.0 (Node) / 0.13.0 (Worker) — 2026-10-03
+- Verifier grants and revokes are appended to the transparency log (SPEC.md v0.39). No migration: the log table already stores any `entry_type`.
+- Tests: a refused call adds no leaf; a grant and a revoke add one each with the expected payload (`tests/transparencyFlow.test.ts`, `worker/tests/api.test.ts`).
 
 ### 0.12.0 (Node) / 0.12.0 (Worker) — 2026-10-01
 - Reputation responses carry `evidence` (SPEC.md v0.35). No migration: `anchored` is read from the existing transparency log.

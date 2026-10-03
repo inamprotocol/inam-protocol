@@ -2,6 +2,7 @@ import { randomBytes, randomUUID } from "node:crypto";
 import { agents, linkChallenges } from "../storage/db.js";
 import { config } from "../config.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
+import * as transparencyService from "./transparencyService.js";
 import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
 import { secp256k1Verify, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
@@ -54,6 +55,8 @@ export function setVerifierStatus(callerDid: string, targetAgentId: string, auth
   if (record.revokedAt) throw conflict("AGENT_REVOKED", `Agent ${targetAgentId} was revoked at ${record.revokedAt}`);
   const updated: AgentRecord = { ...record, isAuthorizedVerifier: authorized };
   agents.set(targetAgentId, updated);
+  // SPEC v0.39 §13.1: every grant and revoke is logged, so the operator's choices are tamper-evident too.
+  transparencyService.appendEntry("verifier_status_changed", targetAgentId, { agentId: targetAgentId, authorized, operator: callerDid });
   return updated;
 }
 

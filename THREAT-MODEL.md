@@ -1,6 +1,6 @@
 # Threat model
 
-This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.38 and as run at `api.inamprotocol.org`. For each attack it names the defence, where the spec requires that defence, and what the defence leaves open. A residual risk listed here is a known limit, not an undiscovered bug. Report anything that breaks a defence through [`SECURITY.md`](./SECURITY.md).
+This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.39 and as run at `api.inamprotocol.org`. For each attack it names the defence, where the spec requires that defence, and what the defence leaves open. A residual risk listed here is a known limit, not an undiscovered bug. Report anything that breaks a defence through [`SECURITY.md`](./SECURITY.md).
 
 ## What INAM protects
 
@@ -64,7 +64,7 @@ This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.38 
 | Rewriting or deleting past receipt events. | Every finalize, dispute, resolve, and non-performance report is a leaf in an append-only RFC 6962 Merkle log (§13). An independent monitor checks each new tree head for consistency every hour and publishes its history; each new head is timestamped in Bitcoin through OpenTimestamps (§13.4). | Tree heads are unsigned. A registry could show different logs to different clients (a split view), and only a client that compares heads with a monitor would notice. There is no gossip or witness network yet. The monitor is run by the maintainers; anyone can run their own. |
 | Reporting false scores. | Scores are hints. A relying party can fetch the receipts, check every signature and inclusion proof, and recompute; the SDKs ship the functions for this (§5.4). | A relying party that just reads `trustScore` trusts the registry. |
 | Silently dropping or refusing writes (censorship). | Receipts are portable signed JSON: either party can show one without the registry (§4.3). | The log proves what was recorded, not what was submitted. A receipt the registry refused never enters any log. |
-| Granting verifier status to accomplices. | Grants are visible on every agent profile (`isAuthorizedVerifier`), and a relying party can apply its own verifier list instead (§5.4). | Grants are not logged in the transparency log, so the grant history is not tamper-evident. |
+| Granting verifier status to accomplices. | Every grant and revoke is a leaf in the transparency log with the operator's ID (§13.1), so a grant-verify-revoke sequence leaves a permanent trace. Grants are also visible on every agent profile, and a relying party can apply its own verifier list instead (§5.4). | The log shows who was granted, not why. Judging a grant is still up to the reader. |
 
 ### Using reputation to decide payment or trust
 
@@ -107,9 +107,8 @@ This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.38 
 In rough order of value:
 
 1. Tree-head witnesses or signed heads, so split views are detectable without trusting one monitor.
-2. Verifier grants and revocations recorded in the transparency log.
-3. An iterative trust solve and collusion clustering in place of the single-pass approximation.
-4. Key rotation with a signed successor chain.
-5. Removing legacy v1 request signatures.
-6. Capability-specific correctness verifiers and multi-verifier consensus (§12.7).
-7. An external security audit.
+2. An iterative trust solve and collusion clustering in place of the single-pass approximation.
+3. Key rotation with a signed successor chain.
+4. Removing legacy v1 request signatures.
+5. Capability-specific correctness verifiers and multi-verifier consensus (§12.7).
+6. An external security audit.
