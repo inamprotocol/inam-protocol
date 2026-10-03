@@ -519,7 +519,7 @@ describe("execution receipt lifecycle", () => {
     // check (see isAnchoredCounterparty's doc comment for why a weight cap
     // was tried and reverted).
     expect(rep.trustScore).toBeGreaterThan(0);
-  });
+  }, 20_000); // ~40 signed writes; took 9s on a slow CI runner
 
   it("buckets settlement volume by currency instead of summing every currency as USD", async () => {
     // An audit found `components.volumeUsd` summed `settlement.amount` across
