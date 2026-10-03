@@ -21,6 +21,8 @@ INAM has no free-standing score to post. Every trust signal is built from eviden
 
 INAM composes with ERC-8004 rather than competing with it at the identity layer: an ERC-8004 identity can be linked to an INAM ID with a standard wallet signature (SPEC [§11.1](./SPEC.md#111-inam-and-erc-8004)).
 
+What these defences do not cover is listed in [`THREAT-MODEL.md`](./THREAT-MODEL.md). Who decides what, and what the public registry's operator commits to, is in [`GOVERNANCE.md`](./GOVERNANCE.md).
+
 ## This repository
 
 This directory is the Node/TypeScript reference implementation: Express registry server, `did:key` identity, sybil-resistant reputation engine, and the `InamClient` SDK. The SDK itself is published standalone as [`inamprotocol`](https://www.npmjs.com/package/inamprotocol) (source in [`sdk-js/`](./sdk-js) — the exact code this server and the Worker deployment import, not a separate build). A parity Python SDK is published as [`inamprotocol`](https://pypi.org/project/inamprotocol/) on PyPI (source in [`sdk-python/`](./sdk-python)). Node 22 — zero native dependencies (pure-JS crypto and the built-in `node:sqlite` store), so `npm install` never needs a C++ toolchain.

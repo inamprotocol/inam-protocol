@@ -27,28 +27,21 @@ component (registry server, Worker deployment, `sdk-js`/`sdk-python`
 packages) is supported with security fixes. There is no backport policy
 for older versions while the protocol is still stabilizing.
 
-## Known, deliberate gaps in the release/publish pipeline
+## Release pipeline
 
-These are known process gaps, not secrets, and are tracked here so they
-aren't mistaken for oversights:
+Packages are published from GitHub Actions with no long-lived tokens:
+`inamprotocol` on npm carries SLSA provenance (`npm publish --provenance`),
+and `inamprotocol` on PyPI uses Trusted Publishing (OIDC) with
+attestations. Check provenance with `npm audit signatures` or on each
+package page.
 
-- **PyPI publishing is not yet using Trusted Publishing (OIDC).**
-  `inamprotocol@0.4.0` on PyPI was published via a maintainer running
-  `twine upload` locally with a PyPI API token, not via
-  [PyPI Trusted Publishing](https://docs.pypi.org/trusted-publishers/).
-  Moving to OIDC-based trusted publishing (no long-lived token, provenance
-  tied to the GitHub Actions run that built the release) is a known,
-  not-yet-completed hardening step.
-- **npm publishing does not yet use `npm publish --provenance`.**
-  Releases of the `inamprotocol` npm package (`sdk-js`) are not currently
-  published with npm's provenance attestation. Adopting
-  `--provenance` (via a trusted npm publish GitHub Action) is a known,
-  not-yet-completed hardening step.
+## Threat model
 
-Neither gap affects the protocol's cryptographic guarantees (agent
-identity, receipt signing, and verification are unaffected) — they affect
-the *supply-chain* trust of the published packages themselves, which is
-why they're flagged here rather than treated as protocol vulnerabilities.
+[`THREAT-MODEL.md`](./THREAT-MODEL.md) lists the attacks the protocol
+defends against, where each defence is specified, and the known limits.
+A report that one of those defences does not hold is in scope; a
+limit already listed there is not a new vulnerability, though ideas
+for closing one are welcome as issues.
 
 ## Scope
 
