@@ -1,3 +1,5 @@
+<img src="site/public/logo.svg" width="64" height="64" alt="INAM Protocol logo">
+
 # Inam Protocol Registry
 
 [![npm](https://img.shields.io/npm/v/inamprotocol?label=npm%20inamprotocol)](https://www.npmjs.com/package/inamprotocol)

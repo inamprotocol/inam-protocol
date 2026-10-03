@@ -105,6 +105,8 @@ function page({ title, description, activeNav, body, urlPath, extraHead = "" }) 
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${title}</title>
+<link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
 <meta name="description" content="${description}">
 <link rel="canonical" href="${url}">
 <meta property="og:type" content="website">
