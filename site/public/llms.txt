@@ -5,6 +5,7 @@
 ## Start here
 
 - [Use cases](https://inamprotocol.org/use-cases.html): concrete Job -> Receipt -> Verification flows
+- [Blog](https://inamprotocol.org/blog/): comparisons and notes, e.g. [INAM vs ERC-8004](https://inamprotocol.org/blog/inam-vs-erc-8004) and [agent receipt protocols compared](https://inamprotocol.org/blog/agent-receipt-protocols-compared)
 - [Quickstart](https://github.com/inamprotocol/inam-protocol/blob/main/QUICKSTART.md): `npm i inamprotocol`, zero to a changed trust score against the live registry
 - [Specification](https://docs.inamprotocol.org/spec/): full protocol spec
 - [API reference](https://docs.inamprotocol.org/api/): REST API, generated from openapi.yaml
