@@ -48,6 +48,8 @@ cpSync(path.join(SITE_ROOT, "public"), DIST, {
 
 // Blog: site/blog/<slug>.md (front matter: title, description, date) -> /blog/<slug>.
 // visibilityOS's blog publishing provider drops files here; pushing to main deploys them.
+// A post dated in the future stays out of the build until that day (UTC); deploy-site.yml
+// rebuilds daily so queued posts go live on their date without another push.
 const SITE = "https://inamprotocol.org";
 const BLOG_SRC = path.join(SITE_ROOT, "blog");
 const BLOG_DIST = path.join(DIST, "blog");
@@ -72,6 +74,9 @@ const posts = readdirSync(BLOG_SRC).filter((n) => n.endsWith(".md")).map((file) 
   if (!/^[a-z0-9-]+$/.test(slug)) throw new Error(`blog/${file}: file name must be lowercase-kebab-case`);
   return { ...meta, slug, url: `${SITE}/blog/${slug}`, html: marked.parse(m[2]) };
 }).sort((a, b) => b.date.localeCompare(a.date));
+const today = new Date().toISOString().slice(0, 10);
+const queued = posts.filter((p) => p.date > today).map((p) => `${p.slug} (${p.date})`);
+posts.splice(0, posts.length, ...posts.filter((p) => p.date <= today));
 
 for (const p of posts) {
   const jsonld = { "@context": "https://schema.org", "@type": "BlogPosting", headline: p.title, description: p.description,
@@ -104,4 +109,4 @@ for (const f of [...readdirSync(DIST).filter((n) => n.endsWith(".html")), ...rea
   if (left) throw new Error(`${f} still contains ${left[0]}`);
 }
 
-console.log(`Built site/dist — ${posts.length} blog posts, spec ${SPEC_VERSION} ${SPEC_STATUS}, registry ${REGISTRY_VERSION}, js ${JS_VERSION}, py ${PY_VERSION}`);
+console.log(`Built site/dist — ${posts.length} blog posts${queued.length ? ` (queued: ${queued.join(", ")})` : ""}, spec ${SPEC_VERSION} ${SPEC_STATUS}, registry ${REGISTRY_VERSION}, js ${JS_VERSION}, py ${PY_VERSION}`);
