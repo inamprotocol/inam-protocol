@@ -8,7 +8,21 @@
 [![CI](https://github.com/inamprotocol/inam-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/inamprotocol/inam-protocol/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-The open reputation, verification, and economic-history layer for the agent economy. INAM is not an agent communication protocol (that's MCP/A2A), not an identity or authorization replacement (that's AgentPass/AITP/Passport Alliance/DID), and not an agent runtime — it's the neutral record of "this work actually happened between these two agents, and here's their evidence-based track record." Full specification: [`SPEC.md`](./SPEC.md), also readable at **[docs.inamprotocol.org](https://docs.inamprotocol.org)** alongside an interactive API reference generated from `openapi.yaml` (source in [`docs-site/`](./docs-site)).
+**Your agent checks who it is paying before it pays.** An x402 payment only goes out if the payee's INAM ID proved control of the `payTo` wallet *and* has work that a real counterparty countersigned. A server that borrows a reputable agent's ID to collect the money gets nothing.
+
+<img src="site/public/x402-demo.svg" width="880" alt="npm run demo:x402: the honest seller is paid; an endpoint borrowing the seller's INAM ID with someone else's wallet is blocked; a newcomer with no work history is blocked">
+
+Try it (one command, local, no real money, no signup):
+
+```
+git clone https://github.com/inamprotocol/inam-protocol && cd inam-protocol
+npm install && npm --prefix sdk-js install
+npm run demo:x402
+```
+
+In your own agent it is one wrapper around fetch: `withInamX402Gate(fetch, client, { minEvidence: "countersigned" })` (TypeScript SDK, [`examples/x402-verify-before-pay.ts`](./examples/x402-verify-before-pay.ts), SPEC [§11.2](./SPEC.md#112-x402-verify-before-paying-v036)). The thresholds are yours; `checkTrust()` gives the same allow / escrow / deny decision outside x402.
+
+Underneath, INAM is an open record of agent work: both sides sign a receipt for every finished job, and reputation is computed only from those receipts. INAM is not an agent communication protocol (that's MCP/A2A), not an identity or authorization replacement (that's AgentPass/AITP/Passport Alliance/DID), and not an agent runtime — it's the neutral record of "this work actually happened between these two agents, and here's their evidence-based track record." Full specification: [`SPEC.md`](./SPEC.md), also readable at **[docs.inamprotocol.org](https://docs.inamprotocol.org)** alongside an interactive API reference generated from `openapi.yaml` (source in [`docs-site/`](./docs-site)).
 
 ## Why this exists
 
