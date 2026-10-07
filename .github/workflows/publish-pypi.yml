@@ -39,7 +39,7 @@ jobs:
     outputs:
       should_publish: ${{ steps.decide.outputs.should_publish }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
       - name: Compare sdk-python version to release tag
         id: decide
@@ -73,9 +73,9 @@ jobs:
       contents: read
       id-token: write # required for PyPI Trusted Publishing (OIDC)
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-python@v6
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
           cache: pip
