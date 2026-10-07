@@ -10,11 +10,23 @@ import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPubl
  * withInamX402Gate, so it only pays the one whose INAM ID proved control of
  * the payTo wallet and has countersigned work behind it.
  *
- *   npm run dev                                     # terminal 1
- *   npx tsx examples/x402-verify-before-pay.ts      # terminal 2
+ *   npm run demo:x402
  *
+ * With no INAM_URL it starts a throwaway in-process registry (temp dir), so it is
+ * one command. Set INAM_URL to use a running local registry instead (`npm run dev`).
  * Local only: it writes receipts, and transparency-log leaves are permanent. */
-const INAM_URL = process.env.INAM_URL ?? "http://localhost:4021";
+let INAM_URL = process.env.INAM_URL;
+let registry: http.Server | undefined;
+if (!INAM_URL) {
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  const path = await import("node:path");
+  process.env.INAM_DATA_DIR = mkdtempSync(path.join(tmpdir(), "inam-x402-demo-")); // read by src/config.ts at import
+  const { createServer } = await import("../src/server.js");
+  registry = createServer().listen(0);
+  await new Promise((r) => registry!.once("listening", r));
+  INAM_URL = `http://localhost:${(registry.address() as { port: number }).port}`;
+}
 if (!/^https?:\/\/(localhost|127\.0\.0\.1)/.test(INAM_URL)) throw new Error("refusing to write to a non-local registry");
 
 // --- 1. A seller agent with a wallet linked to its INAM ID and one finished job.
@@ -51,10 +63,10 @@ await newcomer.completeLink("erc8004_id", ethAddressFromUncompressedPublicKey(w2
 
 // --- 2. Three paid endpoints (a stand-in x402 server: 402 until a PAYMENT-SIGNATURE arrives).
 const impostorWallet = "0x000000000000000000000000000000000000dead";
-const endpoints: Record<string, { did: string; payTo: string }> = {
-  "/forecast": { did: seller.did, payTo },                // honest seller
-  "/borrowed": { did: seller.did, payTo: impostorWallet }, // claims the seller's DID, routes money elsewhere
-  "/newcomer": { did: newcomer.did, payTo: ethAddressFromUncompressedPublicKey(w2.publicKey) },
+const endpoints: Record<string, { did: string; payTo: string; who: string }> = {
+  "/forecast": { did: seller.did, payTo, who: "honest seller, 1 countersigned job" },
+  "/borrowed": { did: seller.did, payTo: impostorWallet, who: "claims the seller's INAM ID, payTo is someone else's wallet" },
+  "/newcomer": { did: newcomer.did, payTo: ethAddressFromUncompressedPublicKey(w2.publicKey), who: "own wallet, no work history yet" },
 };
 const server = http.createServer((req, res) => {
   const e = endpoints[req.url ?? ""];
@@ -81,7 +93,8 @@ const fakePay = (f: typeof fetch): typeof fetch => async (input, init) => {
 const paidFetch = fakePay(withInamX402Gate(fetch, buyer, { minEvidence: "countersigned" }));
 
 for (const path of Object.keys(endpoints)) {
-  console.log(`GET ${path}`);
+  console.log(`
+GET ${path}  (${endpoints[path].who})`);
   try {
     console.log(`   ✓ ${await (await paidFetch(base + path)).text()}`);
   } catch (e) {
@@ -90,3 +103,4 @@ for (const path of Object.keys(endpoints)) {
   }
 }
 server.close();
+registry?.close();

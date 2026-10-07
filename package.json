@@ -9,6 +9,7 @@
     "start": "tsx src/index.ts",
     "build": "tsc -p tsconfig.json",
     "demo": "tsx scripts/demo.ts",
+    "demo:x402": "tsx examples/x402-verify-before-pay.ts",
     "test": "vitest run"
   },
   "dependencies": {
