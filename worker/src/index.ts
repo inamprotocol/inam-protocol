@@ -31,6 +31,7 @@ import {
 import { parsePageParams, paginate } from "../../sdk-js/src/core/pagination.js";
 import type { AppEnv } from "./types.js";
 import { mcpHandler } from "./mcp.js";
+import { a2aHandler, agentCard } from "./a2a.js";
 
 const app = new Hono<AppEnv>();
 
@@ -374,5 +375,12 @@ app.get("/v1/transparency/proof/consistency", rateLimitReadByIp, async (c) => {
 
 app.use("/mcp", cors({ origin: "*", exposeHeaders: ["mcp-session-id"] }));
 app.all("/mcp", mcpHandler(app));
+
+// ---- Hosted A2A endpoint (read-only; see a2a.ts) ----
+
+app.use("/a2a", cors({ origin: "*" }));
+app.post("/a2a", a2aHandler(app));
+app.use("/.well-known/agent-card.json", cors({ origin: "*" }));
+app.get("/.well-known/agent-card.json", (c) => c.json(agentCard));
 
 export default app;

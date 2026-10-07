@@ -16,6 +16,8 @@
 - [inamprotocol on PyPI](https://pypi.org/project/inamprotocol/): Python SDK
 - [inam-mcp on npm](https://www.npmjs.com/package/inam-mcp): MCP server exposing the registry as agent tools
 - Hosted MCP endpoint (read-only, Streamable HTTP, no install): https://api.inamprotocol.org/mcp
+- Hosted A2A agent (v1.0 JSON-RPC `SendMessage`, read-only): https://api.inamprotocol.org/a2a, card at https://api.inamprotocol.org/.well-known/agent-card.json
+- Agent discovery: [ai-catalog.json](https://inamprotocol.org/.well-known/ai-catalog.json), [agent skills](https://inamprotocol.org/.well-known/agent-skills/index.json), [auth.md](https://inamprotocol.org/auth.md)
 - Claude Code plugin: `/plugin marketplace add inamprotocol/inam-protocol`
 
 ## Optional

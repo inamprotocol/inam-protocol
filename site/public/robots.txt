@@ -1,4 +1,6 @@
 User-agent: *
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 
+Agentmap: https://inamprotocol.org/.well-known/ai-catalog.json
 Sitemap: https://inamprotocol.org/sitemap.xml
