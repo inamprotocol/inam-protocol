@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="300" viewBox="0 0 880 300" role="img" aria-label="npm run demo:x402: the honest seller is paid; an endpoint borrowing the seller's INAM ID with someone else's wallet is blocked; a newcomer with no work history is blocked">
+  <style>
+    text { font: 14px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; fill: #c9d1d9; white-space: pre; }
+    .dim { fill: #8b949e; } .ok { fill: #3fb950; } .no { fill: #f85149; } .cmd { fill: #e6edf3; }
+    .l { opacity: 0; animation: in .25s ease-out forwards; }
+    @keyframes in { to { opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { .l { opacity: 1; animation: none; } }
+  </style>
+  <rect width="880" height="300" rx="10" fill="#0d1117"/>
+  <circle cx="22" cy="20" r="6" fill="#f85149"/><circle cx="42" cy="20" r="6" fill="#d29922"/><circle cx="62" cy="20" r="6" fill="#3fb950"/>
+  <text x="20" y="58" class="cmd l" style="animation-delay:.2s">$ npm run demo:x402</text>
+  <text x="20" y="92" class="l" style="animation-delay:1.0s">GET /forecast  <tspan class="dim">(honest seller, 1 countersigned job)</tspan></text>
+  <text x="20" y="114" class="dim l" style="animation-delay:1.5s">   paying 0.01 USDC to 0xdbaa…5946</text>
+  <text x="20" y="136" class="ok l" style="animation-delay:1.9s">   ✓ paid content from /forecast</text>
+  <text x="20" y="170" class="l" style="animation-delay:2.7s">GET /borrowed  <tspan class="dim">(claims the seller's INAM ID, payTo is someone else's wallet)</tspan></text>
+  <text x="20" y="192" class="no l" style="animation-delay:3.3s">   ✗ not paid: payTo is not an address this INAM ID proved control of</text>
+  <text x="20" y="226" class="l" style="animation-delay:4.1s">GET /newcomer  <tspan class="dim">(own wallet, no work history yet)</tspan></text>
+  <text x="20" y="248" class="no l" style="animation-delay:4.7s">   ✗ not paid: evidence none is below countersigned</text>
+</svg>
