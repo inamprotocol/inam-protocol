@@ -15,6 +15,10 @@ updates:
     groups:
       npm-minor-patch:
         update-types: ["minor", "patch"]
+    ignore:
+      # Packages declare node >=18 and CI runs 22/24; a newer @types/node major types APIs those runtimes lack.
+      - dependency-name: "@types/node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: pip
     directory: /sdk-python
