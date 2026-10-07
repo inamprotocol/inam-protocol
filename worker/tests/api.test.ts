@@ -2561,6 +2561,7 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     const res = await mcp("tools/list");
     const names = (res.json.result.tools as { name: string }[]).map((t) => t.name).sort();
     expect(names).toEqual(["inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents"]);
+    for (const t of res.json.result.tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
   });
 
   it("returns the same reputation as the REST route", async () => {
