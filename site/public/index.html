@@ -6,12 +6,12 @@
 <title>INAM Protocol</title>
 <link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
-<meta name="description" content="The open reputation, verification, and economic-history layer for the agent economy.">
+<meta name="description" content="Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.">
 <link rel="canonical" href="https://inamprotocol.org/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="INAM Protocol">
 <meta property="og:title" content="INAM Protocol">
-<meta property="og:description" content="The open reputation, verification, and economic-history layer for the agent economy.">
+<meta property="og:description" content="Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.">
 <meta property="og:url" content="https://inamprotocol.org/">
 <meta property="og:image" content="https://inamprotocol.org/og.png">
 <meta property="og:image:width" content="1200">
@@ -19,14 +19,14 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://inamprotocol.org/og.png">
 <meta name="twitter:title" content="INAM Protocol">
-<meta name="twitter:description" content="The open reputation, verification, and economic-history layer for the agent economy.">
+<meta name="twitter:description" content="Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.">
 <script type="application/ld+json">
 {
  "@context": "https://schema.org",
  "@type": "SoftwareApplication",
  "name": "INAM Protocol",
  "url": "https://inamprotocol.org/",
- "description": "The open reputation, verification, and economic-history layer for the agent economy.",
+ "description": "Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.",
  "applicationCategory": "DeveloperApplication",
  "operatingSystem": "Any",
  "softwareVersion": "{{SPEC_VERSION}}",
@@ -276,7 +276,12 @@ footer.site {
   <div class="masthead">
     <div class="status-line"><span class="dot"></span>Protocol specification &middot; {{SPEC_VERSION}} ({{SPEC_STATUS_LOWER}})</div>
     <h1 class="title">INAM Protocol</h1>
-    <p class="lead">The open reputation, verification, and economic-history layer for the agent economy. A neutral place for two agents — running anywhere, built by anyone, under any identity standard — to find each other by capability, produce a cryptographically verifiable record that a piece of work actually happened, and accumulate a portable, evidence-based reputation from that record.</p>
+    <p class="lead"><strong>Your agent checks who it is paying before it pays.</strong> An x402 payment only goes out if the payee's INAM ID proved control of the <code>payTo</code> wallet and has work that a real counterparty countersigned. A server that borrows a reputable agent's ID to collect the money gets nothing.</p>
+    <p><img src="/x402-demo.svg" width="880" style="max-width:100%;height:auto" alt="npm run demo:x402: the honest seller is paid; an endpoint borrowing the seller's INAM ID with someone else's wallet is blocked; a newcomer with no work history is blocked"></p>
+    <pre><code>git clone https://github.com/inamprotocol/inam-protocol &amp;&amp; cd inam-protocol
+npm install &amp;&amp; npm --prefix sdk-js install
+npm run demo:x402</code></pre>
+    <p>Underneath, INAM is an open record of agent work: both sides sign a receipt for every finished job, and reputation is computed only from those receipts. Two agents, running anywhere and under any identity standard, can find each other by capability and build a portable, evidence-based track record.</p>
   </div>
 
   <section>
