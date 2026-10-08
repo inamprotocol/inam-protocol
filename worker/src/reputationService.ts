@@ -29,20 +29,15 @@ function countsTowardReputation(r: DisputeCheckable): boolean {
 /**
  * v0.24 — does `counterparty` have any standing independent of `excludeIds`
  * (the agent being scored, plus every counterparty *it* has ever
- * transacted with)? Used only to flag a Sybil-ring pattern the per-pair
- * wash-trading cap structurally can't catch: spreading volume across many
+ * transacted with)? Catches the Sybil-ring pattern the per-pair
+ * wash-trading cap structurally can't: spreading volume across many
  * sockpuppet counterparties instead of one means no single counterparty
  * ever crosses the concentration threshold, even though none of them has
  * any transaction history outside the very cluster being scored.
  *
- * Deliberately flag-only, not a weight cap: an agent's *first-ever*
- * transaction with a brand-new, perfectly legitimate counterparty is
- * locally indistinguishable from a ring member by this one-hop check alone
- * (both have zero external history at that moment) — discounting weight on
- * this signal was tried and reverted after it zeroed out ordinary
- * few-receipt cold-start scores in testing. Real disambiguation needs
- * either a trust seed (stake, once staking ships) or multi-hop graph
- * analysis over real volume — both explicitly deferred (SPEC.md §5.2).
+ * v0.39 (issue #26): an unanchored counterparty lends no weight once the
+ * agent has >= 3 finalized receipts (same rule as the Node reference
+ * implementation; see src/services/reputationService.ts).
  *
  * `getAgent`/`listByAgent` are async here (unlike the Node reference
  * implementation) — an async predicate inside `.filter()`/`.some()`
@@ -115,6 +110,16 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     }
   }
   const counterpartyWeightedCount = new Map<string, number>();
+
+  // v0.39 (#26): counterparties with no standing outside this agent's own
+  // cluster lend no weight once the agent is past cold start.
+  const unanchored = new Set<string>();
+  if (finalized.length >= 3) {
+    const excludeIds = new Set<string>([agentId, ...pairCounts.keys()]);
+    for (const counterparty of pairCounts.keys()) {
+      if (!(await isAnchoredCounterparty(env, counterparty, excludeIds))) unanchored.add(counterparty);
+    }
+  }
 
   let weightedSuccessSum = 0;
   let weightSum = 0;
@@ -200,8 +205,8 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     const countedSoFar = counterpartyWeightedCount.get(counterparty) ?? 0;
     const cap = counterpartyWeightCap.get(counterparty) ?? Infinity;
     let weight: number;
-    if (countedSoFar >= cap) {
-      weight = 0; // over the concentrated-counterparty cap — see comment above
+    if (countedSoFar >= cap || unanchored.has(counterparty)) {
+      weight = 0; // over the concentrated-counterparty cap, or an unanchored counterparty — see comments above
     } else {
       weight = pairWeight * counterpartyTrust * decay * attestationBoost;
       counterpartyWeightedCount.set(counterparty, countedSoFar + 1);
@@ -270,14 +275,11 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   // per-pair check above (no single one is concentrated) — flag when most
   // of this agent's volume comes from counterparties that themselves have
   // no transaction history outside this agent's own counterparty set. Same
-  // >=3 gate and threshold as the per-pair check; see isAnchoredCounterparty
-  // for why this is a flag, not a weight cap.
+  // >=3 gate and threshold as the per-pair check. Since v0.39 that volume
+  // already scores zero; the flag tells consumers why.
   if (finalized.length >= 3) {
-    const excludeIds = new Set<string>([agentId, ...pairCounts.keys()]);
     let unanchoredReceiptCount = 0;
-    for (const [counterparty, count] of pairCounts.entries()) {
-      if (!(await isAnchoredCounterparty(env, counterparty, excludeIds))) unanchoredReceiptCount += count;
-    }
+    for (const counterparty of unanchored) unanchoredReceiptCount += pairCounts.get(counterparty) ?? 0;
     if (unanchoredReceiptCount / finalized.length > CONCENTRATED_COUNTERPARTY_THRESHOLD) {
       flags.push("unanchored_counterparty_volume");
     }

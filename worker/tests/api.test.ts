@@ -515,10 +515,9 @@ describe("execution receipt lifecycle", () => {
     // The new group-level flag catches it: all 15 receipts are with
     // counterparties that have no standing outside this ring.
     expect(rep.flags).toContain("unanchored_counterparty_volume");
-    // Deliberately flag-only — trustScore/weight are untouched by this
-    // check (see isAnchoredCounterparty's doc comment for why a weight cap
-    // was tried and reverted).
-    expect(rep.trustScore).toBeGreaterThan(0);
+    // v0.39 (#26): no longer flag-only. Unanchored feeders lend no weight,
+    // so the ring earns nothing.
+    expect(rep.trustScore).toBe(0);
   }, 20_000); // ~40 signed writes; took 9s on a slow CI runner
 
   it("buckets settlement volume by currency instead of summing every currency as USD", async () => {
