@@ -14,7 +14,14 @@ export default defineConfig({
       // it. This override applies only inside this test runner. The
       // corresponding private key lives in tests/testOperator.ts (32 bytes
       // of 0x02, a fixed fixture -- not a real credential).
-      miniflare: { bindings: { OPERATOR_DID: "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH" } },
+      // DEMO_PRIVATE_KEY (SPEC.md §14) is likewise a fixed test fixture
+      // (32 bytes of 0x03); production sets its own with `wrangler secret put`.
+      miniflare: {
+        bindings: {
+          OPERATOR_DID: "did:key:z6Mko9hTggMwjSTEaJaPUfE6tqcy2xvU6BnNq3e3o8qVBiyH",
+          DEMO_PRIVATE_KEY: "03".repeat(32),
+        },
+      },
     }),
   ],
   test: {

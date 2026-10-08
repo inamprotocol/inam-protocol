@@ -243,6 +243,9 @@ export interface Env {
    * source could reconstruct. A real deployment configures this itself
    * (`vars` or `wrangler secret put`). */
   OPERATOR_DID?: string;
+  /** Hex Ed25519 private key of the hosted demo counterparty (SPEC.md §14),
+   * set with `wrangler secret put`. Unset = the /v1/demo routes answer 503. */
+  DEMO_PRIVATE_KEY?: string;
 }
 
 export type AppEnv = {

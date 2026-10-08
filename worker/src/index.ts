@@ -32,6 +32,7 @@ import { parsePageParams, paginate } from "../../sdk-js/src/core/pagination.js";
 import type { AppEnv } from "./types.js";
 import { mcpHandler } from "./mcp.js";
 import { a2aHandler, agentCard } from "./a2a.js";
+import * as demo from "./demo.js";
 
 const app = new Hono<AppEnv>();
 
@@ -71,6 +72,8 @@ const PUBLIC_READ_PATHS = [
   "/v1/receipts/:id",
   "/v1/receipts/:id/verifications",
   "/v1/verifications/:id",
+  "/v1/demo",
+  "/v1/demo/*",
 ];
 // /v1/jobs/:id/offers is GET *and* POST at the same path — a blanket .use()
 // would wrongly hand CORS headers to the signed POST too, so it's applied
@@ -88,6 +91,23 @@ app.onError((err, c) => {
 app.notFound((c) => c.json({ error: { code: "ROUTE_NOT_FOUND", message: `No route for ${c.req.method} ${c.req.path}` } }, 404));
 
 app.get("/v1/health", (c) => c.json({ status: "ok" }));
+
+// ---- Hosted demo counterparty (SPEC.md §14) ----
+// Unsigned on purpose: the receipt itself is signed by the caller as agent_b,
+// and the demo agent only countersigns work it has checked. CORS is open so a
+// browser quickstart can drive it.
+
+function stringField(body: unknown, key: string): string {
+  const v = (body as Record<string, unknown> | null)?.[key];
+  if (typeof v !== "string" || !v) throw badRequest("VALIDATION_ERROR", `${key} is required`);
+  return v;
+}
+
+app.get("/v1/demo", async (c) => c.json(await demo.describeDemo(c.env)));
+app.post("/v1/demo/task", rateLimitRegistrationByIp, async (c) =>
+  c.json(await demo.issueTask(c.env, stringField(await c.req.json().catch(() => null), "agentId")), 201));
+app.post("/v1/demo/complete", rateLimitRegistrationByIp, async (c) =>
+  c.json(await demo.completeTask(c.env, stringField(await c.req.json().catch(() => null), "receiptId"))));
 
 // ---- Agents ----
 

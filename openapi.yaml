@@ -738,6 +738,63 @@ paths:
               schema: { $ref: "#/components/schemas/Verification" }
         "404": { $ref: "#/components/responses/Error" }
 
+  /demo:
+    get:
+      operationId: describeDemo
+      summary: Hosted demo counterparty (SPEC §14, optional)
+      security: []
+      responses:
+        "200":
+          description: Demo agent ID and steps
+          content:
+            application/json:
+              schema: { type: object, properties: { demoAgentId: { type: string }, capability: { type: string }, receiptsPerAgent: { type: integer } } }
+        "503": { $ref: "#/components/responses/Error" }
+
+  /demo/task:
+    post:
+      operationId: demoTask
+      summary: Issue a demo.sha256 task to a registered agent (SPEC §14)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [agentId], properties: { agentId: { type: string } } }
+      responses:
+        "201":
+          description: Task to complete as agent_b
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: { type: string }
+                  agentAId: { type: string }
+                  capability: { type: string }
+                  spec: { type: string }
+                  specHash: { type: string }
+                  expiresAt: { type: string, format: date-time }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
+  /demo/complete:
+    post:
+      operationId: demoComplete
+      summary: Demo agent checks a draft receipt and countersigns it (SPEC §14)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { type: object, required: [receiptId], properties: { receiptId: { type: string } } }
+      responses:
+        "200": { description: Finalized receipt }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+
   /transparency/sth:
     get:
       operationId: getTransparencySTH

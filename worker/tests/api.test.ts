@@ -9,6 +9,8 @@ import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPubl
 import type { Keypair } from "../../sdk-js/src/crypto/keys.js";
 import { testOperatorKeypair } from "./testOperator.js";
 import { buildSigningStringV1, buildSigningStringV2 } from "../../sdk-js/src/core/signingString.js";
+import { buildSignableContent } from "../../sdk-js/src/core/receiptContent.js";
+import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
 import DRAFT_WINDOW_MIGRATION from "../migration-draft-window-null.sql?raw";
 
 // Inlined rather than read from ../schema.sql at runtime: this test file
@@ -2651,5 +2653,72 @@ describe("hosted A2A endpoint (POST /a2a)", () => {
   it("replies with usage help instead of guessing at prose", async () => {
     const res = await a2a("SendMessage", { messageId: "m4", role: "ROLE_USER", parts: [{ text: "who should I hire?" }] });
     expect(res.json.result.message.parts[0].text).toContain("did:key");
+  });
+});
+
+describe("hosted demo counterparty (SPEC.md §14)", () => {
+  async function newAgent() {
+    const kp = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: ["x"] } });
+    return kp;
+  }
+
+  type Task = { jobId: string; agentAId: string; capability: string; spec: string; specHash: string };
+
+  async function draft(kp: Keypair, t: Task, output = sha256Hex(t.spec)) {
+    const now = new Date().toISOString();
+    const input = {
+      jobId: t.jobId,
+      task: { capability: t.capability, specHash: t.specHash, createdAt: now },
+      result: { outputHash: `sha256:${sha256Hex(output)}`, completedAt: now },
+      verification: { method: "payer_confirmation", outcome: "success" },
+    };
+    const content = buildSignableContent(t.agentAId, kp.did, input as never);
+    const signature = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), kp.privateKey));
+    const r = await call("POST", "/v1/receipts", { keypair: kp, idempotencyKey: `receipt:${t.jobId}`, body: { ...input, agentAId: t.agentAId, signature } });
+    expect(r.status).toBe(201);
+    return (r.json as { receiptId: string }).receiptId;
+  }
+
+  const task = async (kp: Keypair) => call("POST", "/v1/demo/task", { body: { agentId: kp.did } });
+
+  it("checks the work, countersigns, and the receipt never counts toward reputation", async () => {
+    const kp = await newAgent();
+    const info = await call("GET", "/v1/demo");
+    expect(info.status).toBe(200);
+
+    const t = await task(kp);
+    expect(t.status).toBe(201);
+    const receiptId = await draft(kp, t.json as Task);
+    const done = await call("POST", "/v1/demo/complete", { body: { receiptId } });
+    expect(done.status).toBe(200);
+    expect((done.json as { status: string }).status).toBe("finalized");
+    expect((done.json as { agentA: { id: string } }).agentA.id).toBe((info.json as { demoAgentId: string }).demoAgentId);
+
+    const rep = (await call("GET", `/v1/agents/${kp.did}/reputation`)).json as { trustScore: number; evidenceLevel: string };
+    expect(rep.trustScore).toBe(0);
+    expect(rep.evidenceLevel).toBe("none");
+
+    // Second demo receipt allowed, third refused.
+    await call("POST", "/v1/demo/complete", { body: { receiptId: await draft(kp, (await task(kp)).json as Task) } });
+    const third = await task(kp);
+    expect(third.status).toBe(409);
+    expect((third.json as { error: { code: string } }).error.code).toBe("DEMO_LIMIT_REACHED");
+  });
+
+  it("rejects wrong output and a jobId issued to someone else", async () => {
+    const kp = await newAgent();
+    const t = (await task(kp)).json as Task;
+    const wrong = await call("POST", "/v1/demo/complete", { body: { receiptId: await draft(kp, t, "not the hash") } });
+    expect((wrong.json as { error: { code: string } }).error.code).toBe("DEMO_WORK_REJECTED");
+
+    const other = await newAgent();
+    const stolen = await call("POST", "/v1/demo/complete", { body: { receiptId: await draft(other, t) } });
+    expect((stolen.json as { error: { code: string } }).error.code).toBe("DEMO_TASK_INVALID");
+  });
+
+  it("refuses unregistered agents", async () => {
+    const t = await call("POST", "/v1/demo/task", { body: { agentId: generateKeypair().did } });
+    expect(t.status).toBe(404);
   });
 });

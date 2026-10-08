@@ -6,6 +6,7 @@ import { attestationVerdict } from "./verificationService.js";
 import { evidenceLevel } from "../../sdk-js/src/core/attestation.js";
 import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
 import { isDisputeActive, type DisputeCheckable } from "../../sdk-js/src/core/disputeLifecycle.js";
+import { DEMO_CAPABILITY_PREFIX } from "../../sdk-js/src/core/demo.js";
 import type { Env, ReputationResult } from "./types.js";
 
 const CONFIDENCE_SATURATION = 5;
@@ -22,7 +23,11 @@ function clamp(n: number, lo: number, hi: number): number {
 
 // A disputed receipt whose opener never resolves it would otherwise zero out
 // its reputation contribution forever at no cost — see disputeLifecycle.ts.
-function countsTowardReputation(r: DisputeCheckable): boolean {
+// SPEC.md §5.2 (v0.40): receipts for `demo.*` capabilities (the hosted demo
+// counterparty, §14) are real and logged but never count, or a demo run would
+// hand out free countersigned evidence and anchor Sybil rings (#26).
+function countsTowardReputation(r: DisputeCheckable & { task: { capability: string } }): boolean {
+  if (r.task.capability.startsWith(DEMO_CAPABILITY_PREFIX)) return false;
   return r.status === "finalized" || (r.status === "disputed" && !isDisputeActive(r));
 }
 
