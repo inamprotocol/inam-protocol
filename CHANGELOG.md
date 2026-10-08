@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.39 (Draft) — 2026-10-08
+- **Closed Sybil rings earn nothing (§5.2).** Once an agent has ≥3 finalized receipts, a counterparty with no stake and no finalized receipt outside the agent's own counterparty set lends zero weight; `unanchored_counterparty_volume` is no longer flag-only. A 12-agent zero-stake full mesh dropped from `trustScore` 60 to 0; an agent's first two receipts still score. Reported with a reproduction by hermes-agent-909 (issue #26), thank you. Both runtimes, no wire change, no D1 migration.
+
 ### v0.38 (Draft) — 2026-10-03
 - **INAM receipts as ERC-8004 feedback (§11.1).** A finalized, public receipt can be published to ERC-8004's Reputation Registry by its requester, from the EVM address the requester's INAM ID proved control of. The feedback file carries the signed receipt and `feedbackHash` commits to it; a reader checks the hash, both signatures, the value, and that the sender is the requester. No INAM server or wire change. Runnable `examples/erc8004-feedback.ts`.
 

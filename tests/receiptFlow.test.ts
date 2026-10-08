@@ -262,10 +262,37 @@ describe("execution receipt lifecycle", () => {
     // The new group-level flag catches it: all 15 receipts are with
     // counterparties that have no standing outside this ring.
     expect(reputation.flags).toContain("unanchored_counterparty_volume");
-    // Deliberately flag-only — trustScore/weight are untouched by this
-    // check (see isAnchoredCounterparty's doc comment for why a weight cap
-    // was tried and reverted).
-    expect(reputation.trustScore).toBeGreaterThan(0);
+    // v0.39 (#26): no longer flag-only. Unanchored feeders lend no weight,
+    // so the ring earns nothing.
+    expect(reputation.trustScore).toBe(0);
+  });
+
+  it("a closed zero-stake mesh earns nothing, while cold start and anchored work still count (issue #26)", () => {
+    // hermes-agent-909's repro: 12 fresh agents, full mesh, every pair
+    // transacting both ways. Before v0.39 each member reached trustScore 60.
+    const ring = Array.from({ length: 12 }, () => generateKeypair());
+    for (const a of ring) registerAgent(a.did, { capabilities: ["x", "job.posting"] });
+    let n = 0;
+    function deal(requester: (typeof ring)[number], provider: (typeof ring)[number]) {
+      const input = freshInput(`mesh_${n++}`);
+      const draft = createDraft(provider.did, { ...input, agentAId: requester.did, signature: signDraft(requester.did, provider.privateKey, provider.did, input) });
+      countersign(draft.receiptId, requester.did, signCountersign(draft, requester.privateKey));
+    }
+    for (let i = 0; i < ring.length; i++) for (let j = 0; j < ring.length; j++) if (i !== j) deal(ring[i], ring[j]);
+
+    for (const member of ring) {
+      const rep = computeReputation(member.did);
+      expect(rep.components.finalizedReceipts).toBe(22);
+      expect(rep.trustScore).toBe(0);
+      expect(rep.flags).toContain("unanchored_counterparty_volume");
+    }
+
+    // Cold start is untouched: a newcomer's first two receipts still score.
+    const newcomer = generateKeypair();
+    registerAgent(newcomer.did, { capabilities: ["x"] });
+    deal(ring[0], newcomer);
+    deal(ring[1], newcomer);
+    expect(computeReputation(newcomer.did).trustScore).toBeGreaterThan(0);
   });
 
   it("rejects a future result.completedAt beyond clock-skew tolerance", async () => {
@@ -422,8 +449,15 @@ describe("execution receipt lifecycle", () => {
     // A legitimate, diversified counterparty gives the capped agent real
     // headroom: one receipt with someone else raises otherReceipts to 1, so
     // up to floor(1.5 * 1) = 1 of the wash-traded receipts can count again.
+    // Since v0.39 (#26) that counterparty must itself be anchored -- have
+    // work outside this cluster -- or it is indistinguishable from a sockpuppet.
     const honest = generateKeypair();
+    const elsewhere = generateKeypair();
     registerAgent(honest.did, { capabilities: ["job.posting"] });
+    registerAgent(elsewhere.did, { capabilities: ["x"] });
+    const prior = freshInput("honest_prior_job");
+    const priorDraft = createDraft(elsewhere.did, { ...prior, agentAId: honest.did, signature: signDraft(honest.did, elsewhere.privateKey, elsewhere.did, prior) });
+    countersign(priorDraft.receiptId, honest.did, signCountersign(priorDraft, honest.privateKey));
     const input = freshInput("honest_job");
     const signature = signDraft(honest.did, attackerB.privateKey, attackerB.did, input);
     const draft = createDraft(attackerB.did, { ...input, agentAId: honest.did, signature });
