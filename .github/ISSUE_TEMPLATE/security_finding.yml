@@ -1,0 +1,16 @@
+name: Scoring or protocol finding (public)
+description: A way to game reputation or break a protocol guarantee that is safe to discuss publicly. For anything exploitable against live users, follow SECURITY.md instead.
+labels: [bug]
+body:
+  - type: textarea
+    id: finding
+    attributes:
+      label: Finding
+      description: What guarantee breaks, with numbers (e.g. trustScore before/after).
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction
+      description: Ideally a vitest file using the SDK, no mocks.
