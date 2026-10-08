@@ -2561,6 +2561,7 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     const res = await mcp("tools/list");
     const names = (res.json.result.tools as { name: string }[]).map((t) => t.name).sort();
     expect(names).toEqual(["inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents"]);
+    for (const t of res.json.result.tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
   });
 
   it("returns the same reputation as the REST route", async () => {
@@ -2598,5 +2599,58 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     // A different caller is unaffected.
     const other = await callTool("inam_check_reputation", { agentId: agent });
     expect(other.json.result.content[0].text).not.toContain("429");
+  });
+});
+
+describe("hosted A2A endpoint (POST /a2a)", () => {
+  async function a2a(method: string, message: Record<string, unknown>) {
+    const request = new Request("http://worker.test/a2a", {
+      method: "POST",
+      headers: { "content-type": "application/json", "a2a-version": "1.0", "cf-connecting-ip": crypto.randomUUID() },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 7, method, params: { message } }),
+    });
+    const ctx = createExecutionContext();
+    const response = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    return { status: response.status, json: (await response.json()) as { id: unknown; result?: any; error?: { code: number } } };
+  }
+
+  it("serves an agent card whose interface points at /a2a", async () => {
+    const { status, json } = await call("GET", "/.well-known/agent-card.json");
+    expect(status).toBe(200);
+    const card = json as { supportedInterfaces: { url: string; protocolBinding: string }[]; skills: { id: string }[] };
+    expect(card.supportedInterfaces[0]).toMatchObject({ url: "https://api.inamprotocol.org/a2a", protocolBinding: "JSONRPC" });
+    expect(card.skills.map((s) => s.id).sort()).toEqual(["check_reputation", "get_receipt", "search_agents"]);
+  });
+
+  it("answers a did:key in text with the same reputation as the REST route (v1.0)", async () => {
+    const agent = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: agent, idempotencyKey: `reg:${agent.did}`, body: { capabilities: ["a2a.test"] } });
+    const res = await a2a("SendMessage", { messageId: "m1", role: "ROLE_USER", parts: [{ text: `reputation of ${agent.did}?` }] });
+    expect(res.json.id).toBe(7);
+    const msg = res.json.result.message;
+    expect(msg.role).toBe("ROLE_AGENT");
+    expect(msg.parts[0].data.skill).toBe("check_reputation");
+    const rest = (await call("GET", `/v1/agents/${encodeURIComponent(agent.did)}/reputation`)).json as { trustScore: number; evidenceLevel: string };
+    expect(msg.parts[0].data.result).toMatchObject({ trustScore: rest.trustScore, evidenceLevel: rest.evidenceLevel });
+  });
+
+  it("routes structured data parts and speaks v0.3 message/send", async () => {
+    const res = await a2a("message/send", { messageId: "m2", role: "user", kind: "message", parts: [{ kind: "data", data: { capability: "a2a.test" } }] });
+    expect(res.json.result.kind).toBe("message");
+    expect(res.json.result.role).toBe("agent");
+    expect(res.json.result.parts[0]).toMatchObject({ kind: "data", data: { skill: "search_agents" } });
+  });
+
+  it("reports a missing receipt as an answer, and unknown methods as JSON-RPC errors", async () => {
+    const missing = await a2a("SendMessage", { messageId: "m3", role: "ROLE_USER", parts: [{ text: "sha256:" + "0".repeat(64) }] });
+    expect(missing.json.result.message.parts[0].text).toContain("404");
+    const bad = await a2a("GetTask", { parts: [] });
+    expect(bad.json.error?.code).toBe(-32601);
+  });
+
+  it("replies with usage help instead of guessing at prose", async () => {
+    const res = await a2a("SendMessage", { messageId: "m4", role: "ROLE_USER", parts: [{ text: "who should I hire?" }] });
+    expect(res.json.result.message.parts[0].text).toContain("did:key");
   });
 });

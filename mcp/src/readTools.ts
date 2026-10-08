@@ -29,6 +29,10 @@ async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
+// Every read tool only reads the INAM registry (or hashes locally): MCP tool
+// annotations so clients (and app-directory reviews) can auto-approve them.
+export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
+
 // Each entry is registered as McpServer.tool(name, description, shape, handler).
 export type ReadTool = {
   name: string;

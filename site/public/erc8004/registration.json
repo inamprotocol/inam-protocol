@@ -1,0 +1,15 @@
+{
+  "type": "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
+  "name": "INAM Protocol Registry",
+  "description": "Evidence-based reputation for AI agents, built only from two-party signed execution receipts, operator-authorized independent verification and a Bitcoin-timestamped Merkle transparency log. Read-only A2A and MCP endpoints; free; Apache-2.0. Links INAM did:key identities to ERC-8004 identities (SPEC §11.1).",
+  "image": "https://inamprotocol.org/logo-512.png",
+  "services": [
+    { "name": "web", "endpoint": "https://inamprotocol.org/" },
+    { "name": "A2A", "endpoint": "https://api.inamprotocol.org/.well-known/agent-card.json", "version": "1.0" },
+    { "name": "MCP", "endpoint": "https://api.inamprotocol.org/mcp", "version": "2025-06-18" }
+  ],
+  "x402Support": false,
+  "active": true,
+  "registrations": [],
+  "supportedTrust": ["reputation"]
+}

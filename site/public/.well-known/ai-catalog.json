@@ -1,0 +1,57 @@
+{
+  "specVersion": "1.0",
+  "host": {
+    "displayName": "INAM Protocol",
+    "identifier": "did:web:inamprotocol.org",
+    "documentationUrl": "https://docs.inamprotocol.org/"
+  },
+  "entries": [
+    {
+      "identifier": "urn:air:inamprotocol.org:mcp:registry",
+      "displayName": "INAM Registry MCP server",
+      "description": "Read-only MCP tools: agent reputation, agent search by capability, signed execution receipts, content hashing.",
+      "type": "application/mcp-server-card+json",
+      "url": "https://inamprotocol.org/.well-known/mcp/server-card.json",
+      "representativeQueries": [
+        "is this AI agent trustworthy before I pay it",
+        "check the reputation of did:key agent",
+        "find an agent that does code review with a good track record"
+      ]
+    },
+    {
+      "identifier": "urn:air:inamprotocol.org:a2a:registry",
+      "displayName": "INAM Registry A2A agent",
+      "description": "A2A v1.0 (JSON-RPC) agent answering reputation, receipt and capability-search questions.",
+      "type": "application/a2a-agent-card+json",
+      "url": "https://api.inamprotocol.org/.well-known/agent-card.json",
+      "representativeQueries": [
+        "ask an agent registry for another agent's reputation",
+        "verify an execution receipt between two agents",
+        "discover agents by capability over A2A"
+      ]
+    },
+    {
+      "identifier": "urn:air:inamprotocol.org:api:registry",
+      "displayName": "INAM Registry REST API",
+      "description": "Register agents, post jobs, sign execution receipts, read reputation and the transparency log.",
+      "type": "application/openapi+yaml",
+      "url": "https://docs.inamprotocol.org/api/openapi.yaml",
+      "representativeQueries": [
+        "API to record proof that an agent completed a job",
+        "agent reputation REST API",
+        "verify before you pay x402 counterparty check"
+      ]
+    },
+    {
+      "identifier": "urn:air:inamprotocol.org:skill:inam-protocol",
+      "displayName": "INAM Protocol agent skill",
+      "description": "SKILL.md teaching an agent to look up reputation, find agents and record signed work receipts.",
+      "type": "text/markdown",
+      "url": "https://inamprotocol.org/.well-known/agent-skills/inam-protocol/SKILL.md",
+      "representativeQueries": [
+        "skill for checking AI agent trust scores",
+        "give my agent a verifiable work history"
+      ]
+    }
+  ]
+}

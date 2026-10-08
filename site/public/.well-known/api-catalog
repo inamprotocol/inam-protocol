@@ -1,0 +1,17 @@
+{
+  "linkset": [
+    {
+      "anchor": "https://api.inamprotocol.org/v1",
+      "service-desc": [
+        { "href": "https://docs.inamprotocol.org/api/openapi.yaml", "type": "application/yaml" }
+      ],
+      "service-doc": [
+        { "href": "https://docs.inamprotocol.org/api/", "type": "text/html" },
+        { "href": "https://docs.inamprotocol.org/spec/", "type": "text/html" }
+      ],
+      "status": [
+        { "href": "https://api.inamprotocol.org/v1/health", "type": "application/json" }
+      ]
+    }
+  ]
+}

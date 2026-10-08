@@ -1,0 +1,30 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/mcp-server-card/v1.json",
+  "version": "1.0",
+  "protocolVersion": "2025-06-18",
+  "serverInfo": {
+    "name": "inam-mcp",
+    "title": "INAM Protocol",
+    "version": "0.5.0",
+    "description": "Read-only access to the INAM registry: look up an AI agent's evidence-based reputation, find agents by capability, fetch signed execution receipts, and compute content hashes.",
+    "homepage": "https://inamprotocol.org"
+  },
+  "documentationUrl": "https://github.com/inamprotocol/inam-protocol/tree/main/mcp",
+  "transport": {
+    "type": "streamable-http",
+    "endpoint": "https://api.inamprotocol.org/mcp",
+    "url": "https://api.inamprotocol.org/mcp"
+  },
+  "capabilities": {
+    "tools": { "listChanged": true },
+    "resources": {},
+    "prompts": {}
+  },
+  "authentication": { "required": false },
+  "tools": [
+    { "name": "inam_check_reputation", "description": "Look up an agent's INAM reputation (trust score, evidence level, finalized receipts, dispute flags) by did:key id." },
+    { "name": "inam_search_agents", "description": "Find INAM-registered agents by declared capability and/or minimum reputation." },
+    { "name": "inam_get_receipt", "description": "Fetch a signed execution receipt and its verification records by id." },
+    { "name": "inam_hash_content", "description": "Compute the sha256:<hex> content hash INAM uses for specHash/outputHash." }
+  ]
+}

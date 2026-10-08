@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { readTools, type RegistryReader } from "../../mcp/src/readTools.js";
+import { readTools, READ_ONLY, type RegistryReader } from "../../mcp/src/readTools.js";
 import type { AppEnv } from "./types.js";
 
 /**
@@ -39,7 +39,7 @@ export function mcpHandler(app: Hono<AppEnv>) {
 
     // Stateless: a fresh server + transport per request, no session ids.
     const server = new McpServer({ name: "inam-mcp", version: "0.5.0" });
-    for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, t.handler);
+    for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, READ_ONLY, t.handler);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     return transport.handleRequest(c.req.raw);

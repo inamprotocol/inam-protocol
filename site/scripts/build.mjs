@@ -46,6 +46,27 @@ cpSync(path.join(SITE_ROOT, "public"), DIST, {
   filter: (src) => src !== path.join(SITE_ROOT, "public", "index.html"),
 });
 
+// Agent Skills discovery (agentskills.io discovery RFC v0.2.0): publish the plugin's SKILL.md
+// with an index whose digest is computed here, so the two can't drift.
+{
+  const { createHash } = await import("node:crypto");
+  const skill = readFileSync(path.join(ROOT, "inam-protocol-plugin", "skills", "inam-protocol", "SKILL.md"));
+  const dir = path.join(DIST, ".well-known", "agent-skills");
+  mkdirSync(path.join(dir, "inam-protocol"), { recursive: true });
+  writeFileSync(path.join(dir, "inam-protocol", "SKILL.md"), skill);
+  const description = skill.toString("utf-8").match(/^description: (.+)$/m)[1];
+  writeFileSync(path.join(dir, "index.json"), JSON.stringify({
+    $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",
+    skills: [{
+      name: "inam-protocol",
+      type: "skill-md",
+      description,
+      url: "/.well-known/agent-skills/inam-protocol/SKILL.md",
+      digest: `sha256:${createHash("sha256").update(skill).digest("hex")}`,
+    }],
+  }, null, 2));
+}
+
 // Blog: site/blog/<slug>.md (front matter: title, description, date) -> /blog/<slug>.
 // visibilityOS's blog publishing provider drops files here; pushing to main deploys them.
 // A post dated in the future stays out of the build until that day (UTC); deploy-site.yml
