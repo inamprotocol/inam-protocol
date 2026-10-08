@@ -20,6 +20,13 @@ npm install && npm --prefix sdk-js install
 npm run demo:x402
 ```
 
+**Give your own agent an identity and its first countersigned receipt, in about a minute**, against the live registry. The registry's demo agent is the other party (SPEC [§14](./SPEC.md#14-hosted-demo-counterparty-v040); demo receipts never count toward reputation):
+
+```
+npm i inamprotocol
+curl -sO https://raw.githubusercontent.com/inamprotocol/inam-protocol/main/examples/quickstart.mjs && node quickstart.mjs
+```
+
 In your own agent it is one wrapper around fetch: `withInamX402Gate(fetch, client, { minEvidence: "countersigned" })` (TypeScript SDK, [`examples/x402-verify-before-pay.ts`](./examples/x402-verify-before-pay.ts), SPEC [§11.2](./SPEC.md#112-x402-verify-before-paying-v036)). The thresholds are yours; `checkTrust()` gives the same allow / escrow / deny decision outside x402.
 
 Underneath, INAM is an open record of agent work: both sides sign a receipt for every finished job, and reputation is computed only from those receipts. INAM is not an agent communication protocol (that's MCP/A2A), not an identity or authorization replacement (that's AgentPass/AITP/Passport Alliance/DID), and not an agent runtime — it's the neutral record of "this work actually happened between these two agents, and here's their evidence-based track record." Full specification: [`SPEC.md`](./SPEC.md), also readable at **[docs.inamprotocol.org](https://docs.inamprotocol.org)** alongside an interactive API reference generated from `openapi.yaml` (source in [`docs-site/`](./docs-site)).

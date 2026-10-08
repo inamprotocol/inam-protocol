@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.40 (Draft) — 2026-10-08
+- **Hosted demo counterparty (new §14).** `POST /demo/task` then `POST /demo/complete` gives a newcomer a real countersigned, logged receipt in a minute. Receipts for any `demo.*` capability never count toward reputation (§5.2), so the demo can't hand out free evidence or anchor Sybil rings. Stateless (HMAC-bound job ids), 2 per agent. Worker only; the Node reference server excludes demo receipts from scoring but does not host the demo.
+
 ### v0.39 (Draft) — 2026-10-08
 - **Closed Sybil rings earn nothing (§5.2).** Once an agent has ≥3 finalized receipts, a counterparty with no stake and no finalized receipt outside the agent's own counterparty set lends zero weight; `unanchored_counterparty_volume` is no longer flag-only. A 12-agent zero-stake full mesh dropped from `trustScore` 60 to 0; an agent's first two receipts still score. Reported with a reproduction by hermes-agent-909 (issue #26), thank you. Both runtimes, no wire change, no D1 migration.
 
