@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "inam": {
+      "type": "http",
+      "url": "https://api.inamprotocol.org/mcp"
+    }
+  }
+}

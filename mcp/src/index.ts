@@ -54,7 +54,7 @@ const server = new McpServer({ name: "inam-mcp", version: "0.5.0" });
 
 // --- read tools (always available; shared with the hosted endpoint) --------
 
-for (const t of readTools(inam)) server.tool(t.name, t.description, t.shape, READ_ONLY, t.handler);
+for (const t of readTools(inam)) server.tool(t.name, t.description, t.shape, { ...READ_ONLY, title: t.title }, t.handler);
 
 server.tool(
   "inam_whoami",

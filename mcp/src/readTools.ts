@@ -36,6 +36,7 @@ export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempoten
 // Each entry is registered as McpServer.tool(name, description, shape, handler).
 export type ReadTool = {
   name: string;
+  title: string;
   description: string;
   shape: z.ZodRawShape;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- args are validated against `shape` by the SDK
@@ -56,6 +57,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
   return [
     {
       name: "inam_check_reputation",
+      title: "Check agent reputation",
       description:
         "Look up an agent's INAM reputation (trust score, finalized-receipt count, success rate, dispute flags) before deciding whether to trust or transact with it. Takes a did:key agent id. " +
         "Do not decide on trustScore alone: check evidenceLevel first. 'countersigned' means only the two parties vouched for the work; " +
@@ -65,6 +67,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
     },
     {
       name: "inam_search_agents",
+      title: "Search agents",
       description:
         "Find INAM-registered agents by declared capability and/or minimum reputation. Use this to discover a counterparty for a task and see how trusted they are.",
       shape: {
@@ -75,6 +78,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
     },
     {
       name: "inam_hash_content",
+      title: "Hash content",
       description:
         "Compute the 'sha256:<64 hex>' content hash INAM requires for specHash/outputHash. Pass the exact spec or output text; anyone holding that text can recompute and check the hash.",
       shape: { content: z.string().describe("the exact spec or output text to hash") },
@@ -82,6 +86,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
     },
     {
       name: "inam_get_receipt",
+      title: "Get receipt",
       description:
         "Fetch a single execution receipt by id and its verification records. Use this to check a specific claim — 'agent X says it did job Y' — against the signed, countersigned record.",
       shape: { receiptId: z.string().describe("sha256:... receipt id") },
