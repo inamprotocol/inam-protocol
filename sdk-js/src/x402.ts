@@ -1,6 +1,8 @@
 import type { InamClient } from "./client.js";
 import type { AgentRecord, ReputationResult } from "./types.js";
 import type { EvidenceLevel } from "./core/attestation.js";
+import { canonicalize } from "./crypto/canonical.js";
+import { sha256Hex } from "./crypto/keys.js";
 
 /** "Verify before you pay" for x402 v2 (SPEC.md §11.2).
  *
@@ -61,6 +63,68 @@ export function policyFailure(reputation: ReputationResult, policy: X402Policy =
   if (EVIDENCE_RANK[reputation.evidenceLevel] < EVIDENCE_RANK[minEvidence]) return `evidence ${reputation.evidenceLevel} is below ${minEvidence}`;
   if (reputation.trustScore < (policy.minTrustScore ?? 0)) return `trustScore ${reputation.trustScore} is below ${policy.minTrustScore}`;
   return null;
+}
+
+/** The payment the caller is about to make, as `CounterpartyContext` names it (x402 #1777). */
+export interface X402Request {
+  resource: string;
+  amount: string;
+  network: string;
+  nonce: string;
+}
+
+export const X402_POLICY_VERSION = "inam-x402-gate/1";
+
+/** Exactly what `decideX402` reads, with defaults applied: anyone holding this
+ * object can re-derive the decision and recompute `policy_input_hash`. */
+export function x402PolicyInput(agent: AgentRecord, reputation: ReputationResult, payTo: string[], request: X402Request, policy: X402Policy = {}) {
+  return {
+    policy_version: X402_POLICY_VERSION,
+    policy: { minEvidence: policy.minEvidence ?? "countersigned", minTrustScore: policy.minTrustScore ?? 0 },
+    counterparty_did: agent.id,
+    revoked: Boolean(agent.revokedAt),
+    bound_wallet: agent.linked.erc8004_id?.toLowerCase() ?? null,
+    pay_to: payTo.map((a) => a.toLowerCase()),
+    evidence_level: reputation.evidenceLevel,
+    trust_score: reputation.trustScore,
+    trust_profile_issued_at: reputation.evidence?.freshness?.evaluatedAt ?? null,
+    requested_resource: request.resource,
+    requested_amount: request.amount,
+    chain_or_settlement_network: request.network,
+    nonce_or_request_id: request.nonce,
+  };
+}
+
+/** A `CounterpartyContext` (x402 #1777) for one gate decision. `policy_input_hash`
+ * is sha256 over the JCS (RFC 8785) form of `x402PolicyInput`. Unsigned: it is
+ * the payer's own record of what it checked, not an attestation. */
+export function counterpartyContext(
+  agent: AgentRecord,
+  reputation: ReputationResult,
+  payTo: string[],
+  request: X402Request,
+  policy: X402Policy = {},
+  registryUrl = "https://api.inamprotocol.org",
+) {
+  const input = x402PolicyInput(agent, reputation, payTo, request, policy);
+  const decision = decideX402(agent, reputation, payTo, policy);
+  const agentUrl = `${registryUrl}/v1/agents/${encodeURIComponent(agent.id)}`;
+  return {
+    counterparty_did: agent.id,
+    counterparty_wallet_or_account: input.bound_wallet,
+    wallet_binding_proof_ref: agentUrl,
+    trust_profile_ref: `${agentUrl}/reputation`,
+    trust_profile_issued_at: input.trust_profile_issued_at,
+    requested_resource: request.resource,
+    requested_amount: request.amount,
+    chain_or_settlement_network: request.network,
+    nonce_or_request_id: request.nonce,
+    policy_version: X402_POLICY_VERSION,
+    policy_input_canonicalization: "JCS (RFC 8785)",
+    policy_input_hash: `sha256:${sha256Hex(canonicalize(input))}`,
+    decision: decision.allow ? ("allow" as const) : ("deny" as const),
+    reason: decision.reason,
+  };
 }
 
 export class X402PaymentBlocked extends Error {
