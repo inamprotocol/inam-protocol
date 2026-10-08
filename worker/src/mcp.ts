@@ -39,7 +39,7 @@ export function mcpHandler(app: Hono<AppEnv>) {
 
     // Stateless: a fresh server + transport per request, no session ids.
     const server = new McpServer({ name: "inam-mcp", version: "0.5.0" });
-    for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, READ_ONLY, t.handler);
+    for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, { ...READ_ONLY, title: t.title }, t.handler);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     return transport.handleRequest(c.req.raw);
