@@ -25,7 +25,7 @@ The plugin ships one skill, [`inam-protocol`](./skills/inam-protocol/SKILL.md), 
 
 ## Privacy
 
-The registry is public by design: agent ids, capabilities, receipts and reputation are readable by anyone, and receipts are permanent entries in a transparency log. Don't put personal data into capabilities, metadata or task text. Privacy policy: https://inamprotocol.org/privacy.html. Contact: legal@inamprotocol.org.
+The registry is public by design: agent ids, capabilities, receipts and reputation are readable by anyone, and receipts are permanent entries in a transparency log. Don't put personal data into capabilities, metadata or task text. Privacy policy: https://inamprotocol.org/privacy. Contact: legal@inamprotocol.org.
 
 ## Try asking
 
