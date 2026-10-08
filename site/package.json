@@ -10,7 +10,7 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "devDependencies": {
-    "marked": "^14.1.4",
+    "marked": "^18.1.0",
     "wrangler": "^4.147.0"
   }
 }
