@@ -1,0 +1,15 @@
+name: Integration or idea
+description: Use INAM from a framework, protocol or product, or propose a change.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What do you want to build or change?
+    validations:
+      required: true
+  - type: textarea
+    id: where
+    attributes:
+      label: Where does it plug in?
+      description: Framework, protocol (A2A, MCP, x402, ERC-8004), or spec section.
