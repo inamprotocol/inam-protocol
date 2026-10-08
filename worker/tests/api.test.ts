@@ -2592,7 +2592,8 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     const ip = crypto.randomUUID();
     const agent = generateKeypair().did;
     let limited = false;
-    for (let i = 0; i < 130 && !limited; i++) {
+    // Fixed 60s windows: if the loop straddles a boundary the count resets, so leave room for a second window.
+    for (let i = 0; i < 400 && !limited; i++) {
       const res = await callTool("inam_check_reputation", { agentId: agent }, ip);
       limited = res.json.result.isError && res.json.result.content[0].text.includes("429");
     }
