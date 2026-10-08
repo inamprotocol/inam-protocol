@@ -1,6 +1,6 @@
 {
   "name": "inamprotocol",
-  "version": "0.17.1",
+  "version": "0.18.0",
   "description": "Reference TypeScript/JavaScript SDK for the INAM Protocol — agent identity, execution receipts, jobs, and reputation",
   "type": "module",
   "main": "./dist/index.js",
@@ -9,6 +9,10 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./ai-sdk": {
+      "types": "./dist/aiSdk.d.ts",
+      "import": "./dist/aiSdk.js"
     }
   },
   "files": [
@@ -26,7 +30,10 @@
     "reputation",
     "did",
     "protocol",
-    "execution-receipt"
+    "execution-receipt",
+    "ai-sdk",
+    "vercel-ai",
+    "tools"
   ],
   "homepage": "https://inamprotocol.org",
   "repository": {
@@ -48,6 +55,15 @@
   },
   "devDependencies": {
     "@types/node": "^22.5.0",
+    "ai": "^7.0.135",
     "typescript": "^5.5.4"
+  },
+  "peerDependencies": {
+    "ai": ">=7"
+  },
+  "peerDependenciesMeta": {
+    "ai": {
+      "optional": true
+    }
   }
 }

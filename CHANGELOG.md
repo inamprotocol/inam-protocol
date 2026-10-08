@@ -211,7 +211,8 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
-### Unreleased
+### 0.18.0 — 2026-10-09
+- New `inamprotocol/ai-sdk` entry point: `inamTools()` returns `checkReputation`, `searchAgents` and `getReceipt` as Vercel AI SDK `tool()` definitions, read-only, with the hosted MCP server's descriptions. `ai` (>=7) is an optional peer dependency; the main entry point does not import it. Closes #52.
 - `counterpartyContext(agent, reputation, payTo, request, policy?)` returns a `CounterpartyContext` (x402-foundation/x402#1777) for one x402 gate decision: `policy_input_hash` is sha256 over the JCS form of `x402PolicyInput(...)`, the exact input `decideX402` reads. Unsigned; it is the payer's record of what it checked. Published vectors in `tests/vectors/x402-counterparty-context.json` (generator `scripts/x402-context-vectors.ts`), with a test that recomputes hash and decision without the SDK.
 
 ### 0.17.1 — 2026-10-03
