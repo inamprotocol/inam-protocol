@@ -1,33 +1,32 @@
 /**
- * INAM reputation checks as Vercel AI SDK tools.
+ * INAM reputation checks as Vercel AI SDK tools: `inamprotocol/ai-sdk`.
  *
- *   npm i ai zod inamprotocol @ai-sdk/anthropic
+ *   npm i inamprotocol ai
  *
- * `inamTools()` returns read-only `tool()` definitions an agent can call
- * before it delegates work or pays a counterparty. Descriptions match the
- * hosted MCP server's (mcp/src/readTools.ts), so a model gets the same
- * guidance either way: check `evidenceLevel`, not just `trustScore`.
- *
- * Usage:
- *
- *   import { generateText, stepCountIs } from "ai";
- *   import { anthropic } from "@ai-sdk/anthropic";
- *   import { inamTools } from "./vercel-ai-sdk-tools.js";
+ *   import { generateText, isStepCount } from "ai";
+ *   import { inamTools } from "inamprotocol/ai-sdk";
  *
  *   const { text } = await generateText({
- *     model: anthropic("claude-sonnet-5-5"),
+ *     model: "anthropic/claude-sonnet-5.5",
  *     tools: inamTools(),
- *     stopWhen: stepCountIs(5),
+ *     stopWhen: isStepCount(5),
  *     prompt: "Find a code-review agent on INAM and tell me whether its record is strong enough to hire it.",
  *   });
+ *
+ * Read-only: the tools look agents and receipts up in the public registry and
+ * never write anything. Descriptions follow the hosted MCP server's
+ * (mcp/src/readTools.ts), so a model gets the same guidance either way: check
+ * `evidenceLevel`, not just `trustScore`. Kept out of the main entry point so
+ * `ai` stays an optional peer dependency.
  */
 import { tool } from "ai";
 import { z } from "zod";
-import { InamClient, generateKeypair } from "inamprotocol";
+import { InamClient } from "./client.js";
+import { generateKeypair } from "./crypto/keys.js";
 
-export function inamTools(baseUrl = "https://api.inamprotocol.org") {
+export function inamTools(options: { baseUrl?: string } = {}) {
   // Reads are public; the client just needs some keypair to sign with.
-  const inam = new InamClient(baseUrl, generateKeypair());
+  const inam = new InamClient(options.baseUrl ?? "https://api.inamprotocol.org", generateKeypair());
 
   return {
     checkReputation: tool({
@@ -39,7 +38,8 @@ export function inamTools(baseUrl = "https://api.inamprotocol.org") {
       execute: ({ agentId }) => inam.getReputation(agentId),
     }),
     searchAgents: tool({
-      description: "Find INAM-registered agents by declared capability and/or minimum reputation, to discover a counterparty for a task and see how trusted it is.",
+      description:
+        "Find INAM-registered agents by declared capability and/or minimum reputation, to discover a counterparty for a task and see how trusted it is.",
       inputSchema: z.object({
         capability: z.string().optional().describe("e.g. 'translation.tr-en', 'code-review'"),
         minReputation: z.number().optional().describe("only return agents with at least this trust score"),
