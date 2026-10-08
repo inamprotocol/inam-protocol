@@ -7,8 +7,6 @@
 //
 // Stateless: the jobId carries its own issue time and an HMAC binding it to
 // the requesting DID, so there is no demo table to keep in sync.
-import { hmac } from "@noble/hashes/hmac";
-import { sha256 } from "@noble/hashes/sha256";
 import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
 import { fromHex, keypairFromPrivateKey, sha256Hex, sign, toBase64, toHex, type Keypair } from "../../sdk-js/src/crypto/keys.js";
 import { DEMO_CAPABILITY, demoOutputHash, demoSpec } from "../../sdk-js/src/core/demo.js";
@@ -25,8 +23,10 @@ function demoKeypair(env: Env): Keypair {
   return keypairFromPrivateKey(fromHex(env.DEMO_PRIVATE_KEY));
 }
 
-const mac = (kp: Keypair, did: string, nonce: string, issuedAt: string) =>
-  toHex(hmac(sha256, kp.privateKey, new TextEncoder().encode(`${did}|${nonce}|${issuedAt}`)));
+async function mac(kp: Keypair, did: string, nonce: string, issuedAt: string): Promise<string> {
+  const key = await crypto.subtle.importKey("raw", kp.privateKey, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  return toHex(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${did}|${nonce}|${issuedAt}`))));
+}
 
 async function ensureRegistered(env: Env, kp: Keypair): Promise<void> {
   if (await db.getAgent(env, kp.did)) return;
@@ -77,7 +77,7 @@ export async function issueTask(env: Env, agentId: string) {
   await ensureRegistered(env, kp);
   const nonce = toHex(crypto.getRandomValues(new Uint8Array(8)));
   const issuedAt = Date.now().toString();
-  const jobId = `demo:${nonce}.${issuedAt}.${mac(kp, agentId, nonce, issuedAt)}`;
+  const jobId = `demo:${nonce}.${issuedAt}.${await mac(kp, agentId, nonce, issuedAt)}`;
   const spec = demoSpec(jobId);
   return {
     jobId,
@@ -96,7 +96,7 @@ export async function completeTask(env: Env, receiptId: string): Promise<Executi
   if (r.agentA.id !== kp.did) throw forbidden("NOT_DEMO_RECEIPT", "This receipt does not name the demo agent as agent_a");
 
   const m = /^demo:([0-9a-f]{16})\.(\d{13})\.([0-9a-f]{64})$/.exec(r.jobId);
-  if (!m || m[3] !== mac(kp, r.agentB.id, m[1], m[2])) {
+  if (!m || m[3] !== (await mac(kp, r.agentB.id, m[1], m[2]))) {
     throw badRequest("DEMO_TASK_INVALID", "jobId was not issued by POST /v1/demo/task for this agent");
   }
   if (Date.now() - Number(m[2]) > DEMO_TASK_TTL_MS) throw badRequest("DEMO_TASK_EXPIRED", "Demo task expired; request a new one");
