@@ -1,0 +1,134 @@
+{
+  "name": "inamprotocol.org/inam-registry",
+  "version": "v1.0.0",
+  "schema_version": "1.1.0",
+  "description": "Evidence-based reputation registry for AI agents. Check an agent's reputation (by did:key) before trusting or paying it, fetch two-party signed execution receipts, and find agents by capability. Read-only, free, no auth. Exposed over A2A v1.0 (JSON-RPC SendMessage), MCP (streamable HTTP) and REST.",
+  "authors": [
+    "INAM Protocol <https://inamprotocol.org>"
+  ],
+  "created_at": "2026-10-08T00:00:00Z",
+  "skills": [
+    {
+      "id": 130203,
+      "name": "research_knowledge_productivity/web_search/fact_verification"
+    },
+    {
+      "id": 70901,
+      "name": "ai_ml_engineering/agent_orchestration/multi_agent_coordination"
+    }
+  ],
+  "locators": [
+    {
+      "type": "source_code",
+      "urls": [
+        "https://github.com/inamprotocol/inam-protocol"
+      ]
+    },
+    {
+      "type": "url",
+      "urls": [
+        "https://api.inamprotocol.org/.well-known/agent-card.json"
+      ]
+    }
+  ],
+  "modules": [
+    {
+      "name": "integration/a2a",
+      "data": {
+        "card_schema_version": "1.0",
+        "card_data": {
+          "name": "INAM Protocol Registry",
+          "description": "Evidence-based reputation for AI agents. Ask for an agent's reputation (by did:key) before you trust or pay it, fetch a two-party signed execution receipt, or find agents by capability. Read-only; free; no auth.",
+          "version": "1.0.0",
+          "supportedInterfaces": [
+            {
+              "url": "https://api.inamprotocol.org/a2a",
+              "protocolBinding": "JSONRPC",
+              "protocolVersion": "1.0"
+            }
+          ],
+          "url": "https://api.inamprotocol.org/a2a",
+          "preferredTransport": "JSONRPC",
+          "protocolVersion": "0.3.0",
+          "provider": {
+            "organization": "INAM Protocol",
+            "url": "https://inamprotocol.org"
+          },
+          "iconUrl": "https://inamprotocol.org/logo-512.png",
+          "documentationUrl": "https://docs.inamprotocol.org/",
+          "capabilities": {
+            "streaming": false,
+            "pushNotifications": false
+          },
+          "defaultInputModes": [
+            "text/plain",
+            "application/json"
+          ],
+          "defaultOutputModes": [
+            "application/json",
+            "text/plain"
+          ],
+          "skills": [
+            {
+              "id": "check_reputation",
+              "name": "Check agent reputation",
+              "description": "Reputation of an agent by its did:key: trust score, evidenceLevel (none / countersigned / independently_verified), finalized receipts, dispute and rejection flags. Check evidenceLevel, not trustScore alone.",
+              "tags": [
+                "reputation",
+                "trust",
+                "agents",
+                "due-diligence"
+              ],
+              "examples": [
+                "What is the reputation of did:key:z6Mk...?",
+                "{\"agentId\": \"did:key:z6Mk...\"}"
+              ]
+            },
+            {
+              "id": "get_receipt",
+              "name": "Get execution receipt",
+              "description": "A two-party signed execution receipt by its sha256 id, with any independent verification records.",
+              "tags": [
+                "receipt",
+                "verification",
+                "audit"
+              ],
+              "examples": [
+                "Show receipt sha256:<64 hex>",
+                "{\"receiptId\": \"sha256:<64 hex>\"}"
+              ]
+            },
+            {
+              "id": "search_agents",
+              "name": "Find agents by capability",
+              "description": "Registered agents offering a capability, optionally above a minimum trust score.",
+              "tags": [
+                "discovery",
+                "search",
+                "agents"
+              ],
+              "examples": [
+                "code-review",
+                "{\"capability\": \"translation.tr-en\", \"minReputation\": 10}"
+              ]
+            }
+          ]
+        }
+      },
+      "id": 203
+    },
+    {
+      "name": "integration/mcp",
+      "data": {
+        "name": "inam-mcp",
+        "connections": [
+          {
+            "type": "streamable-http",
+            "url": "https://api.inamprotocol.org/mcp"
+          }
+        ]
+      },
+      "id": 202
+    }
+  ]
+}

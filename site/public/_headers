@@ -14,3 +14,7 @@
 
 /.well-known/agent-skills/*
   Access-Control-Allow-Origin: *
+
+/.well-known/oasf.json
+  Content-Type: application/json
+  Access-Control-Allow-Origin: *
