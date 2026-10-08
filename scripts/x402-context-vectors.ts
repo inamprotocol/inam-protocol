@@ -15,8 +15,10 @@ const BOUND = "0x1111111111111111111111111111111111111111";
 const OTHER = "0x2222222222222222222222222222222222222222";
 const REQUEST = { resource: "https://paid.example/api/translate", amount: "1000", network: "eip155:8453", nonce: "req-0001" };
 
-// EIP-55 test address from the EIP itself: stored lowercase, presented checksummed.
-const MIXED = "0x52908400098527886E0F7030069857D2E4169EE7";
+// Mixed-case EIP-55 test address from the EIP itself, and the same 20 bytes with
+// the case of each letter flipped (an invalid checksum).
+const MIXED = "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed";
+const BAD_CHECKSUM = "0x5AaEB6053f3e94c9B9a09F33669435e7eF1bEaED";
 
 const agent = (o: { revokedAt?: string; bound?: string } = {}) =>
   ({ id: DID, linked: { erc8004_id: o.bound ?? BOUND }, revokedAt: o.revokedAt }) as unknown as AgentRecord;
@@ -32,15 +34,17 @@ const cases: { name: string; agent: AgentRecord; reputation: ReputationResult; p
   // Added after the recompute on #1777: pin reason precedence and address case.
   { name: "deny: two conditions fail (payTo unbound and newcomer), payTo reason wins", agent: agent(), reputation: rep("none", 0), payTo: [OTHER] },
   { name: "allow: checksummed mixed-case payTo matches a lowercase bound wallet", agent: agent({ bound: MIXED.toLowerCase() }), reputation: rep("countersigned", 40), payTo: [MIXED] },
+  { name: "allow: invalid EIP-55 casing of the bound address (checksum validation is out of scope)", agent: agent({ bound: MIXED }), reputation: rep("countersigned", 40), payTo: [BAD_CHECKSUM] },
 ];
 
 export function buildVectors() {
   return {
-    description: "INAM x402 gate CounterpartyContext vectors (x402-foundation/x402#1777). policy_input_hash = 'sha256:' + hex(sha256(UTF-8 of policy_input_canonical)); policy_input_canonical is the JCS (RFC 8785) form of policy_input. The decision is a function of policy_input alone: deny if revoked; deny unless bound_wallet is in pay_to; deny if evidence_level ranks below policy.minEvidence (none < countersigned < independently_verified) or trust_score < policy.minTrustScore; else allow. Conditions are checked in that order and the context's reason names the first one that fails. Addresses are compared case-insensitively: bound_wallet and pay_to are lowercased in policy_input.",
+    description: "INAM x402 gate CounterpartyContext vectors (x402-foundation/x402#1777). policy_input_hash = 'sha256:' + hex(sha256(UTF-8 of policy_input_canonical)); policy_input_canonical is the JCS (RFC 8785) form of policy_input. The decision is a function of policy_input alone: deny if revoked; deny unless bound_wallet is in pay_to; deny if evidence_level ranks below policy.minEvidence (none < countersigned < independently_verified) or trust_score < policy.minTrustScore; else allow. Conditions are checked in that order and the context's reason names the first one that fails. Addresses are compared case-insensitively: bound_wallet and pay_to are lowercased in policy_input; `presented` records them as given, before normalization. EIP-55 checksum validation is outside the gate: the comparison is over the 20 address bytes, so a wrongly cased address still names the same account, and checking its checksum is the wallet's job.",
     policy_version: "inam-x402-gate/1",
     vectors: cases.map((c) => {
       const policy_input = x402PolicyInput(c.agent, c.reputation, c.payTo, REQUEST, c.policy);
-      return { name: c.name, policy_input, policy_input_canonical: canonicalize(policy_input), context: counterpartyContext(c.agent, c.reputation, c.payTo, REQUEST, c.policy) };
+      const presented = { bound_wallet: c.agent.linked.erc8004_id ?? null, pay_to: c.payTo };
+      return { name: c.name, presented, policy_input, policy_input_canonical: canonicalize(policy_input), context: counterpartyContext(c.agent, c.reputation, c.payTo, REQUEST, c.policy) };
     }),
   };
 }

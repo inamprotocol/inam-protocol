@@ -1,9 +1,15 @@
 {
-  "description": "INAM x402 gate CounterpartyContext vectors (x402-foundation/x402#1777). policy_input_hash = 'sha256:' + hex(sha256(UTF-8 of policy_input_canonical)); policy_input_canonical is the JCS (RFC 8785) form of policy_input. The decision is a function of policy_input alone: deny if revoked; deny unless bound_wallet is in pay_to; deny if evidence_level ranks below policy.minEvidence (none < countersigned < independently_verified) or trust_score < policy.minTrustScore; else allow. Conditions are checked in that order and the context's reason names the first one that fails. Addresses are compared case-insensitively: bound_wallet and pay_to are lowercased in policy_input.",
+  "description": "INAM x402 gate CounterpartyContext vectors (x402-foundation/x402#1777). policy_input_hash = 'sha256:' + hex(sha256(UTF-8 of policy_input_canonical)); policy_input_canonical is the JCS (RFC 8785) form of policy_input. The decision is a function of policy_input alone: deny if revoked; deny unless bound_wallet is in pay_to; deny if evidence_level ranks below policy.minEvidence (none < countersigned < independently_verified) or trust_score < policy.minTrustScore; else allow. Conditions are checked in that order and the context's reason names the first one that fails. Addresses are compared case-insensitively: bound_wallet and pay_to are lowercased in policy_input; `presented` records them as given, before normalization. EIP-55 checksum validation is outside the gate: the comparison is over the 20 address bytes, so a wrongly cased address still names the same account, and checking its checksum is the wallet's job.",
   "policy_version": "inam-x402-gate/1",
   "vectors": [
     {
       "name": "allow: bound payTo, countersigned history",
+      "presented": {
+        "bound_wallet": "0x1111111111111111111111111111111111111111",
+        "pay_to": [
+          "0x1111111111111111111111111111111111111111"
+        ]
+      },
       "policy_input": {
         "policy_version": "inam-x402-gate/1",
         "policy": {
@@ -44,6 +50,12 @@
     },
     {
       "name": "deny: payTo not bound to the DID (borrowed DID)",
+      "presented": {
+        "bound_wallet": "0x1111111111111111111111111111111111111111",
+        "pay_to": [
+          "0x2222222222222222222222222222222222222222"
+        ]
+      },
       "policy_input": {
         "policy_version": "inam-x402-gate/1",
         "policy": {
@@ -84,6 +96,12 @@
     },
     {
       "name": "deny: newcomer with no countersigned work",
+      "presented": {
+        "bound_wallet": "0x1111111111111111111111111111111111111111",
+        "pay_to": [
+          "0x1111111111111111111111111111111111111111"
+        ]
+      },
       "policy_input": {
         "policy_version": "inam-x402-gate/1",
         "policy": {
@@ -124,6 +142,12 @@
     },
     {
       "name": "deny: revoked DID",
+      "presented": {
+        "bound_wallet": "0x1111111111111111111111111111111111111111",
+        "pay_to": [
+          "0x1111111111111111111111111111111111111111"
+        ]
+      },
       "policy_input": {
         "policy_version": "inam-x402-gate/1",
         "policy": {
@@ -164,6 +188,12 @@
     },
     {
       "name": "deny: score below policy minimum",
+      "presented": {
+        "bound_wallet": "0x1111111111111111111111111111111111111111",
+        "pay_to": [
+          "0x1111111111111111111111111111111111111111"
+        ]
+      },
       "policy_input": {
         "policy_version": "inam-x402-gate/1",
         "policy": {
@@ -204,6 +234,12 @@
     },
     {
       "name": "deny: two conditions fail (payTo unbound and newcomer), payTo reason wins",
+      "presented": {
+        "bound_wallet": "0x1111111111111111111111111111111111111111",
+        "pay_to": [
+          "0x2222222222222222222222222222222222222222"
+        ]
+      },
       "policy_input": {
         "policy_version": "inam-x402-gate/1",
         "policy": {
@@ -244,6 +280,12 @@
     },
     {
       "name": "allow: checksummed mixed-case payTo matches a lowercase bound wallet",
+      "presented": {
+        "bound_wallet": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
+        "pay_to": [
+          "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed"
+        ]
+      },
       "policy_input": {
         "policy_version": "inam-x402-gate/1",
         "policy": {
@@ -252,9 +294,9 @@
         },
         "counterparty_did": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
         "revoked": false,
-        "bound_wallet": "0x52908400098527886e0f7030069857d2e4169ee7",
+        "bound_wallet": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
         "pay_to": [
-          "0x52908400098527886e0f7030069857d2e4169ee7"
+          "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"
         ],
         "evidence_level": "countersigned",
         "trust_score": 40,
@@ -264,10 +306,10 @@
         "chain_or_settlement_network": "eip155:8453",
         "nonce_or_request_id": "req-0001"
       },
-      "policy_input_canonical": "{\"bound_wallet\":\"0x52908400098527886e0f7030069857d2e4169ee7\",\"chain_or_settlement_network\":\"eip155:8453\",\"counterparty_did\":\"did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX\",\"evidence_level\":\"countersigned\",\"nonce_or_request_id\":\"req-0001\",\"pay_to\":[\"0x52908400098527886e0f7030069857d2e4169ee7\"],\"policy\":{\"minEvidence\":\"countersigned\",\"minTrustScore\":0},\"policy_version\":\"inam-x402-gate/1\",\"requested_amount\":\"1000\",\"requested_resource\":\"https://paid.example/api/translate\",\"revoked\":false,\"trust_profile_issued_at\":\"2026-10-08T12:00:00.000Z\",\"trust_score\":40}",
+      "policy_input_canonical": "{\"bound_wallet\":\"0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed\",\"chain_or_settlement_network\":\"eip155:8453\",\"counterparty_did\":\"did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX\",\"evidence_level\":\"countersigned\",\"nonce_or_request_id\":\"req-0001\",\"pay_to\":[\"0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed\"],\"policy\":{\"minEvidence\":\"countersigned\",\"minTrustScore\":0},\"policy_version\":\"inam-x402-gate/1\",\"requested_amount\":\"1000\",\"requested_resource\":\"https://paid.example/api/translate\",\"revoked\":false,\"trust_profile_issued_at\":\"2026-10-08T12:00:00.000Z\",\"trust_score\":40}",
       "context": {
         "counterparty_did": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
-        "counterparty_wallet_or_account": "0x52908400098527886e0f7030069857d2e4169ee7",
+        "counterparty_wallet_or_account": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
         "wallet_binding_proof_ref": "https://api.inamprotocol.org/v1/agents/did%3Akey%3Az6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
         "trust_profile_ref": "https://api.inamprotocol.org/v1/agents/did%3Akey%3Az6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX/reputation",
         "trust_profile_issued_at": "2026-10-08T12:00:00.000Z",
@@ -277,7 +319,53 @@
         "nonce_or_request_id": "req-0001",
         "policy_version": "inam-x402-gate/1",
         "policy_input_canonicalization": "JCS (RFC 8785)",
-        "policy_input_hash": "sha256:581357b85173caa624d9d1ec4e85a6fbc53e7c4e5118171431021a2c3eb88f18",
+        "policy_input_hash": "sha256:fd187c38572096611b642adacc974e2e1b740a01063c83e9e9a54ea945a5eb9c",
+        "decision": "allow",
+        "reason": "ok"
+      }
+    },
+    {
+      "name": "allow: invalid EIP-55 casing of the bound address (checksum validation is out of scope)",
+      "presented": {
+        "bound_wallet": "0x5aAeb6053F3E94C9b9A09f33669435E7Ef1BeAed",
+        "pay_to": [
+          "0x5AaEB6053f3e94c9B9a09F33669435e7eF1bEaED"
+        ]
+      },
+      "policy_input": {
+        "policy_version": "inam-x402-gate/1",
+        "policy": {
+          "minEvidence": "countersigned",
+          "minTrustScore": 0
+        },
+        "counterparty_did": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+        "revoked": false,
+        "bound_wallet": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
+        "pay_to": [
+          "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed"
+        ],
+        "evidence_level": "countersigned",
+        "trust_score": 40,
+        "trust_profile_issued_at": "2026-10-08T12:00:00.000Z",
+        "requested_resource": "https://paid.example/api/translate",
+        "requested_amount": "1000",
+        "chain_or_settlement_network": "eip155:8453",
+        "nonce_or_request_id": "req-0001"
+      },
+      "policy_input_canonical": "{\"bound_wallet\":\"0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed\",\"chain_or_settlement_network\":\"eip155:8453\",\"counterparty_did\":\"did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX\",\"evidence_level\":\"countersigned\",\"nonce_or_request_id\":\"req-0001\",\"pay_to\":[\"0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed\"],\"policy\":{\"minEvidence\":\"countersigned\",\"minTrustScore\":0},\"policy_version\":\"inam-x402-gate/1\",\"requested_amount\":\"1000\",\"requested_resource\":\"https://paid.example/api/translate\",\"revoked\":false,\"trust_profile_issued_at\":\"2026-10-08T12:00:00.000Z\",\"trust_score\":40}",
+      "context": {
+        "counterparty_did": "did:key:z6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+        "counterparty_wallet_or_account": "0x5aaeb6053f3e94c9b9a09f33669435e7ef1beaed",
+        "wallet_binding_proof_ref": "https://api.inamprotocol.org/v1/agents/did%3Akey%3Az6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX",
+        "trust_profile_ref": "https://api.inamprotocol.org/v1/agents/did%3Akey%3Az6Mkon3Necd6NkkyfoGoHxid2znGc59LU3K7mubaRcFbLfLX/reputation",
+        "trust_profile_issued_at": "2026-10-08T12:00:00.000Z",
+        "requested_resource": "https://paid.example/api/translate",
+        "requested_amount": "1000",
+        "chain_or_settlement_network": "eip155:8453",
+        "nonce_or_request_id": "req-0001",
+        "policy_version": "inam-x402-gate/1",
+        "policy_input_canonicalization": "JCS (RFC 8785)",
+        "policy_input_hash": "sha256:fd187c38572096611b642adacc974e2e1b740a01063c83e9e9a54ea945a5eb9c",
         "decision": "allow",
         "reason": "ok"
       }
