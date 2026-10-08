@@ -205,6 +205,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### Unreleased
+- `counterpartyContext(agent, reputation, payTo, request, policy?)` returns a `CounterpartyContext` (x402-foundation/x402#1777) for one x402 gate decision: `policy_input_hash` is sha256 over the JCS form of `x402PolicyInput(...)`, the exact input `decideX402` reads. Unsigned; it is the payer's record of what it checked. Published vectors in `tests/vectors/x402-counterparty-context.json` (generator `scripts/x402-context-vectors.ts`), with a test that recomputes hash and decision without the SDK.
+
 ### 0.17.1 — 2026-10-03
 - `withInamX402Gate` no longer intercepts the 402 a payee sends back for a request that already carries a payment. The x402 payment wrapper sends its paid retry through the same fetch, so a rejected payment surfaced as "no readable PAYMENT-REQUIRED header" instead of the payee's real error. Found on a real Base Sepolia payment run with `@x402/fetch` 2.28.0 and the x402.org facilitator; three payments settled after the fix.
 

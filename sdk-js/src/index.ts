@@ -85,8 +85,8 @@ export type {
   VerificationResult,
   VerificationRecord,
 } from "./types.js";
-export { INAM_X402_EXTENSION, inamX402Extension, decideX402, withInamX402Gate, X402PaymentBlocked } from "./x402.js";
-export type { X402Policy, X402Decision } from "./x402.js";
+export { INAM_X402_EXTENSION, inamX402Extension, decideX402, withInamX402Gate, X402PaymentBlocked, X402_POLICY_VERSION, x402PolicyInput, counterpartyContext } from "./x402.js";
+export type { X402Policy, X402Decision, X402Request } from "./x402.js";
 export { INAM_A2A_EXTENSION_URI, inamA2AExtension, decideA2A, verifyA2ACard, cardEndpoints } from "./a2a.js";
 export type { A2APolicy, A2ADecision, A2AAgentCardLike } from "./a2a.js";
 export { decideTrust, checkTrust, DEFAULT_ESCROW_FLAGS } from "./trust.js";
