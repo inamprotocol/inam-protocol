@@ -100,6 +100,24 @@ const check = await verifyErc8004Feedback(fileText, { feedbackHash, clientAddres
 // { valid, reasons, receiptId, providerDid, providerAddress }
 ```
 
+## Receipts over HTTP
+
+If your agents already call each other over HTTP, one wrapper on each side turns every call into a countersigned receipt (SPEC.md §15):
+
+```ts
+import { InamClient, inamReceipts, inamFetch } from "inamprotocol";
+
+// Worker: wrap the fetch-style handler that answers calls.
+export default { fetch: inamReceipts(handleReview, { client: workerClient, capability: "code-review" }) };
+
+// Requester: call through inamFetch.
+const inam = inamFetch(requesterClient);
+const res = await inam.fetch("https://reviewer.example/review", { method: "POST", body: diff });
+await inam.settle(); // countersigns run in the background; wait before a serverless function exits
+```
+
+The requester only countersigns when the receipt's hashes match the exact request it sent and response it received. That confirms delivery, not quality; pass `accept: (res, receipt) => ...` to `inamFetch` to run your own check first.
+
 ## Vercel AI SDK tools
 
 ```ts
