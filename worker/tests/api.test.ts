@@ -2723,3 +2723,74 @@ describe("hosted demo counterparty (SPEC.md §14)", () => {
     expect(t.status).toBe(404);
   });
 });
+
+describe("paid x402 report (x402Report.ts)", () => {
+  const PAY_TO = "0x209693Bc6afc0C5328bA36FaF03C514EF312287C";
+  const enabled = { ...env, X402_PAY_TO: PAY_TO } as typeof env;
+  async function get(path: string, e: typeof env, headers: Record<string, string> = {}) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(new Request(`http://worker.test${path}`, { headers: { "cf-connecting-ip": crypto.randomUUID(), ...headers } }), e, ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+  const decode = (h: string | null) => JSON.parse(atob(h!));
+
+  it("is off until a payout wallet is configured, and never charges for unknown agents", async () => {
+    const kp = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `x402off:${kp.did}`, body: { capabilities: ["x"] } });
+    expect((await get(`/v1/x402/report/${kp.did}`, env)).status).toBe(404);
+    expect((await get(`/v1/x402/report/${generateKeypair().did}`, enabled)).status).toBe(404);
+  });
+
+  it("answers 402 with x402 v2 requirements and a bazaar listing, then serves the report once the facilitator verifies and settles", async () => {
+    const kp = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `x402on:${kp.did}`, body: { capabilities: ["x"] } });
+    const unpaid = await get(`/v1/x402/report/${kp.did}`, enabled);
+    expect(unpaid.status).toBe(402);
+    const required = decode(unpaid.headers.get("payment-required"));
+    expect(required.x402Version).toBe(2);
+    expect(required.accepts[0]).toMatchObject({ scheme: "exact", network: "eip155:8453", amount: "10000", payTo: PAY_TO, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" });
+    expect(required.extensions.bazaar.info.input).toEqual({ type: "http", method: "GET" });
+
+    const calls: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      calls.push(url);
+      const body = JSON.parse(String(init?.body));
+      expect(body.paymentRequirements.payTo).toBe(PAY_TO);
+      return Response.json(url.endsWith("/verify") ? { isValid: true, payer: "0xabc" } : { success: true, transaction: "0x1", network: "eip155:8453", payer: "0xabc" });
+    }) as typeof fetch;
+    try {
+      const paid = await get(`/v1/x402/report/${kp.did}`, enabled, { "payment-signature": btoa(JSON.stringify({ x402Version: 2, accepted: required.accepts[0], payload: {} })) });
+      expect(paid.status).toBe(200);
+      expect(calls).toEqual(["https://facilitator.payai.network/verify", "https://facilitator.payai.network/settle"]);
+      expect(decode(paid.headers.get("payment-response")).success).toBe(true);
+      const report = (await paid.json()) as { agent: { id: string }; reputation: { evidenceLevel: string }; workHistory: { jobsFinalized: number } };
+      expect(report.agent.id).toBe(kp.did);
+      expect(report.reputation.evidenceLevel).toBe("none");
+      expect(report.workHistory.jobsFinalized).toBe(0);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it("does not serve or settle when the facilitator rejects the payment", async () => {
+    const kp = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `x402bad:${kp.did}`, body: { capabilities: ["x"] } });
+    const calls: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls.push(String(input));
+      return Response.json({ isValid: false, invalidReason: "insufficient_funds" });
+    }) as typeof fetch;
+    try {
+      const res = await get(`/v1/x402/report/${kp.did}`, enabled, { "payment-signature": btoa(JSON.stringify({ x402Version: 2 })) });
+      expect(res.status).toBe(402);
+      expect(decode(res.headers.get("payment-required")).error).toBe("insufficient_funds");
+      expect(calls).toHaveLength(1);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+});

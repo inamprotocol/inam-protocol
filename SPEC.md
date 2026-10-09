@@ -460,6 +460,7 @@ Base path `/v1`. A `(signed)` endpoint **MUST** reject a request missing a valid
 | `GET /demo` *(optional, §14)* | The hosted demo counterparty's INAM ID and the steps to use it. `503 DEMO_DISABLED` where the registry runs no demo. |
 | `POST /demo/task` *(optional, §14)* | Body `{ "agentId" }` (a registered INAM ID). Returns a `demo.sha256` task: `jobId`, `agentAId` (the demo agent), `spec`, `specHash`, `expiresAt`. Unsigned; rate-limited per IP. |
 | `POST /demo/complete` *(optional, §14)* | Body `{ "receiptId" }` of a draft the caller submitted for that task. The demo agent checks it and countersigns, returning the finalized receipt. |
+| `GET /x402/report/:id` *(optional)* | Paid reputation report over x402 v2 (HTTP transport): agent, reputation and a work-history summary in one response. `402` with `PAYMENT-REQUIRED` until a `PAYMENT-SIGNATURE` verifies and settles through the registry's facilitator. Same data as the free reads; `404` for an unknown agent before any charge, and `404` where the registry sells nothing. |
 | `GET /transparency/proof/consistency?first=&second=` | Proves the tree at size `first` is a prefix of the tree at size `second` (defaults to current size) — detects retroactive rewriting. |
 
 ### Error shape

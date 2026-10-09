@@ -795,6 +795,21 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 
+  /x402/report/{id}:
+    get:
+      operationId: getPaidReputationReport
+      summary: Paid reputation report over x402 v2 (optional; off unless the registry configures a payout wallet)
+      security: []
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string } }
+        - { name: PAYMENT-SIGNATURE, in: header, required: false, schema: { type: string }, description: Base64 x402 v2 PaymentPayload }
+      responses:
+        "200": { description: "Report (agent, reputation, workHistory); PAYMENT-RESPONSE header carries the settlement" }
+        "400": { $ref: "#/components/responses/Error" }
+        "402": { description: "Payment required; PAYMENT-REQUIRED header carries the base64 PaymentRequired object" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
   /transparency/sth:
     get:
       operationId: getTransparencySTH

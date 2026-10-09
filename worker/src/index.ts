@@ -33,6 +33,7 @@ import type { AppEnv } from "./types.js";
 import { mcpHandler } from "./mcp.js";
 import { a2aHandler, agentCard } from "./a2a.js";
 import * as demo from "./demo.js";
+import { x402ReportHandler } from "./x402Report.js";
 
 const app = new Hono<AppEnv>();
 
@@ -152,6 +153,9 @@ app.get("/v1/agents/:id/protocols", async (c) => {
   const agent = await agentService.getAgent(c.env, c.req.param("id")!);
   return c.json({ linked: agent.linked, linkedProof: agent.linkedProof });
 });
+
+app.use("/v1/x402/*", cors({ origin: "*", exposeHeaders: ["PAYMENT-REQUIRED", "PAYMENT-RESPONSE"] }));
+app.get("/v1/x402/report/:id", rateLimitReadByIp, x402ReportHandler);
 
 app.get("/v1/agents/:id/reputation", rateLimitReadByIp, async (c) => c.json(await computeReputation(c.env, c.req.param("id")!)));
 

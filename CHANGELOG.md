@@ -332,6 +332,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Node reference server & Cloudflare Worker
 
+### Unreleased (Worker)
+- Paid reputation report over x402 v2: `GET /v1/x402/report/:id`, 0.01 USDC on Base, with a `bazaar` discovery extension so x402 Bazaars can list it. Same data as the free reads, in one call. Off unless `X402_PAY_TO` is set (`X402_NETWORK`, `X402_FACILITATOR_URL` optional; default facilitator PayAI). Unknown agents get 404 before any charge; the report is served only after the facilitator verifies and settles. Tests in `worker/tests/api.test.ts`.
+
 ### 0.12.0 (Node) / 0.12.0 (Worker) — 2026-10-01
 - Reputation responses carry `evidence` (SPEC.md v0.35). No migration: `anchored` is read from the existing transparency log.
 - Tests: evidence dimensions, including a de-authorized verifier's attestation reported in `excludedAttestations` (`tests/verificationFlow.test.ts`, `worker/tests/api.test.ts`).
