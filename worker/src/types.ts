@@ -243,6 +243,12 @@ export interface Env {
    * source could reconstruct. A real deployment configures this itself
    * (`vars` or `wrangler secret put`). */
   OPERATOR_DID?: string;
+  /** Payout wallet for the paid x402 report (x402Report.ts). Unset = route off. */
+  X402_PAY_TO?: string;
+  /** CAIP-2 network for that payment; default eip155:8453 (Base). */
+  X402_NETWORK?: string;
+  /** x402 facilitator base URL; default https://facilitator.payai.network. */
+  X402_FACILITATOR_URL?: string;
   /** Hex Ed25519 private key of the hosted demo counterparty (SPEC.md §14),
    * set with `wrangler secret put`. Unset = the /v1/demo routes answer 503. */
   DEMO_PRIVATE_KEY?: string;
