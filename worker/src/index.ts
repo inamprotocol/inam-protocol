@@ -74,6 +74,7 @@ const PUBLIC_READ_PATHS = [
   "/v1/verifications/:id",
   "/v1/demo",
   "/v1/demo/*",
+  "/v1/transparency/*",
 ];
 // /v1/jobs/:id/offers is GET *and* POST at the same path — a blanket .use()
 // would wrongly hand CORS headers to the signed POST too, so it's applied
