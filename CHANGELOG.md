@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.41 (Draft) — 2026-10-09
+- **Receipts over HTTP (new §15).** `INAM-Requester` / `INAM-Receipt` headers bind a receipt to an ordinary HTTP call between two agents: the worker drafts over hashes of the exact request and response, the requester countersigns only when both match what it sent and received. No server, wire or storage change.
+
 ### v0.40 (Draft) — 2026-10-08
 - **Hosted demo counterparty (new §14).** `POST /demo/task` then `POST /demo/complete` gives a newcomer a real countersigned, logged receipt in a minute. Receipts for any `demo.*` capability never count toward reputation (§5.2), so the demo can't hand out free evidence or anchor Sybil rings. Stateless (HMAC-bound job ids), 2 per agent. Worker only; the Node reference server excludes demo receipts from scoring but does not host the demo.
 
@@ -210,6 +213,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial specification: positioning, INAM ID (`did:key`), Execution Receipt schema/lifecycle, reputation model, REST API, request signing, SDK architecture requirements, explicit non-goals, relationship to other protocols.
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
+
+### 0.19.0 — 2026-10-09
+- Receipts over HTTP (SPEC.md §15): `inamReceipts(handler, { client, capability })` drafts a receipt for every 2xx answer to a caller that names itself; `inamFetch(client)` sends `INAM-Requester` and countersigns in the background once the hashes match, with `settle()` to wait. Also `httpSpecHash`, `httpOutputHash`.
 
 ### 0.18.0 — 2026-10-09
 - New `inamprotocol/ai-sdk` entry point: `inamTools()` returns `checkReputation`, `searchAgents` and `getReceipt` as Vercel AI SDK `tool()` definitions, read-only, with the hosted MCP server's descriptions. `ai` (>=7) is an optional peer dependency; the main entry point does not import it. Closes #52.

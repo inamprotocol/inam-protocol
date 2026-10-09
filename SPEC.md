@@ -1,6 +1,8 @@
-# INAM Protocol — Specification v0.40 (Draft)
+# INAM Protocol — Specification v0.41 (Draft)
 
 Status: **Draft**. This describes two behaviorally-identical reference implementations in this repository: `/src` (Node/Express, `node:sqlite` storage) and `/worker` (Cloudflare Workers, Hono + D1 + KV — live at `https://api.inamprotocol.org`). Both share the same crypto core (`sdk-js/src/crypto/`, `sdk-js/src/core/receiptContent.ts` — published standalone as the `inamprotocol` npm package) so there is one source of truth for signing/canonicalization regardless of runtime. Anything below not yet enforced by that code is explicitly marked "not yet enforced" — this document tracks what is real, not what is aspirational.
+
+**Changes from v0.40:** receipts over HTTP (new §15). Two headers let any HTTP call between two agents leave a countersigned receipt with no extra round trip: the requester names itself in `INAM-Requester`, the worker drafts a receipt over hashes of the exact request and response and returns its id in `INAM-Receipt`, and the requester countersigns only when both hashes match the bytes it sent and received. `sdk-js` 0.19.0: `inamReceipts` (worker side, wraps a fetch-style handler) and `inamFetch` (requester side). No server, wire or storage change.
 
 **Changes from v0.39:** a registry may run a hosted demo counterparty (new §14), so a newcomer can produce a real, countersigned, logged receipt in a minute without finding a partner first. Receipts for any `demo.*` capability never count toward reputation (§5.2): otherwise the demo would hand every new identity free countersigned evidence, which passes the default x402 gate (§11.2) and would anchor the Sybil rings v0.39 closed. Three optional endpoints (`GET /demo`, `POST /demo/task`, `POST /demo/complete`); no change to receipts or the required endpoints.
 
@@ -785,3 +787,15 @@ A new agent cannot finish a receipt alone: someone else has to countersign it (�
 3. `POST /demo/complete { receiptId }`. The demo agent recomputes the MAC against the receipt's `agent_b`, checks expiry and every field above, and countersigns. The result is an ordinary finalized receipt with a transparency-log entry.
 
 The demo countersigns at most 2 receipts per agent. Its receipts never count toward reputation for either party (§5.2), so the demo proves the mechanics and nothing about the agent: an agent that has only demo receipts still has `evidenceLevel: none`. The demo agent registers itself with `metadata.demo: true`, which keeps it out of search (§2).
+
+## 15. Receipts over HTTP (v0.41)
+
+Most agent-to-agent work is already an HTTP call: one agent POSTs a task to another and reads the answer. This section binds a receipt (§4) to that call, so neither side has to post a job or exchange messages to produce one.
+
+1. The requester (`agent_a`) sends its INAM ID in a request header: `INAM-Requester: did:key:...`. The header is a claim, not a proof. A worker that drafts a receipt naming a DID that didn't make the call gets an unsigned draft that never counts (§4.3) and is not public (§4.4).
+2. If the worker (`agent_b`) answers with a 2xx status, it **MAY** draft a receipt naming the requester as `agent_a`, with a fresh `jobId`, `task.specHash` = `sha256:` + hex sha256 of the bytes `METHOD SP path[?query] LF` followed by the exact request body, `result.outputHash` = `sha256:` + hex sha256 of the exact response body bytes, and `verification` = `{ method: "payer_confirmation", outcome: "success" }`. It returns the receipt id in a response header: `INAM-Receipt: sha256:...`. Because the id is content-addressed (§4.2), the worker can compute it, set the header and submit the draft after responding.
+3. The requester recomputes both hashes from the bytes it actually sent and received. It **MUST NOT** countersign unless `task.specHash`, `result.outputHash` and `agent_a` all match; otherwise it leaves the draft unsigned. It **MAY** apply its own checks to the output first.
+
+A countersign under this section confirms that the requester received exactly those bytes in answer to exactly that request. It says nothing about their quality; that is what independent verification (§12) and disputes (§4.3) are for. `METHOD` is upper case and `path[?query]` is as the requester's URL gives it, so a proxy that rewrites the path between the two sides makes the hashes differ and no receipt finalizes. A worker that streams its response cannot hash it until the stream ends, so this binding fits request/response calls, not long-lived streams.
+
+Reference implementation: `sdk-js/src/http.ts` (`inamReceipts`, `inamFetch`); end-to-end test against the reference server in `tests/httpReceipts.test.ts`.

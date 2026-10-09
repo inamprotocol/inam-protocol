@@ -93,3 +93,4 @@ export { decideTrust, checkTrust, DEFAULT_ESCROW_FLAGS } from "./trust.js";
 export type { TrustPolicy, TrustDecision, TrustDecisionKind } from "./trust.js";
 export { INAM_FEEDBACK_TAG, buildErc8004Feedback, verifyErc8004Feedback } from "./erc8004.js";
 export type { Erc8004Target, Erc8004Feedback, Erc8004FeedbackCheck } from "./erc8004.js";
+export { inamReceipts, inamFetch, httpSpecHash, httpOutputHash, INAM_REQUESTER_HEADER, INAM_RECEIPT_HEADER } from "./http.js";
