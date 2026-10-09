@@ -67,6 +67,10 @@ SPEC.md §11.2 end to end, no real money: a seller links its payment wallet to i
 
 SPEC.md §11.3 end to end: an agent links its A2A endpoint to its INAM ID, finishes one job, and serves an A2A 1.0 Agent Card carrying the `https://inamprotocol.org/ext/a2a/v1` extension. A second card copies the same INAM ID onto a different endpoint. The client fetches both cards and runs `verifyA2ACard`: it delegates to the first and skips the copycat, because the ID never linked that endpoint. Local registry only (`npm run dev`).
 
+## `adk_a2a_check.py`
+
+SPEC.md §11.3 for a [Google ADK](https://google.github.io/adk-docs/) agent: `check_a2a_agent(agent_card_url)` fetches an A2A Agent Card, reads the INAM ID from the `https://inamprotocol.org/ext/a2a/v1` extension, fetches that agent and its reputation from INAM, and returns `allow` with a `reason`. The rules and reason strings are those of `decideA2A` in `sdk-js`: deny a revoked ID, deny unless a card endpoint is the ID's linked `a2a_endpoint`, deny below the evidence or score policy. `root_agent` is an ADK `Agent` with that function as its tool and an instruction to delegate only on `allow`. Read-only, live registry by default; without `google-adk` installed a stand-in `Agent` keeps the file importable. `python examples/adk_a2a_check.py <agent card URL>` runs the check once.
+
 ## `erc8004-feedback.ts`
 
 SPEC.md §11.1 end to end, no chain writes: a requester and a provider each link an EVM address, finish one job, and the requester builds ERC-8004 `giveFeedback` arguments and the feedback file from the countersigned receipt. A reader then checks it with `verifyErc8004Feedback`: valid from the requester's wallet, rejected when the same file is replayed from another wallet. Send the printed arguments from any wallet in real use. Local registry only (`npm run dev`).
