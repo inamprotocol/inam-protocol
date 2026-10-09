@@ -68,6 +68,21 @@ d = check_trust(did, client, allow={"min_evidence": "independently_verified", "m
 
 A revoked or unknown ID is `deny`; warning flags (`in_dispute`, `attestation_rejected`, `nonperformance_reported`, `concentrated_counterparty`) cap the decision at `escrow` (change with `escrow_flags`).
 
+### Verifying an x402 payee before paying
+
+A payer pays only a `payTo` the payee's INAM ID proved control of (`linked.erc8004_id`), and only if its reputation meets the payer's policy (SPEC.md §11.2). `counterparty_context` records that decision as an x402 `CounterpartyContext` (x402 #1777), with `policy_input_hash` over the JCS form of exactly what was checked:
+
+```python
+from inamprotocol import counterparty_context
+
+agent, rep = client.get_agent(did), client.get_reputation(did)
+request = {"resource": "https://paid.example/api", "amount": "1000", "network": "eip155:8453", "nonce": "req-0001"}
+ctx = counterparty_context(agent, rep, [a["payTo"] for a in accepts], request, min_evidence="countersigned", min_trust_score=0)
+# {"decision": "allow", "reason": "ok", "policy_input_hash": "sha256:...", ...}
+```
+
+`decide_x402` is the decision alone and `x402_policy_input` the hashed input. Hashes and reasons match `sdk-js` byte for byte, checked against `../tests/vectors/x402-counterparty-context.json`.
+
 ### Publishing a receipt as ERC-8004 feedback
 
 The receipt's requester can post it to ERC-8004's Reputation Registry from its linked `erc8004_id` (SPEC.md §11.1). The file carries the signed receipt, so readers can tell it from a bare score:

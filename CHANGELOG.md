@@ -521,6 +521,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Python SDK (`sdk-python`)
 
+### 0.13.0 — 2026-10-09
+- x402 verify-before-pay (SPEC.md §11.2): `counterparty_context()`, `decide_x402()`, `x402_policy_input()`. Same policy input, JCS bytes, `policy_input_hash`, decision and reason as `sdk-js`, checked against all 8 vectors in `tests/vectors/x402-counterparty-context.json` (new `tests/test_x402_context.py`).
+- `canonicalize(value, keep_null=True)` emits `None` as JSON `null` instead of dropping the key, as the JS side does. Default unchanged.
+
 ### 0.12.0 — 2026-10-03
 - `check_trust(did, client, **policy)` and pure `decide_trust()`: allow / escrow / deny with the reasons, same defaults and reason strings as `sdk-js` 0.16.0.
 - ERC-8004 feedback from INAM receipts (SPEC.md v0.38 §11.1): `build_erc8004_feedback()` and `verify_erc8004_feedback()`. Builds byte-identical feedback files to `sdk-js` 0.17.0, checked by a TypeScript-generated vector (`scripts/interop-vectors.ts`). Runnable `examples/erc8004_demo.py`.
