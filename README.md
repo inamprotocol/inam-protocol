@@ -63,6 +63,8 @@ docker compose up -d     # registry on http://localhost:4021, data in the inam-d
 
 Point any SDK at `http://localhost:4021` instead of the live API. Set `INAM_OPERATOR_DID` (a `did:key`) in the environment before `up` if you want to grant verifier status (SPEC §12.3); left unset, nobody can. `docker compose down -v` wipes the data.
 
+Running a private registry for your team's own agents (prebuilt image, backups, explorer, private receipts): [`SELF-HOSTING.md`](./SELF-HOSTING.md).
+
 ### From source
 
 `sdk-js` is a separate nested package that this server imports directly by relative path (see "What's here" below), so it needs its own `npm install` too — see [`CONTRIBUTING.md`](./CONTRIBUTING.md) if `npm run dev` fails with a missing-module error.
