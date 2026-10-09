@@ -1,0 +1,2881 @@
+{
+  "title": "Agent Trust Index #1",
+  "methodology": {
+    "generatedAt": "2026-10-09T18:11:26.034Z",
+    "catalog": "facilitator.payai.network",
+    "note": "The CDP discovery host (api.cdp.coinbase.com) was unreachable from the network this was run on (TLS reset), so this run measures the PayAI facilitator Bazaar list, which implements the same /discovery/resources spec. *.workers.dev hosts were also unreachable from that network, so sample probes to them show as unreachable, not dead. The INAM-side result (0 agents with a linked wallet) holds for any catalog.",
+    "bazaarFetchedAt": "2026-10-09T18:01:08.382Z",
+    "bazaarSnapshot": "data/trust-index/bazaar-facilitator.payai.network-2026-10-09.json.gz",
+    "sources": {
+      "bazaar": "https://facilitator.payai.network/discovery/resources (public x402 Bazaar discovery list, GET /discovery/resources paged with limit=100&offset)",
+      "inam": "https://api.inamprotocol.org/v1/agents/search (public read; supports=erc8004_id lists agents with a linked EVM wallet)"
+    },
+    "fetch": {
+      "reportedTotal": 18931,
+      "pages": 190
+    },
+    "definitions": {
+      "listing": "One discovery item, deduplicated by its resource URL.",
+      "host": "Hostname of the listing's resource URL.",
+      "payTo": "Every accepts[].payTo across listings; EVM addresses lowercased.",
+      "price": "First accepts[] entry, read as USD (6 decimals) only when it is USDC/USDT by extra.name or by a known USDC contract/mint; others are unpriced.",
+      "testnetOnly": "Every accepts[] network is a testnet (Sepolia, devnet, testnet ids).",
+      "verifiableTrackRecord": "The payTo equals the linked.erc8004_id of an INAM agent, i.e. an INAM ID proved control of that wallet (SPEC.md §2.1). Only EVM addresses can be bound today.",
+      "inamReverseLookup": "The registry has no query by wallet. We listed every INAM agent with a linked erc8004_id and intersected.",
+      "dead": "Sample probe returned 404/410. Requests that failed (DNS, connect, TLS) or timed out after 15 s are counted separately as unreachable, because the probing network can cause them.",
+      "probe": "One unpaid request per sampled endpoint using the method the listing declares (GET if none; '{}' JSON body for non-GET). No payment header is sent."
+    },
+    "sample": {
+      "size": 300,
+      "seed": 20261008,
+      "population": "distinct hosts of http listings with an http(s) URL; one random listing probed per sampled host",
+      "concurrency": 4
+    }
+  },
+  "bazaar": {
+    "listingsReturned": 18931,
+    "listings": 18872,
+    "reportedTotal": 18931,
+    "types": {
+      "http": 18849,
+      "mcp": 23
+    },
+    "distinctHosts": 1014,
+    "hostsWithOneListing": 565,
+    "topHosts": {
+      "dev.intel.rallylive.ca": 1583,
+      "monitor.intel.rallylive.ca": 1344,
+      "data.intel.rallylive.ca": 1143,
+      "ip.intel.rallylive.ca": 1067,
+      "site.intel.rallylive.ca": 1063,
+      "api.delx.ai": 1011,
+      "page.intel.rallylive.ca": 949,
+      "email.intel.rallylive.ca": 824,
+      "dns.intel.rallylive.ca": 809,
+      "library.intel.rallylive.ca": 788
+    },
+    "distinctPayTo": 808,
+    "distinctPayToEvm": 646,
+    "distinctPayToNonEvm": 162,
+    "payToWithOneListing": 362,
+    "topPayToByListings": {
+      "0xfc24fd34da9e49a0110dcaee3ad30ec54175ebb3": 10344,
+      "0x9f8bd9875b3e0b632a24a3a7c73f7787175e73a2": 972,
+      "J7aN3PLJnTCF5qpEnvJHJsnCjcGuqC2rYtEM8Gv3xwg": 541,
+      "9urRvUx69HqAopg1JGV9P9wR7JdKoztzdkuNyJ8Eo1up": 533,
+      "AytHnvc6bZx1ALTy7b5Px7hcavoSYszG9aeKvDcZ8R1u": 361,
+      "0xc66d1757b9cf97e51f22075927c36ff7add96a01": 309,
+      "0x8afbd522f8a16bea184b41c593b8925a66830bc6": 280,
+      "7LSjfrJf8fNsB8VA9u7N3WEn25smQLpob3SvyUvXacy7": 259,
+      "0xb989ea35831655d4f223fceee912a1d25e58dd34": 213,
+      "0x348df429bd49a7506128c74ce1124a81b4b7dc9d": 179
+    },
+    "networks": {
+      "eip155:84532": 9126,
+      "eip155:8453": 5841,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp": 2504,
+      "base": 1040,
+      "solana": 280,
+      "eip155:137": 25,
+      "base-sepolia": 11,
+      "solana-devnet": 11,
+      "eip155:196": 7,
+      "polygon": 7,
+      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1": 5,
+      "eip155:42161": 3,
+      "eip155:1329": 2,
+      "eip155:1187947933": 2,
+      "eip155:80002": 2,
+      "eip155:1952": 2,
+      "xlayer-testnet": 1,
+      "xlayer": 1,
+      "sei-testnet": 1,
+      "peaq": 1
+    },
+    "assets": {
+      "eip155:84532:USDC": 9126,
+      "eip155:8453:USD Coin": 5841,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": 2448,
+      "base:USD Coin": 1038,
+      "solana:EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v": 270,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:USD Coin": 43,
+      "eip155:137:USD Coin": 25,
+      "solana-devnet:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": 11,
+      "base-sepolia:USDC": 10,
+      "eip155:196:USDC": 7,
+      "polygon:USD Coin": 7,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:euro5sNHrZC2wu2RoLvy6xxoVMc3Qnd1vjxoWf4MftA": 6,
+      "solana:USD Coin": 6,
+      "solana:EtWTRABZaYq6iMfeYKouRu166VU2xqa1:4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU": 5,
+      "eip155:42161:USD Coin": 3,
+      "eip155:1329:USDC": 2,
+      "eip155:1187947933:Bridged USDC (SKALE Bridge)": 2,
+      "eip155:80002:USDC": 2,
+      "eip155:1952:Global Dollar": 2,
+      "base:0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913": 2,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:nansen_smart_money_trades": 1,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:Wrapped SOL": 1,
+      "solana:Relay Agent Search": 1,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:getPumpFunTokens": 1,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:getAllBalances": 1,
+      "solana:Relay Agent Reputation": 1,
+      "solana:Relay Agent Profile": 1,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:birdeyeTrendingTokens": 1,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:findSolanaGems": 1,
+      "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp:getAllPositions": 1
+    },
+    "price": {
+      "priced": 18859,
+      "unpriced": 13,
+      "minUsd": 0,
+      "medianUsd": 0.01,
+      "p90Usd": 0.025,
+      "maxUsd": 100
+    },
+    "extensionKeysInListings": {
+      "bazaar": 13957
+    },
+    "testnetOnlyListings": 9157,
+    "listingsWithInamExtension": 0,
+    "bazaarExtensionsInamFilterTotal": 0
+  },
+  "inam": {
+    "agentsInRegistry": 17,
+    "agentsInRegistryNonDemo": 9,
+    "agentsWithLinkedErc8004Wallet": 0,
+    "bazaarPayToProvenByInamAgent": 0,
+    "matchedPayTo": [],
+    "shareOfDistinctPayTo": 0
+  },
+  "liveness": {
+    "sampleSize": 300,
+    "outcomes": {
+      "402": 170,
+      "other_4xx": 28,
+      "network_error": 46,
+      "2xx_3xx": 14,
+      "not_found": 40,
+      "server_error": 1,
+      "timeout": 1
+    },
+    "deadCount": 40,
+    "deadSharePct": 13.3,
+    "unreachableCount": 47,
+    "unreachableSharePct": 15.7,
+    "answered402": 170,
+    "answered402WithInamExtension": 0,
+    "extensionKeysIn402": {
+      "bazaar": 141,
+      "x402-merchant": 4,
+      "builder-code": 4,
+      "payment-identifier": 1,
+      "voxsift-job": 1,
+      "sign-in-with-x": 1,
+      "quicknode-session": 1,
+      "x402.bazaar": 1,
+      "facilitator": 1,
+      "twzrd_attempt": 1,
+      "offer-receipt": 1
+    },
+    "probes": [
+      {
+        "resource": "https://pal-full-catalog-remediation.onrender.com/v1/usdc/x402-seller-integrity",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.cn402.com/iching/yao",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://01a046b2-7104-74c2-8a02-04715d7235e1-r5wpl3p4c-xai-org.vercel.app/api/v1/chat",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 401,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://slamlink-ai-main-50fbb45.d2.zuplo.dev/chain/tokens/trending",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x420.dev/api/puff",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://classificado.app.br/api/listings",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://wallet-intel-meta-mcp.mtree.workers.dev/v1/wallet/dossier_summary",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://agent.alexweb.space/v1/verify",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.coinstats.app/markets",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://reality-assurance.up.railway.app/v1/assess",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://payai.43-135-4-66.sslip.io/v1/filings/risk-check-by-symbol/:symbol",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "http://mint.baseland.cc/",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://rasterly-x402-production.up.railway.app/v1/screenshot",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://int.relai.fi/relay/1768048649149/api/v1/wallet/GH93tGR8LHSHSGT6Fvb5nt3UTtYdQs5XgoaQZiU31hhw/info",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 401,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://khipu-x402.khipu-agency.workers.dev/v1/security-headers",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://read.lonestaroracle.xyz/read",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agentoracle.co/research/batch",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 410,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://x402-cent.x402-cent.workers.dev/sha256",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://theoddsgap.com/assistant/v1/answer",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://trade.lonestaroracle.xyz/trade",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.voidly.ai/data/incidents/report",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://api.loopholetape.com/v1/payai/mint/:mint",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://ichimoku-signal.onrender.com/signal/:pair",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "x402-merchant"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402-secure-api-staging.t54.ai/x402/solana/tools/verify_verifiable_intent",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://geo.lonestaroracle.xyz/risk",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://dns.use.x402atlas.com/whois",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://www.tip.md/tip",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agentdata-api.degrees2.workers.dev/api/articles/on-chain-trading-signals",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://ai-utility-farm.brycedees1.chatgpt.site/v1/evidence",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://95.216.126.169.sslip.io/v1/token-check/batch",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://approval-revoke-mcp.mtree.workers.dev/v1/spender/reputation",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://x402-agent.scope-research-api.workers.dev/answer",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://api.growvib.com/v1/agent/orders",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://mdapi.46-224-113-94.sslip.io/md",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://ta.lonestaroracle.xyz/scan",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://api.agmsg.world/agent/profile",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 401,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "http://try402.fun/v5",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://claudeye.notoriousd3v.workers.dev/scrape",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://morsel.0x402.sh/api/recipes/e9b3c198-6d68-4ab5-e42e-26e43cf0cf23/full",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "builder-code"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.agentic-swarm-marketplace.com/x402/v1/contract-triage",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://appraxa-ip.b-kohlenbach.workers.dev/v1/ip/basic",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://v402pay.onvoyage.ai/api/pay/zbRzjsTOY5rY8TDf",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agent-reader.gm-tools.workers.dev/v1/meta",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://app.spheron.ai/api/lease-gpu/very-short-duration",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "http://aiaiaxaxon402.vercel.app/api/chains",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.amerosagent.com/v1/email-check/batch",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://speedbot.dev/api/web-intelligence",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://www.shitx402.wtf/api/mint",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://clawhunter.fun/api/v1/tools/research",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://88-198-100-115.sslip.io/v1/validate",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agentresolver.vercel.app/api/x402-settlement-verify",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agenthustle.ai/api/tools/execute/unified/discoverLaunchLabTokens",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "payment-identifier"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://casino.pixelgames.ai/api/chips/buy/50",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://one-search.one-engine.workers.dev/v1/hash/sha256",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://www.trezalabs.com/api/x402/clip",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://klminnovation.com/paid/packs/playbook-plus-agent-mcp",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://war-tracker.com/media/397003",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://voxsift-x402.fly.dev/v1/transcribe",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "voxsift-job"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x-data-gateway.annushka1190.workers.dev/workflows/profile-digest",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://cannastack.0x402.sh/api/deal-scout",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 410,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://proxy.x402scan.com/x402/tools/get_onchain_trust",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "http://based-canvas-afd317v2v-howards-projects-b5e2d62b.vercel.app/api/buy-pixels/degen",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://first-fold-48h.tatoespitia.chatgpt.site/api/utility",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402geo.com/api/audit/start",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://hardx402.vercel.app/api/weather",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://proofwork-codex-0902.ophl.link/x402/funded-agent-work",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://capitol.lonestaroracle.xyz/trades",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.aiapi.ch/v1/analyze",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://canary.node01.org/api/canary",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://mpp.hyreagent.fun/base/nansen/wallet-intel",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.atomicstream.net/v1/schema/stream/trending-leaderboard",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://ohd-machine-x402-v2.hibiki3027.workers.dev/api/preflight",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://x402-wallet.558686.xyz/v1/tools/receipt-gate-policy",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 503,
+        "outcome": "server_error"
+      },
+      {
+        "resource": "https://payai.lucidumcommunity.com/paid/preflight",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://fal.x402.paysponge.com/fal-ai/recraft-v3",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://pal-nano-catalog-audit.onrender.com/v1/usdc/catalog-audit",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://marketdata.use.x402atlas.com/rsi",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://google.com/api/ping",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "http://node-market.561.group:8087/v1/translate/zh-en/interlinear",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 422,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://api.xona-agent.com/llm/kimi-k3",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.lucidumcommunity.com/paid/preflight",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://jar-resolve-305248849433.europe-west1.run.app/v1/resolve",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://nebulacomponents.shop/api/audit/run",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://agent-social-relay.biv-ai-lab.workers.dev/v1/instagram/reels",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://devryno.com/pay/ping",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402-test-seven.vercel.app/api/mint-reward",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://guard.safepay402.com/v1/guard/check",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://machineinbox.com/api/v1/inboxes",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://agentos.suverse.io/v1/freight/parse_ratecon",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://copperhead.lonestaroracle.xyz/audit",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://latam.lonestaroracle.xyz/report",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://blockrun-sol-vbsbhh7lea-uc.a.run.app/api/v1/chat/completions",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://api.sitecheck-api.workers.dev/api/markets/quote",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://www.getnock.xyz/decide",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://project-zero-agent-api.jordy-prods.workers.dev/scan",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://kronos.seshat.markets/feeds/kronos/forecast-evolution/:symbolKey",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "http://api.minionlab.ai/web/v1/credit/order",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://api.finnputerdex.com/scan/quick",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402name.com/v2/mint/10",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.predge.io/v1/track-record/:pubkey",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "x402-merchant"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://stableenrich.dev/api/companyenrich/properties-enrich",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402-dapp-web.vercel.app/api/mint",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://donation-template-test-2.vercel.app/api/write-message",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://x402-toolbox.shablony-pro.workers.dev/chain/block-number",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://nodeset.regevidencehub.com/api/v1/compatibility-preflight",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://webmaillookup.com/public_api/v1/get_webmail_info",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://ai-customer-lab-x402.onrender.com/ping",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://taxi.regevidencehub.com/api/v1/preflight",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agentwares-stablecoin.vercel.app/v1/reserves/:symbol",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.lucyos.ai/x402/tools/analyze_token",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 422,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://survivor-x402-production.up.railway.app/risk-screen",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://bentcrypto-x402-production.up.railway.app/v1/token/security",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.quiknode-cf.pro/xlayer-testnet",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "sign-in-with-x",
+          "bazaar",
+          "quicknode-session"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://rmassistanthub.io/api/pulse/deep-dive",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://basketprice.themonexus.com/api/v1/basketverify-weight",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://funding.payforapi.com/people-search",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://chain.intel.rallylive.ca/wallet/portfolio/ethereum",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://x402api.vercel.app/x402/ai/flight-agent",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://1rpc.ai/v1/chat/completions",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://vps-62-120.cloudhosting.lv:8443/bounty-snapshot",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://world-hack.vercel.app/api/expertise/query",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://scan.35-253-195-79.sslip.io/m/oakland/changed",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://defi-intel-agent-gateway.gg-neo15.workers.dev/v1/web/serp-clean-proxy",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://testmint.myproceeds.xyz/api/transfer",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://global-business-day-planner-paid.kgy5612.workers.dev/v1/business-day-plan/batch",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://api.nansen.ai/api/v1/profiler/address/historical-balances",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://diffdeck-api.vercel.app/api/providers",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.17711.xyz/registry/url-extract-service/v1/url-extract/get_company_profile",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://engedi.digi-life17.workers.dev/api/news/briefing",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "http://rumourx402-api.vercel.app/rumours",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://preview-chat-985505b1-9dc0-470f-9fc3-3704d8b625e3.space-z.ai/api/x402/wallet-balance",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "timeout"
+      },
+      {
+        "resource": "https://works.regevidencehub.com/api/v1/assess-change-impact",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agent-prices.annushka1190.workers.dev/v1/batch",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://pssvoirdgqkejvuqvaxw.supabase.co/functions/v1/x402-notetakers",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.instahuman.com/x402/feedback",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402-nvidia.vercel.app/api/nemotron-3-nano-30b",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.mach.gallery/api/base/block-number",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agent-web-intelligence.kuhg44.workers.dev/domain",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://www.cloudworldmodel.ai/api/simulations/64a94e9c-e3bf-41b7-9ebf-33766ef4c18d/step-hybrid",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://wallet-labels-mcp.mtree.workers.dev/v1/wallet/labels",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "http://earn-pulse.haiqingm58.workers.dev/yields",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://x402orcle.vercel.app/api/consult/oracle_ask",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://pay-prod.undercoveriris.io/audit/request",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://metaclean-production.up.railway.app/v1/scan",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://sigtap-outreach-api.sigtap.workers.dev/tools/crypto-price",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "http://x402.nichospt.net/url-to-markdown",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://fresh-market-watch-production.up.railway.app/entrypoints/list/invoke",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://api.chipscan.xyz/v1/audit",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://moviememo-production.up.railway.app/entrypoints/soundtrack-list/invoke",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://lupapago.com/api/fx/quote",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://x402-preflight.tinyopsstudio.com/analyze",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://mind-maker-inference-dealer.max270756.chatgpt.site/v1/clawpump/inference",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 422,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "http://old-faithful.up.railway.app/query-base",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://api.orcatrace.dev/v1/latest",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://perps-funding-agent-production.up.railway.app/entrypoints/getFunding/invoke",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://wayd-1650.agentic.no/m/qwen2.5-3b-instruct-q4/v1/chat/completions",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 410,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://solara-x402.onrender.com/api/tip",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://legit.gonna.bond/v1/history",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "x402-merchant",
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402-random.vercel.app/api/random",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://factorytalk.regevidencehub.com/api/v1/audit",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://url-extractor.x402.paysponge.com/url/:domain",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://reusefulshop.com/api/worth",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://agent-cash-x402.emilyannbosze-agentcash-2043.workers.dev/api/extract",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://tanod.dev/v1/check/address",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "builder-code"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://mystudios.fun/api/v1/account/credits/purchase",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agentfx.fun/api/public/s/alpha-read",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402-whiz-token.vercel.app/api/mint-cheap",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://dev.intel.rallylive.ca/dev/mime/h",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://agentmail.leeworks.dev/v1/inbox",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://www.0816.cn/v1/base/token-tax",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://crownblock.lonestaroracle.xyz/report",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.fincodesapi.com/x402/sanctions-screening",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://circadian-agent.com/api/extract",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agentlayer.xyz/x402/airdrop/v1",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "http://api.ethyai.app/x402/ta",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://api.ikoles.dev/v1/tender-shortlist",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://api.orth.sh/v1/responses",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://vamoschips.com/api/v1/x402/orders",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://three.ws/api/x402/model-check",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://payai-eni-x402.systempayroll880.workers.dev/standard",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://x402-bazaar-rank.x402-bazaar-rank-worker.workers.dev/in-agents-deep",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://www.quicknode.com/api/v1/agent/top_up",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 401,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://api.aotrust.link/notarize",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://citable.run/v1/ai-visibility",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://api.shoal.xyz/v1/signal/top",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://based-canvas.vercel.app/api/buy-pixels/degen",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://blockrun-sol-staging-vbsbhh7lea-uc.a.run.app/api/v1/chat/completions",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://atlas-probability-api-production.up.railway.app/v1/x402/discovery/BTC",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://hookpulse.net/api/credito",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://cloudmaxi0x.com/v1/indicators/rsi",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://x402-ghtrend.shablony-pro.workers.dev/trend",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://commsharbor.com/api/credito",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://base-pulse.annushka1190.workers.dev/v1/x402/merchant-score",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://vizor-api.vercel.app/api/transactions/explain",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://domain-parser.nordman-tehau.workers.dev/v1/domain/parse",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://x402.disputetracker.xyz/api/agent/resolution-risk/x402",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://gas-estimator-production-a95a.up.railway.app/api/estimate",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://minia2a.uk/x402/find",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://recallguard-api.vercel.app/api/v1/match",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agentpay.help/v1/geocode",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://vmi3089643.contaboserver.net/v1/price/:symbol",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://example.com/protected-resource",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://x402-doctor.onrender.com/api/v1/preflight",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "x402-merchant"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://portfolio.lonestaroracle.xyz/analyze",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://volkov.evgeny.m2.fvds.ru/pay/ping",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.premiumrewards.vip/buyable",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "x402.bazaar",
+          "bazaar",
+          "facilitator"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://clanker-banker.agentfetcher.workers.dev/v1/llm-pack",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://agent-format.annushka1190.workers.dev/v1/base64",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://hypurrclaw.xyz/x402/tools/getHyperliquidMarketSnapshot",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://orchard-data.letom1176.workers.dev/api/fear-greed",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://buavethsjahoodbeqhay.supabase.co/functions/v1/sagent",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.anchor-x402.com/v1/price/token",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "builder-code"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.banansen.dev/api/v1/account/topup",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 401,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://minara.ai",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://x402-seller-m8nx.onrender.com/price",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://stableemail.dev/api/inbox/buy",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://analyst.lonestaroracle.xyz/ratings",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://my-first-sigma-azure.vercel.app/mint",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://x402.srch.best/batch",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "http://backup.ragradar.space/api/deployer/:chain/:address",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://liquidation-risk-mcp.mtree.workers.dev/v1/risk/aave_v3",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://prama-dynamagh.up.railway.app/v1/public/ask",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://btcnode.uk/api/fees",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://monitor.intel.rallylive.ca/watch/monitor/status/github-copilot",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://tropir.xyz/api/cortex/access",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://intel.solanahub.de/x402/wallet/:address/bundler-check",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.deside.io/api/v1/ask",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://losbeto-production-dd7c.up.railway.app/fear-greed",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://piprail.com/x402/demo",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://token-check.yukikawata.workers.dev/v1/base/tokens/:address",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://x402check.anton-14a.workers.dev/check",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://aoe-tip-seller.magicalcifer.workers.dev/tip?to=0xceA762eE5A5CF0e58dFe1BA459F5902d93e9d989&price=3",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://data.intel.rallylive.ca/data/forecast/hamburg",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://tc-ai-premium.vercel.app/api/x402/nft",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://payai.agentstools.dev/sellerops/settle-check",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://hl-spot-production.up.railway.app/api/tokens",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://azimuth.day/api/x402/nodes",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://ascii-x402-production.up.railway.app/v1/ascii-art",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://www.x402launch.app/api/mint",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://x402.twit.sh/articles/by/id",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "builder-code"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://subsidy-stylized-unaligned.ngrok-free.dev/v1/run-python",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://crossfin.dev/api/premium/market/korea",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://fpds-mcp.mtree.workers.dev/v1/contracts/search",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://intel.twzrd.xyz/v1/intel/quick/GFpLvocNdEjnSsLH3VJQL6wGcjGxTbUBrj6fqN3Qe1Gs",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar",
+          "twzrd_attempt"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://penny-tech.vercel.app/api/mint",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "http://x-research.suzi.trade/x402/search/20",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://agent.kudjak.net/research-brief",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 403,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://tokencheck.yukikawata.fyi/v1/base/tokens/:address",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://qr-code-generator.underscoredone.com/generate",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://cottonmouth.lonestaroracle.xyz/audit",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://aivio.dev/api/agent/signals.corroborated",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402-zadenworks.zaden-gaming.workers.dev/tables",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://defi.lonestaroracle.xyz/risk",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://axixixia.vercel.app/api/hash",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agent-market-lab-v2.dourfer-r.workers.dev/v1/page-to-structured-data",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://korp-txcert-sepolia.mute-cell-557f.workers.dev/v1/certify",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://aws-bedrock.grok.me/api/v1/crawl",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://basetomcat.com/api/mintv2",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://phion.systems/v1/paid/fetch-evidence",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://blockrun-sol-vbsbhh7lea-an.a.run.app/api/v1/chat/completions",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://www.eurostablecoins.xyz/api/x402/v1/holders",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://agent-control.net/api/v1/meter/pass",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://earnings.lonestaroracle.xyz/calendar",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agent-data-api.netlify.app/api/airbnb/listing",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://playbrightgaming.com/agent-services/verify-url",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://payforapi.com/v1/research/deep",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.klimalabs.com/api",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://aero.lonestaroracle.xyz/pool",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.hydratrader.ai/v1/cheap-errand",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://164.160.90.241.sslip.io/api/reg-global-fx-parallel-rate",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://saylorinnovations.com/api/kb/solana-fee-mev-execution",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://prob.atlasprobabilityapi.com/v1/x402/probability/BTC",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://haoskionchain.xyz/query",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://shop.netlobo.com/snapshot/x402-ecosystem",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://storm-weather.troymare.workers.dev/v1/kalshi/:kind/:station/:date",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://klearflow.vercel.app/api/relay/testnet/v1/recover-revenue",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://domain-intelligence.nordman-tehau.workers.dev/rdap",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://rentcast.x402.paysponge.com/avm/rent/long-term",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "http://sableforge.servehttp.com/api/dns",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://agent402-deploy-production.up.railway.app/api/uuid",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://x402-accelerometer-feed.fly.dev/tokenized-equities/st0x/pulse",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "offer-receipt",
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.staging.brandfetch.io/v2/agents/access",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://api.syntalic.com/v1/analyst/price-dispersion",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 400,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://agent.atinamos.co.uk/payai/agent/render-check",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://tenderping.bristolowen.chatgpt.site/api/search",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://getvideos.app/api/v1/generate",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 401,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://trust.terramike.com/v1/lookup",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://oxalpha-x402.val.run/html-clean",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://batcave-x402-gateway.darriel9.workers.dev/v1/json-doctor",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://x402.actor/xila",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 404,
+        "outcome": "not_found"
+      },
+      {
+        "resource": "https://x402-niche-briefs.fly.dev/v1/niches",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.0xbs.org/x402/demo",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://gradetv.net/api/chat/pass",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 401,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://api.clawinspector.xyz/v1/x402/quick",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://testmint-git-ak-fixes-proceeds.vercel.app/api/transfer",
+        "method": "POST",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 401,
+        "outcome": "other_4xx"
+      },
+      {
+        "resource": "https://deeptrawler.com/v1/telegram/search",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://x402.elixir.games/dynamic-pay",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": null,
+        "outcome": "network_error"
+      },
+      {
+        "resource": "https://bookproof-api.sn95wjq846.chatgpt.site/api/v1/market-health",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      },
+      {
+        "resource": "https://devnet.aimo.network/api/v1/chat/completions",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [],
+        "status": 200,
+        "outcome": "2xx_3xx"
+      },
+      {
+        "resource": "https://pons.meshgateway.co/pool",
+        "method": "GET",
+        "inamExtension": false,
+        "extensionKeys": [
+          "bazaar"
+        ],
+        "status": 402,
+        "outcome": "402"
+      }
+    ]
+  }
+}

@@ -2,6 +2,7 @@ node_modules/
 dist/
 data/*
 !data/.gitkeep
+!data/trust-index/
 .interop-tmp/
 sdk-python/.venv/
 sdk-python/.pytest_cache/
