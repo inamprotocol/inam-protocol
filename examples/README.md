@@ -53,6 +53,10 @@ INAM_OPERATOR_KEY=./operator-key.json \
 
 The Python-side counterpart to `mcp-tool-wrapper.ts` for a different, very widely-used integration point: [LangChain](https://python.langchain.com/)'s tool-calling. Wraps four `sdk-python` `InamClient` methods (`register_agent`, `search_agents`, `submit_work`, `get_reputation`) as LangChain tools using the `@tool` decorator from `langchain_core.tools`. Like `mcp-tool-wrapper.ts`, it does **not** depend on the real `langchain`/`langchain-core` package being installed -- it falls back to a tiny local stand-in decorator so the file stays importable on its own, and uses the real decorator automatically if `langchain-core` is present. All four wrapped functions were smoke-tested against a local `npm run dev` server to confirm the request/response wiring is correct.
 
+## `crewai_tools.py`
+
+INAM's read tools for [CrewAI](https://docs.crewai.com/) agents: `inam_check_reputation`, `inam_search_agents` and `inam_get_receipt` (the receipt plus its verifications), wrapped with `@tool` from `crewai.tools` over `sdk-python`'s `InamClient`. Read-only, so they point at the live registry by default (`INAM_BASE_URL` to change it). The descriptions carry the same guidance as the MCP server's tools: check `evidenceLevel` before `trustScore`, since countersigned work means only the two parties vouched for it. Like `langchain-tools.py`, it falls back to a stand-in decorator without `crewai` installed. `python examples/crewai_tools.py` calls all three once against the live registry. Hand `INAM_TOOLS` to a CrewAI `Agent(tools=...)`.
+
 ## `x402-verify-before-pay.ts`
 
 SPEC.md §11.2 end to end, no real money: a seller links its payment wallet to its INAM ID and finishes one job, then three x402 v2 endpoints ask the buyer to pay. The buyer's `fetch` is wrapped with `withInamX402Gate`, so it pays the honest seller, refuses an endpoint that names the seller's ID but routes the money to another wallet, and refuses a newcomer with no countersigned work. Swap the stand-in `fakePay` for `@x402/fetch`'s `wrapFetchWithPayment` in real use; the gate goes inside it. Local registry only (`npm run dev`), since it writes receipts.
@@ -62,6 +66,10 @@ SPEC.md §11.2 end to end, no real money: a seller links its payment wallet to i
 ## `a2a-agent-card.ts`
 
 SPEC.md §11.3 end to end: an agent links its A2A endpoint to its INAM ID, finishes one job, and serves an A2A 1.0 Agent Card carrying the `https://inamprotocol.org/ext/a2a/v1` extension. A second card copies the same INAM ID onto a different endpoint. The client fetches both cards and runs `verifyA2ACard`: it delegates to the first and skips the copycat, because the ID never linked that endpoint. Local registry only (`npm run dev`).
+
+## `adk_a2a_check.py`
+
+SPEC.md §11.3 for a [Google ADK](https://google.github.io/adk-docs/) agent: `check_a2a_agent(agent_card_url)` fetches an A2A Agent Card, reads the INAM ID from the `https://inamprotocol.org/ext/a2a/v1` extension, fetches that agent and its reputation from INAM, and returns `allow` with a `reason`. The rules and reason strings are those of `decideA2A` in `sdk-js`: deny a revoked ID, deny unless a card endpoint is the ID's linked `a2a_endpoint`, deny below the evidence or score policy. `root_agent` is an ADK `Agent` with that function as its tool and an instruction to delegate only on `allow`. Read-only, live registry by default; without `google-adk` installed a stand-in `Agent` keeps the file importable. `python examples/adk_a2a_check.py <agent card URL>` runs the check once.
 
 ## `erc8004-feedback.ts`
 

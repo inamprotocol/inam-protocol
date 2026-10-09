@@ -40,22 +40,27 @@ import math
 from typing import Any
 
 
-def canonicalize(value: Any) -> str:
-    return _stringify(value)
+def canonicalize(value: Any, keep_null: bool = False) -> str:
+    """``keep_null=True`` emits ``None`` as JSON ``null`` instead of dropping the
+    key, matching the JS side for objects that carry a real null (the x402
+    policy input's ``bound_wallet`` and ``trust_profile_issued_at``)."""
+    return _stringify(value, keep_null)
 
 
-def _stringify(value: Any) -> str:
+def _stringify(value: Any, keep_null: bool = False) -> str:
+    if value is None and keep_null:
+        return "null"
     if isinstance(value, dict):
         keys = sorted(value.keys())
         entries = []
         for key in keys:
             v = value[key]
-            if v is None:
+            if v is None and not keep_null:
                 continue
-            entries.append(json.dumps(key, ensure_ascii=False) + ":" + _stringify(v))
+            entries.append(json.dumps(key, ensure_ascii=False) + ":" + _stringify(v, keep_null))
         return "{" + ",".join(entries) + "}"
     if isinstance(value, list):
-        return "[" + ",".join(_stringify(v) for v in value) + "]"
+        return "[" + ",".join(_stringify(v, keep_null) for v in value) + "]"
     if isinstance(value, bool):
         # bool is a subclass of int in Python -- must be checked before the
         # int/float numeric branch below, or True/False would be formatted
