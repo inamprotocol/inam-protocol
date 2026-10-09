@@ -397,6 +397,71 @@ function renderReceiptsTable(receipts, agentId) {
   </table></div>`;
 }
 
+
+// ==================== Activity ====================
+// Every finalized receipt, newest first, from the public transparency log.
+// Test, demo and reference traffic is labelled, never hidden: the log is the record.
+
+const ACTIVITY_ROWS = 50;
+const agentCache = new Map();
+function getAgentCached(id) {
+  if (!agentCache.has(id)) agentCache.set(id, apiGet(`/agents/${encodeURIComponent(id)}`).catch(() => null));
+  return agentCache.get(id);
+}
+
+function activityLabels(receipt, agents) {
+  const labels = new Set();
+  const cap = (receipt.task && receipt.task.capability) || "";
+  if (cap.startsWith("demo.")) labels.add("demo");
+  if (cap.startsWith("test.")) labels.add("test");
+  for (const a of agents) {
+    const m = (a && a.metadata) || {};
+    if (m.test) labels.add("test");
+    if (m.demo) labels.add("demo");
+    if (m.reference) labels.add("reference");
+  }
+  return [...labels];
+}
+
+async function renderActivity() {
+  setApp(`
+    <h2 class="h">Activity</h2>
+    <p class="dim">Every receipt both parties signed, newest first, straight from the <a href="https://docs.inamprotocol.org/spec/#13-transparency-log-v030">transparency log</a>. Tests and demos stay in the log and are labelled here; nothing is removed.</p>
+    <div id="activity-body"><p class="spinner-text">Loading the log…</p></div>
+  `);
+  const body = document.getElementById("activity-body");
+  try {
+    // ponytail: reads the whole log index, then the newest ACTIVITY_ROWS receipts; paginate once the log is large.
+    const entries = [];
+    for (let offset = 0; ; offset += 200) {
+      const page = await apiGet("/transparency/entries", { limit: 200, offset });
+      entries.push(...page.entries);
+      if (!page.hasMore) break;
+    }
+    const latest = entries.filter((e) => e.entryType === "receipt_finalized").reverse().slice(0, ACTIVITY_ROWS);
+    const rows = await Promise.all(latest.map(async (e) => {
+      const receipt = await apiGet(`/receipts/${encodeURIComponent(e.refId)}`).catch(() => null);
+      const agents = receipt ? await Promise.all([getAgentCached(receipt.agentA.id), getAgentCached(receipt.agentB.id)]) : [];
+      return { e, receipt, labels: receipt ? activityLabels(receipt, agents) : ["private"] };
+    }));
+    body.innerHTML = `<p class="faint">${entries.length} entries in the log${entries.length > ACTIVITY_ROWS ? `, showing the latest ${ACTIVITY_ROWS}` : ""}.</p>
+    <div class="table-wrap"><table class="data">
+      <thead><tr><th>#</th><th>Receipt</th><th>Requester</th><th>Worker</th><th>Capability</th><th>Label</th><th>Logged</th></tr></thead>
+      <tbody>${rows.map(({ e, receipt, labels }) => `<tr>
+        <td class="mono">${e.leafIndex}</td>
+        <td class="mono">${receiptLink(e.refId)}</td>
+        <td>${receipt ? agentLink(receipt.agentA.id) : "—"}</td>
+        <td>${receipt ? agentLink(receipt.agentB.id) : "—"}</td>
+        <td>${escapeHtml((receipt && receipt.task && receipt.task.capability) || "—")}</td>
+        <td>${labels.length ? pillRow(labels) : '<span class="faint">live</span>'}</td>
+        <td>${fmtDate(e.createdAt)}</td>
+      </tr>`).join("")}</tbody>
+    </table></div>`;
+  } catch (err) {
+    body.innerHTML = errorBox(err, "the transparency log");
+  }
+}
+
 // ==================== Jobs ====================
 
 function jobFiltersForm(q) {
@@ -939,6 +1004,11 @@ function route() {
   if (segments[0] === "receipts" && segments.length === 2) {
     setActiveNav("");
     renderReceiptDetail(decodeURIComponent(segments[1]));
+    return;
+  }
+  if (segments[0] === "activity") {
+    setActiveNav("activity");
+    renderActivity();
     return;
   }
   if (segments[0] === "lookup") {
