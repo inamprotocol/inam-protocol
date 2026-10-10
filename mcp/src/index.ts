@@ -31,6 +31,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { InamClient, generateKeypair, keypairFromPrivateKey, fromHex, type Keypair } from "inamprotocol";
 import { readTools, ok, fail, READ_ONLY } from "./readTools.js";
+import { createRequire } from "node:module";
 
 const INAM_URL = process.env.INAM_URL ?? "https://api.inamprotocol.org";
 
@@ -50,7 +51,8 @@ if (rawKey) {
 }
 
 const inam = new InamClient(INAM_URL, keypair);
-const server = new McpServer({ name: "inam-mcp", version: "0.6.0" });
+const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
+const server = new McpServer({ name: "inam-mcp", version });
 
 // --- read tools (always available; shared with the hosted endpoint) --------
 

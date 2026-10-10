@@ -22,6 +22,7 @@ if (!specVersionMatch) {
 const [, SPEC_VERSION, SPEC_STATUS] = specVersionMatch;
 
 const REGISTRY_VERSION = JSON.parse(readFileSync(path.join(ROOT, "worker", "package.json"), "utf-8")).version;
+const MCP_VERSION = JSON.parse(readFileSync(path.join(ROOT, "mcp", "package.json"), "utf-8")).version;
 const JS_VERSION = JSON.parse(readFileSync(path.join(ROOT, "sdk-js", "package.json"), "utf-8")).version;
 const pyVersionMatch = readFileSync(path.join(ROOT, "sdk-python", "pyproject.toml"), "utf-8").match(/^version = "([^"]+)"/m);
 if (!pyVersionMatch) {
@@ -45,6 +46,14 @@ cpSync(path.join(SITE_ROOT, "public"), DIST, {
   recursive: true,
   filter: (src) => src !== path.join(SITE_ROOT, "public", "index.html"),
 });
+// Discovery files that mirror a package version: written from the package.json, never hand-typed.
+for (const [file, vars] of [
+  [".well-known/mcp/server-card.json", { MCP_VERSION }],
+  [".well-known/oasf.json", { REGISTRY_VERSION }],
+]) {
+  const p = path.join(DIST, file);
+  writeFileSync(p, readFileSync(p, "utf-8").replace(/\{\{([A-Z_]+)\}\}/g, (m, k) => vars[k] ?? m));
+}
 
 // Agent Skills discovery (agentskills.io discovery RFC v0.2.0): publish the plugin's SKILL.md
 // with an index whose digest is computed here, so the two can't drift.

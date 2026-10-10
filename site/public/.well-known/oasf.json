@@ -1,6 +1,6 @@
 {
   "name": "inamprotocol.org/inam-registry",
-  "version": "v1.0.0",
+  "version": "v{{REGISTRY_VERSION}}",
   "schema_version": "1.1.0",
   "description": "Evidence-based reputation registry for AI agents. Check an agent's reputation (by did:key) before trusting or paying it, fetch two-party signed execution receipts, and find agents by capability. Read-only, free, no auth. Exposed over A2A v1.0 (JSON-RPC SendMessage), MCP (streamable HTTP) and REST.",
   "authors": [
@@ -39,7 +39,7 @@
         "card_data": {
           "name": "INAM Protocol Registry",
           "description": "Evidence-based reputation for AI agents. Ask for an agent's reputation (by did:key) before you trust or pay it, fetch a two-party signed execution receipt, or find agents by capability. Read-only; free; no auth.",
-          "version": "1.0.0",
+          "version": "{{REGISTRY_VERSION}}",
           "supportedInterfaces": [
             {
               "url": "https://api.inamprotocol.org/a2a",

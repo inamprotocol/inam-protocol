@@ -19,4 +19,4 @@ body:
     id: versions
     attributes:
       label: Versions
-      placeholder: "registry 0.12.0 / inamprotocol (npm) 0.17.1 / spec v0.39"
+      placeholder: "registry x.y.z (GET /v1/health) / inamprotocol (npm) x.y.z / spec v0.NN"

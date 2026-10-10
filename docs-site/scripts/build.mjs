@@ -240,6 +240,8 @@ writeFileSync(
 
 // ---------- API reference (Redoc, self-hosted, no CDN) ----------
 writeFileSync(path.join(DIST, "api", "openapi.yaml"), openapiYaml);
+// Machine-readable spec version (README badge, scripts): same SPEC.md title line as the eyebrow above.
+writeFileSync(path.join(DIST, "version.json"), JSON.stringify({ spec: SPEC_VERSION, status: SPEC_STATUS }) + "\n");
 copyFileSync(
   path.join(SITE, "node_modules/redoc/bundles/redoc.standalone.js"),
   path.join(DIST, "api", "redoc.standalone.js"),

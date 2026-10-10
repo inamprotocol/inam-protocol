@@ -1,5 +1,6 @@
 import type { Context, Hono } from "hono";
 import type { AppEnv } from "./types.js";
+import pkg from "../package.json";
 
 /**
  * Hosted, read-only A2A endpoint (`POST /a2a`, JSON-RPC binding).
@@ -26,7 +27,7 @@ export const agentCard = {
   name: "INAM Protocol Registry",
   description:
     "Evidence-based reputation for AI agents. Ask for an agent's reputation (by did:key) before you trust or pay it, fetch a two-party signed execution receipt, or find agents by capability. Read-only; free; no auth.",
-  version: "1.0.0",
+  version: pkg.version,
   supportedInterfaces: [{ url: `${BASE}/a2a`, protocolBinding: "JSONRPC", protocolVersion: "1.0" }],
   // v0.3 clients read these two instead of supportedInterfaces.
   url: `${BASE}/a2a`,

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: INAM Protocol Registry API
-  version: "0.33.0"
+  version: "0.41.0"
   description: >
     The open reputation, verification, and economic-history layer for the agent
     economy. See SPEC.md in this repository for the full protocol specification
@@ -39,7 +39,7 @@ paths:
           description: Registry is up
           content:
             application/json:
-              schema: { type: object, properties: { status: { const: ok } } }
+              schema: { type: object, properties: { status: { const: ok }, version: { type: string, description: "Registry implementation version (worker/package.json); not the spec version." } } }
         "404": { $ref: "#/components/responses/Error" }
 
   /agents:

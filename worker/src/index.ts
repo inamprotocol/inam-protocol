@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
+import pkg from "../package.json";
 import type { ZodType } from "zod";
 import { requireSignedRequest, optionalSignedRequest } from "./signedRequest.js";
 import { requireIdempotencyKey } from "./idempotency.js";
@@ -99,7 +100,7 @@ app.onError((err, c) => {
 
 app.notFound((c) => c.json({ error: { code: "ROUTE_NOT_FOUND", message: `No route for ${c.req.method} ${c.req.path}` } }, 404));
 
-app.get("/v1/health", (c) => c.json({ status: "ok" }));
+app.get("/v1/health", (c) => c.json({ status: "ok", version: pkg.version }));
 
 // Evidence breakdown of the whole registry (statsService.ts): demo vs.
 // maintainer-only vs. other receipts, countersigned/verified/disputed/paid.
