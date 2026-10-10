@@ -54,7 +54,24 @@ const server = new McpServer({ name: "inam-mcp", version: "0.5.1" });
 
 // --- read tools (always available; shared with the hosted endpoint) --------
 
-for (const t of readTools(inam)) server.tool(t.name, t.description, t.shape, { ...READ_ONLY, title: t.title }, t.handler);
+// verifyReceipt is a plain HTTPS call so this works with any published `inamprotocol` version.
+const reader = {
+  getReputation: (id: string) => inam.getReputation(id),
+  searchAgents: (q: { capability?: string; minReputation?: number }) => inam.searchAgents(q),
+  getReceipt: (id: string) => inam.getReceipt(id),
+  listReceiptVerifications: (id: string) => inam.listReceiptVerifications(id),
+  verifyReceipt: async (id: string, given: { spec?: string; output?: string }) => {
+    const res = await fetch(`${INAM_URL}/v1/receipts/${encodeURIComponent(id)}/verify`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "user-agent": "inam-mcp" },
+      body: JSON.stringify(given),
+    });
+    const body = await res.json().catch(() => null);
+    if (!res.ok) throw new Error(`POST /v1/receipts/${id}/verify -> ${res.status}: ${JSON.stringify(body)}`);
+    return body;
+  },
+};
+for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, { ...READ_ONLY, title: t.title }, t.handler);
 
 server.tool(
   "inam_whoami",

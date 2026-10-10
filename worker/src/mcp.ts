@@ -19,10 +19,12 @@ import type { AppEnv } from "./types.js";
 export function mcpHandler(app: Hono<AppEnv>) {
   return async (c: Context<AppEnv>) => {
     const ip = c.req.header("cf-connecting-ip") ?? "unknown";
-    const get = async (path: string) => {
-      const res = await app.request(path, { headers: { "cf-connecting-ip": ip } }, c.env, c.executionCtx);
+    // `post` (a JSON body) is only for the side-effect-free POST /receipts/:id/verify.
+    const get = async (path: string, post?: unknown) => {
+      const init = post === undefined ? {} : { method: "POST", body: JSON.stringify(post) };
+      const res = await app.request(path, { ...init, headers: { "cf-connecting-ip": ip, "content-type": "application/json" } }, c.env, c.executionCtx);
       const body = await res.json();
-      if (!res.ok) throw new Error(`GET ${path} -> ${res.status}: ${JSON.stringify(body)}`);
+      if (!res.ok) throw new Error(`${post === undefined ? "GET" : "POST"} ${path} -> ${res.status}: ${JSON.stringify(body)}`);
       return body;
     };
     const reader: RegistryReader = {
@@ -35,6 +37,7 @@ export function mcpHandler(app: Hono<AppEnv>) {
       },
       getReceipt: (id) => get(`/v1/receipts/${encodeURIComponent(id)}`),
       listReceiptVerifications: (id) => get(`/v1/receipts/${encodeURIComponent(id)}/verifications`),
+      verifyReceipt: (id, given) => get(`/v1/receipts/${encodeURIComponent(id)}/verify`, given),
     };
 
     // Stateless: a fresh server + transport per request, no session ids.
