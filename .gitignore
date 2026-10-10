@@ -3,6 +3,7 @@ dist/
 data/*
 !data/.gitkeep
 !data/trust-index/
+!data/x402-scan/
 .interop-tmp/
 sdk-python/.venv/
 sdk-python/.pytest_cache/
