@@ -231,3 +231,5 @@ footer.site { border-top: 1px solid var(--line); margin-top: 10px; padding: 22px
   font-family: "IBM Plex Mono", monospace; font-size: 12px; background: var(--warn-soft);
   color: var(--warn); border-bottom: 1px solid var(--line); padding: 6px 28px; text-align: center;
 }
+#activity-toggle { font-size: 11px; padding: 4px 10px; margin-left: 8px; }
+#activity-toggle[aria-pressed="true"] { opacity: 1; font-weight: 600; }
