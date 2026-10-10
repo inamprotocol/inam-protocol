@@ -471,6 +471,16 @@ export async function loggedRefIds(env: Env, entryType: string, refIds: string[]
   return new Set(results.map((r) => r.ref_id));
 }
 
+/** The first leaf of `entryType` for `refId`, or null (receipts finalized before v0.30 have none). */
+export async function transparencyEntryByRef(env: Env, entryType: string, refId: string): Promise<TransparencyLogEntryRow | null> {
+  const r = await env.DB.prepare(
+    "SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload FROM transparency_log WHERE entry_type = ? AND ref_id = ? ORDER BY leaf_index ASC LIMIT 1",
+  )
+    .bind(entryType, refId)
+    .first<{ leaf_index: number; entry_type: string; ref_id: string; created_at: string; data: string; leaf_hash: string; payload: string | null }>();
+  return r ? { leafIndex: r.leaf_index, entryType: r.entry_type, refId: r.ref_id, createdAt: r.created_at, data: r.data, leafHash: r.leaf_hash, payload: r.payload } : null;
+}
+
 export async function transparencyEntries(env: Env, limit: number, offset: number): Promise<TransparencyLogEntryRow[]> {
   const { results } = await env.DB.prepare(
     "SELECT leaf_index, entry_type, ref_id, created_at, data, leaf_hash, payload FROM transparency_log ORDER BY leaf_index ASC LIMIT ? OFFSET ?",
