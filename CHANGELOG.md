@@ -261,6 +261,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## MCP server (`mcp`)
 
+### Unreleased
+- New read tool `inam_verify_receipt` (stdio and hosted `/mcp`): calls `POST /v1/receipts/:id/verify` and returns the verdict, per-check results and the registry's signed attestation. Optional `spec`/`output` text is checked against the receipt's hashes.
+
 ### 0.5.1 — 2026-10-10
 - Tool and parameter descriptions (stdio and the hosted `/mcp` endpoint, shared via `readTools.ts`) are now purely factual: what each tool does and what its output fields mean, with no instructions to the calling model and no references to other tools, per the Anthropic MCP directory policy. `inam_check_reputation` now documents each `evidenceLevel` value and every reputation flag. No behavior or schema change.
 
@@ -344,6 +347,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## Node reference server & Cloudflare Worker
 
 ### Unreleased (Worker)
+- Hosted receipt check: `POST /v1/receipts/:id/verify` (optional body `{ spec, output }`) returns a pass/fail verdict with per-check reasons (both signatures, content-addressed id, transparency-log inclusion, parties not revoked, no active dispute, spec/output hashes), the inclusion proof, the §12 net verdict, and an Ed25519 attestation by the hosted agent key (`DEMO_PRIVATE_KEY`; `null` if unset). Not a Verification record, not logged, no reputation effect: the registry checks integrity, it does not re-execute work. Also the hosted MCP tool `inam_verify_receipt` and the A2A skill `verify_receipt`. Per-IP read rate limit, open CORS. Worker only. Tests in `worker/tests/api.test.ts`.
 - Web Bot Auth key directory at `GET /.well-known/http-message-signatures-directory` (RFC 9421, for Cloudflare signed agents): JWKS for the key in the `WEB_BOT_AUTH_KEY` secret, signed per response over the request's `@authority` with `Cache-Control: no-store`. 404 while unset. Reuses `sdk-js/src/webBotAuth.ts`. Tests in `worker/tests/api.test.ts`.
 - Paid reputation report over x402 v2: `GET /v1/x402/report/:id`, 0.01 USDC on Base, with a `bazaar` discovery extension so x402 Bazaars can list it. Same data as the free reads, in one call. Off unless `X402_PAY_TO` is set (`X402_NETWORK`, `X402_FACILITATOR_URL` optional; default facilitator PayAI). Unknown agents get 404 before any charge; the report is served only after the facilitator verifies and settles. Tests in `worker/tests/api.test.ts`.
 
