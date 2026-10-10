@@ -214,6 +214,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.20.0 — 2026-10-10
+- Optional Web Bot Auth signatures (RFC 9421, the profile Cloudflare verifies for signed agents, draft-meunier-web-bot-auth-architecture): `inamFetch(client, { webBotAuth: { signatureAgent: "https://..." } })` signs every request with the agent's Ed25519 key, sending `Signature-Agent`, `Signature-Input` (`tag="web-bot-auth"`, `keyid` = JWK thumbprint, `created`/`expires`, covering `@authority` and `signature-agent`) and `Signature`. Off by default. `client.webBotAuthDirectory(host)` returns the JWKS body and signed headers to serve at `/.well-known/http-message-signatures-directory`. Also `webBotAuthHeaders`, `directoryResponseHeaders`, `httpMessageSignaturesDirectory`, `jwkThumbprint`. Tested against the draft's Ed25519 vector. No new dependency.
+
 ### 0.19.0 — 2026-10-09
 - Receipts over HTTP (SPEC.md §15): `inamReceipts(handler, { client, capability })` drafts a receipt for every 2xx answer to a caller that names itself; `inamFetch(client)` sends `INAM-Requester` and countersigns in the background once the hashes match, with `settle()` to wait. Also `httpSpecHash`, `httpOutputHash`.
 

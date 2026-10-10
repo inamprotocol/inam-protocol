@@ -3,6 +3,7 @@ import { sha256Hex, sign, toBase64, type Keypair } from "./crypto/keys.js";
 import { buildSigningStringV2, SIG_VERSION_HEADER, CURRENT_SIG_VERSION } from "./core/signingString.js";
 import { buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";
 import { buildSignableVerificationContent, type VerificationContentInput } from "./core/verificationContent.js";
+import { directoryResponseHeaders, httpMessageSignaturesDirectory, webBotAuthHeaders, type SignatureOptions } from "./webBotAuth.js";
 import type {
   AgentRecord,
   ExecutionReceipt,
@@ -36,6 +37,19 @@ export class InamClient {
 
   get did(): string {
     return this.keypair.did;
+  }
+
+  /** Web Bot Auth request headers for `url`, signed with this agent's key (see webBotAuth.ts). */
+  webBotAuthHeaders(url: string | URL, opts: SignatureOptions & { signatureAgent: string }) {
+    return webBotAuthHeaders(url, this.keypair.privateKey, opts);
+  }
+
+  /** Body and signed headers to serve at `/.well-known/http-message-signatures-directory` on host `authority`. */
+  webBotAuthDirectory(authority: string, opts?: SignatureOptions) {
+    return {
+      body: JSON.stringify(httpMessageSignaturesDirectory([this.keypair.publicKey])),
+      headers: directoryResponseHeaders(authority, this.keypair.privateKey, opts),
+    };
   }
 
   private async request<T>(method: string, path: string, body?: unknown, opts?: { idempotencyKey?: string }): Promise<T> {
