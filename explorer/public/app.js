@@ -841,12 +841,16 @@ async function renderStats() {
     <section class="block">
       ${lookupBox("Check an agent before you trust it", "Paste an agent's <code>did:key:...</code> to see its trust score, how much of it is independently verified, and its signed receipt history. Receipt (<code>sha256:...</code>) and job (<code>job_...</code>) IDs work too.")}
     </section>
-    <h2 class="h">Registry &amp; adoption stats</h2>
+    <h2 class="h">What the receipts are</h2>
+    <p class="dim">A receipt count alone says little. This splits it by who the parties are and what backs each receipt, from <a href="${escapeHtml(API_BASE.replace(/\/$/, ""))}/stats" target="_blank" rel="noopener"><code>GET /v1/stats</code></a>. Numbers overlap; they are not meant to add up.</p>
+    <div id="evidence-body"><p class="spinner-text">Loading…</p></div>
+    <h2 class="h" style="margin-top:26px">Registry &amp; adoption stats</h2>
     <p class="dim">A live snapshot of the public registry, computed client-side from the same API anyone can query, plus package/community signal from npm, PyPI, and GitHub's own public APIs. Not a real-time feed -- see the timestamp below.</p>
     <div id="stats-asof"></div>
     <div id="stats-body"><p class="spinner-text">Loading stats…</p></div>
   `);
   wireLookupForm();
+  renderEvidence();
   await loadAndRenderStats(false);
   document.getElementById("stats-asof").addEventListener("click", (e) => {
     if (e.target && e.target.id === "stats-refresh") loadAndRenderStats(true);
@@ -925,6 +929,38 @@ async function loadAndRenderStats(forceRefresh) {
       ${statTileUnavailable("PyPI downloads", `pypistats.org doesn't allow browser requests &mdash; <a class="stat-fallback" href="https://pypistats.org/packages/inamprotocol" target="_blank" rel="noopener">pypistats.org/packages/inamprotocol</a>`)}
     </div>
   `;
+}
+
+// Evidence breakdown (GET /v1/stats). Each row: number, what it counts, what it doesn't.
+async function renderEvidence() {
+  const el = document.getElementById("evidence-body");
+  let s;
+  try {
+    s = await apiGet("/stats");
+  } catch (err) {
+    el.innerHTML = err.status === 404
+      ? stateBox("This registry does not serve GET /v1/stats yet.", false)
+      : errorBox(err, "the evidence breakdown");
+    return;
+  }
+  const r = s.receipts, log = s.transparencyLog;
+  const rows = [
+    [log.receiptsFinalized, "Receipts in the transparency log", `${log.last7Days} in the last 7 days, ${log.last30Days} in the last 30. Receipts finalized before the log existed (v0.30) have no entry.`],
+    [r.countersigned, "Countersigned receipts", "Signed by both parties (finalized or disputed). The rows below count within these. Not counted: " + r.drafts + " one-sided drafts."],
+    [r.demo, "Demo receipts", "A <code>demo.*</code> task or the hosted demo agent as a party. Never counted toward reputation."],
+    [r.labelledTestOrDemo, "Labelled test or demo", "Demo receipts, plus <code>test.*</code> tasks and receipts where a party self-declares <code>metadata.demo</code> or <code>metadata.test</code>."],
+    [r.operatorOnly, "Both parties operator agents", `Both parties are on the registry's published operator list (${s.operatorAgents.length} agents: maintainer DIDs named in the repo, the demo agent, agents marked <code>metadata.reference</code>).`],
+    [r.unlabelledWithNonOperatorParty, "Unlabelled, with a non-operator party", "Not labelled test/demo, and at least one party is not on the operator list. That party is not proven independent: the registry cannot tell who runs an unlabelled key."],
+    [r.withVerifiedAttestation, "With a verifier attestation", `At least one <code>verified</code> attestation (SPEC §12) from a currently authorized verifier (SPEC §12.5); ${r.withVerifiedAttestationByNonOperator} from a verifier outside the operator list. Checks output integrity only, not correctness.`],
+    [r.disputed, "Disputed", "Currently in dispute. Resolved disputes count as finalized again."],
+    [r.withPaymentRef, "With a payment reference", "Carries <code>settlement.paymentRef</code>. Self-declared by the parties; the registry does not check that money moved."],
+    [s.agents.inCountersignedReceipts, "Distinct agents in receipts", `Agents party to at least one countersigned receipt, out of ${s.agents.registered} registered.`],
+    [s.counterpartyPairs, "Distinct counterparty pairs", "Unordered agent pairs with at least one countersigned receipt."],
+  ];
+  el.innerHTML = `<div class="table-wrap"><table class="data">
+    <tbody>${rows.map(([n, label, def]) => `<tr><td class="mono" style="white-space:nowrap;word-break:normal;font-size:1.2rem;font-weight:600">${Number(n)}</td><td><strong>${escapeHtml(label)}</strong><br><span class="faint">${def}</span></td></tr>`).join("")}</tbody>
+  </table></div>
+  <p class="faint">As of ${escapeHtml(fmtDate(s.generatedAt))}; cached up to 5 minutes.</p>`;
 }
 
 // ==================== Lookup ====================

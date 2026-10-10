@@ -861,6 +861,47 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 
+  /stats:
+    get:
+      operationId: registryStats
+      summary: Evidence breakdown of the whole registry (optional)
+      description: >-
+        Counts only, no receipt content. Receipt counts are over countersigned receipts (finalized or disputed).
+        Operator agents are MAINTAINER_AGENT_IDS (worker/src/statsService.ts), OPERATOR_DID, the hosted demo agent,
+        and agents self-declaring metadata.reference. Cached up to 5 minutes.
+      security: []
+      responses:
+        "200":
+          description: Registry evidence counts
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  generatedAt: { type: string, format: date-time }
+                  transparencyLog:
+                    type: object
+                    properties: { entries: { type: integer }, receiptsFinalized: { type: integer }, last7Days: { type: integer }, last30Days: { type: integer } }
+                  receipts:
+                    type: object
+                    properties:
+                      drafts: { type: integer, description: One-sided, not countersigned, not logged }
+                      countersigned: { type: integer }
+                      disputed: { type: integer }
+                      withPaymentRef: { type: integer, description: settlement.paymentRef present; self-declared, not checked }
+                      withVerifiedAttestation: { type: integer, description: ">=1 verified Verification from a currently authorized verifier (§12.5)" }
+                      withVerifiedAttestationByNonOperator: { type: integer }
+                      demo: { type: integer, description: demo.* capability or the hosted demo agent is a party }
+                      labelledTestOrDemo: { type: integer, description: "demo, test.* capability, or a party with metadata.demo/test true" }
+                      operatorOnly: { type: integer, description: Both parties are operator agents }
+                      unlabelledWithNonOperatorParty: { type: integer, description: Not labelled test/demo and at least one party is not an operator agent }
+                  agents:
+                    type: object
+                    properties: { registered: { type: integer }, inCountersignedReceipts: { type: integer } }
+                  counterpartyPairs: { type: integer, description: Distinct unordered agent pairs across countersigned receipts }
+                  operatorAgents: { type: array, items: { type: string } }
+        "429": { $ref: "#/components/responses/Error" }
+
   /check:
     get:
       operationId: checkTarget

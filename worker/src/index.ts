@@ -36,6 +36,7 @@ import * as demo from "./demo.js";
 import { checkReceipt } from "./receiptCheck.js";
 import { x402ReportHandler } from "./x402Report.js";
 import { checkHandler } from "./check.js";
+import { computeStats } from "./statsService.js";
 import { fromHex, keypairFromPrivateKey } from "../../sdk-js/src/crypto/keys.js";
 import { DIRECTORY_PATH, directoryResponseHeaders, httpMessageSignaturesDirectory } from "../../sdk-js/src/webBotAuth.js";
 
@@ -65,6 +66,7 @@ function parseBody<T>(schema: ZodType<T>, body: unknown): T {
 // just keeps the surface intentionally narrow until real frontend origins exist.
 const PUBLIC_READ_PATHS = [
   "/v1/health",
+  "/v1/stats",
   "/v1/agents/search",
   "/v1/agents/:id",
   "/v1/agents/:id/protocols",
@@ -98,6 +100,13 @@ app.onError((err, c) => {
 app.notFound((c) => c.json({ error: { code: "ROUTE_NOT_FOUND", message: `No route for ${c.req.method} ${c.req.path}` } }, 404));
 
 app.get("/v1/health", (c) => c.json({ status: "ok" }));
+
+// Evidence breakdown of the whole registry (statsService.ts): demo vs.
+// maintainer-only vs. other receipts, countersigned/verified/disputed/paid.
+app.get("/v1/stats", rateLimitReadByIp, async (c) => {
+  c.header("Cache-Control", "public, max-age=300");
+  return c.json(await computeStats(c.env));
+});
 
 // ---- Hosted demo counterparty (SPEC.md §14) ----
 // Unsigned on purpose: the receipt itself is signed by the caller as agent_b,
