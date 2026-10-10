@@ -214,6 +214,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### Unreleased
+- `CheckOptions.fetch`: inject the `fetch` every outbound check request uses (the hosted `/v1/check` signs with Web Bot Auth through it). Registry lookups in the check now go through the same fetch instead of `InamClient`. `nextStep(report)` returns one suggested step from the worst line. CLI output unchanged.
+
 ### 0.21.0 — 2026-10-10
 - `npx inamprotocol check <url | 0x wallet | did:key>`: a pre-payment check that works with no INAM data. For an x402 URL it reads the 402 (v2 `PAYMENT-REQUIRED` header or v1 body: payTo, network, asset, amount, resource, description), then for each EVM payTo checks ERC-8004 (owner lookup via the 8004scan index, `balanceOf` on the chain's Identity Registry and `getSummary` on the Reputation Registry through keyless public RPCs, counting feedback tagged `inam-receipt` as task-tied), the INAM wallet link and receipts, the `inam` extension binding (`decideX402`), a Web Bot Auth key directory on the host, and the domain's RDAP registration date. Wallets and DIDs get the identity/reputation subset. Human report by default, `--json`, exit 1 when a key check fails (`--strict`: also on caution). Bins `inamprotocol` and `inam` (the `inam` npm name belongs to another package, so `npx inam` only works with `inamprotocol` installed). The same engine is exported: `checkTarget`, `checkUrl`, `checkWallet`, `checkDid`, `formatReport`, `walletErc8004`, `inamLinkedWallets`, `parsePaymentRequired`, `paymentOptions`.
 - `verifyDirectoryResponse(authority, headers, body)` checks a fetched Web Bot Auth key directory: Ed25519 JWKS, signature tagged `http-message-signatures-directory` over `"@authority";req` by a listed key (by JWK thumbprint), not expired. Verified against Cloudflare's research directory.
@@ -260,6 +263,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Shared schemas require `specHash`/`outputHash` to match `^sha256:[0-9a-f]{64}$`. Hash real content with the existing `sha256Hex` export: `` `sha256:${sha256Hex(text)}` ``.
 
 ## MCP server (`mcp`)
+
+### Unreleased
+- New read tool `inam_verify_receipt` (stdio and hosted `/mcp`): calls `POST /v1/receipts/:id/verify` and returns the verdict, per-check results and the registry's signed attestation. Optional `spec`/`output` text is checked against the receipt's hashes.
+- `inam_check` read tool (stdio and hosted): pre-payment check of an x402 URL, wallet or did:key via the registry's `GET /v1/check`. Annotated `openWorldHint: true` since it reaches outside the registry.
 
 ### 0.5.1 — 2026-10-10
 - Tool and parameter descriptions (stdio and the hosted `/mcp` endpoint, shared via `readTools.ts`) are now purely factual: what each tool does and what its output fields mean, with no instructions to the calling model and no references to other tools, per the Anthropic MCP directory policy. `inam_check_reputation` now documents each `evidenceLevel` value and every reputation flag. No behavior or schema change.
@@ -344,6 +351,8 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## Node reference server & Cloudflare Worker
 
 ### Unreleased (Worker)
+- Hosted receipt check: `POST /v1/receipts/:id/verify` (optional body `{ spec, output }`) returns a pass/fail verdict with per-check reasons (both signatures, content-addressed id, transparency-log inclusion, parties not revoked, no active dispute, spec/output hashes), the inclusion proof, the §12 net verdict, and an Ed25519 attestation by the hosted agent key (`DEMO_PRIVATE_KEY`; `null` if unset). Not a Verification record, not logged, no reputation effect: the registry checks integrity, it does not re-execute work. Also the hosted MCP tool `inam_verify_receipt` and the A2A skill `verify_receipt`. Per-IP read rate limit, open CORS. Worker only. Tests in `worker/tests/api.test.ts`.
+- Hosted pre-payment check: `GET /v1/check?target=<url | 0x wallet | did:key>` (optional `method`, `rdap=0`) runs the `npx inamprotocol check` engine (`sdk-js/src/check.ts`, reused, not forked) and returns its `--json` report plus `next` (one suggested step) and `cachedAt`. Results are cached 10 minutes in the Cache API (no new binding) so the shared egress stays under the ERC-8004 indexer's limits. Registry lookups run in-process; other outbound requests carry Web Bot Auth headers when `WEB_BOT_AUTH_KEY` is set. Per-IP read rate limit, open CORS. Also the hosted MCP tool `inam_check` and the A2A skill `check` (a URL or 0x wallet in text, or `{"target"}`). Tests in `worker/tests/api.test.ts`.
 - Web Bot Auth key directory at `GET /.well-known/http-message-signatures-directory` (RFC 9421, for Cloudflare signed agents): JWKS for the key in the `WEB_BOT_AUTH_KEY` secret, signed per response over the request's `@authority` with `Cache-Control: no-store`. 404 while unset. Reuses `sdk-js/src/webBotAuth.ts`. Tests in `worker/tests/api.test.ts`.
 - Paid reputation report over x402 v2: `GET /v1/x402/report/:id`, 0.01 USDC on Base, with a `bazaar` discovery extension so x402 Bazaars can list it. Same data as the free reads, in one call. Off unless `X402_PAY_TO` is set (`X402_NETWORK`, `X402_FACILITATOR_URL` optional; default facilitator PayAI). Unknown agents get 404 before any charge; the report is served only after the facilitator verifies and settles. Tests in `worker/tests/api.test.ts`.
 

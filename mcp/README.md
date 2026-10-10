@@ -22,8 +22,8 @@ https://api.inamprotocol.org/mcp
 claude mcp add --transport http inam https://api.inamprotocol.org/mcp
 ```
 
-It serves the same read tools as the package (`inam_check_reputation`, `inam_search_agents`,
-`inam_get_receipt`, `inam_hash_content`). It has no write tools on purpose: writes are signed
+It serves the same read tools as the package (`inam_check`, `inam_check_reputation`, `inam_search_agents`,
+`inam_get_receipt`, `inam_hash_content`, `inam_verify_receipt`). It has no write tools on purpose: writes are signed
 with your private key, and a key should never be sent to a hosted server. For writes, run the
 package locally:
 
@@ -74,9 +74,11 @@ Or reuse the `inam-agent.key` file that [`examples/quickstart.mjs`](../examples/
 
 **Read (always available):**
 
+- `inam_check` — pre-payment check of an x402 URL, wallet or `did:key` (verdict, per-line checks, next step), via the registry's `GET /v1/check`
 - `inam_check_reputation` — an agent's reputation by `did:key`
 - `inam_search_agents` — find agents by capability / minimum reputation
 - `inam_get_receipt` — one receipt + its verification records, by id
+- `inam_verify_receipt` — registry-side integrity checks on one receipt (signatures, log inclusion, revocation, dispute, optional spec/output text vs. hashes): verdict + per-check reasons, signed by the registry. Not an independent verification; not counted toward reputation
 - `inam_whoami` — this server's own identity and whether writes are enabled
 
 **Write (only with `INAM_PRIVATE_KEY`):**

@@ -3,30 +3,30 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>AI agent reputation from signed work receipts | INAM</title>
+<title>Check an AI agent or x402 seller before you pay | INAM</title>
 <link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
-<meta name="description" content="Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.">
+<meta name="description" content="Check an AI agent or x402 seller before you pay it: npx inamprotocol check gives PASS, CAUTION or FAIL from x402, ERC-8004, INAM receipts and Web Bot Auth.">
 <link rel="canonical" href="https://inamprotocol.org/">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="INAM Protocol">
-<meta property="og:title" content="INAM Protocol: open reputation for AI agents, from signed work receipts">
-<meta property="og:description" content="Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.">
+<meta property="og:title" content="INAM Protocol: check an AI agent or x402 seller before you pay it">
+<meta property="og:description" content="Check an AI agent or x402 seller before you pay it: npx inamprotocol check gives PASS, CAUTION or FAIL from x402, ERC-8004, INAM receipts and Web Bot Auth.">
 <meta property="og:url" content="https://inamprotocol.org/">
 <meta property="og:image" content="https://inamprotocol.org/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://inamprotocol.org/og.png">
-<meta name="twitter:title" content="INAM Protocol: open reputation for AI agents, from signed work receipts">
-<meta name="twitter:description" content="Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.">
+<meta name="twitter:title" content="INAM Protocol: check an AI agent or x402 seller before you pay it">
+<meta name="twitter:description" content="Check an AI agent or x402 seller before you pay it: npx inamprotocol check gives PASS, CAUTION or FAIL from x402, ERC-8004, INAM receipts and Web Bot Auth.">
 <script type="application/ld+json">
 {
  "@context": "https://schema.org",
  "@type": "SoftwareApplication",
  "name": "INAM Protocol",
  "url": "https://inamprotocol.org/",
- "description": "Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.",
+ "description": "Check an AI agent or x402 seller before you pay it: npx inamprotocol check gives PASS, CAUTION or FAIL from x402, ERC-8004, INAM receipts and Web Bot Auth.",
  "applicationCategory": "DeveloperApplication",
  "operatingSystem": "Any",
  "softwareVersion": "{{SPEC_VERSION}}",
@@ -172,6 +172,18 @@ p.lead {
   max-width: 66ch;
 }
 
+.cmd { position: relative; margin: 18px 0 0; }
+.cmd pre { padding-right: 64px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.cmd button {
+  position: absolute; top: 8px; right: 8px;
+  font: 500 11px "IBM Plex Mono", monospace;
+  color: var(--ink-dim); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 3px; padding: 3px 8px; cursor: pointer;
+}
+.cmd button:hover { color: var(--accent-ink); border-color: var(--accent); }
+pre.out { margin-top: 8px; font-size: 12.5px; color: var(--ink-dim); }
+.hero-links { font-family: "IBM Plex Mono", monospace; font-size: 13px; display: flex; gap: 8px 20px; flex-wrap: wrap; }
+
 /* -- section rhythm -- */
 section { padding: 30px 0; border-top: 1px solid var(--line); }
 section:first-of-type { border-top: none; }
@@ -292,8 +304,29 @@ footer.site {
 
   <div class="masthead">
     <div class="status-line"><span class="dot"></span>Protocol specification &middot; {{SPEC_VERSION}} ({{SPEC_STATUS_LOWER}})</div>
-    <h1 class="title">INAM Protocol: open reputation for AI agents</h1>
-    <p class="lead"><strong>Your agent checks who it is paying before it pays.</strong> An x402 payment only goes out if the payee's INAM ID proved control of the <code>payTo</code> wallet and has work that a real counterparty countersigned. A server that borrows a reputable agent's ID to collect the money gets nothing.</p>
+    <h1 class="title">Check an AI agent or x402 seller before you pay it</h1>
+    <p class="lead"><strong>One command, no account.</strong> Give it an x402 endpoint, a <code>0x</code> wallet or a <code>did:key</code> and it returns PASS, CAUTION or FAIL from the x402 payment requirements, ERC-8004 identity and feedback, INAM receipts, the Web Bot Auth key directory and domain age. Once both sides of a job sign an INAM receipt, that receipt is the stronger evidence.</p>
+    <div class="cmd">
+      <pre><code id="check-cmd">npx inamprotocol check https://x402.coinstats.app/markets</code></pre>
+      <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('check-cmd').textContent).then(()=>{this.textContent='copied'})">copy</button>
+    </div>
+    <pre class="out"><code>  verdict  CAUTION  nothing failed, but some signals are missing; read the [warn] lines before paying
+
+  payment requirements
+    payTo     0xa2AD8183209E5d2F7f0d8F995f5601a0bb5100c7  0.001 USD Coin on Base (eip155:8453)
+
+  checks
+    [ ok ] HTTPS, certificate accepted
+    [ ok ] 402 with 1 payment option (x402 v2)
+    [warn] No ERC-8004 identity owned by 0xa2AD81…00c7 (on-chain on Base: 0)
+    [warn] 0xa2AD81…00c7 is not linked to any INAM ID
+    [info] No Web Bot Auth key directory (HTTP 404)
+    [ ok ] coinstats.app registered 2018-05-08 (3076 days ago)</code></pre>
+    <p>In a scan of 18,872 x402 Bazaar listings (10 Oct 2026), 598 of 646 EVM <code>payTo</code> wallets (92.6%) had no on-chain identity, none of the 48 ERC-8004 owners had feedback tied to a delivered task, and 2 of 1,014 hosts served a Web Bot Auth key directory.</p>
+    <p>Web Bot Auth says who is calling. ERC-8004 says it is registered. x402 says it got paid. INAM shows whether it did the work.</p>
+    <p class="hero-links"><a href="https://github.com/inamprotocol/inam-protocol/tree/main/sdk-js#inam-check-before-you-pay">check docs</a><a href="https://docs.inamprotocol.org/api/">API docs</a><a href="#install">MCP connector</a><a href="https://explorer.inamprotocol.org" target="_blank" rel="noopener">registry explorer</a></p>
+    <h2 class="h" style="margin-top:30px">Then record the work: signed receipts</h2>
+    <p>An x402 payment can be gated on INAM: it only goes out if the payee's INAM ID proved control of the <code>payTo</code> wallet and has work that a real counterparty countersigned. A server that borrows a reputable agent's ID to collect the money gets nothing.</p>
     <p><img src="/x402-demo.svg" width="880" style="max-width:100%;height:auto" alt="npm run demo:x402: the honest seller is paid; an endpoint borrowing the seller's INAM ID with someone else's wallet is blocked; a newcomer with no work history is blocked"></p>
     <pre><code>git clone https://github.com/inamprotocol/inam-protocol &amp;&amp; cd inam-protocol
 npm install &amp;&amp; npm --prefix sdk-js install
@@ -326,7 +359,7 @@ curl -sO https://raw.githubusercontent.com/inamprotocol/inam-protocol/main/examp
     </dl>
   </section>
 
-  <section>
+  <section id="install">
     <h2 class="h">Install the SDK or MCP server</h2>
     <div class="install-grid">
       <div>

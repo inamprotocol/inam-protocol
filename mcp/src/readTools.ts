@@ -14,6 +14,9 @@ export interface RegistryReader {
   searchAgents(query: { capability?: string; minReputation?: number }): Promise<unknown>;
   getReceipt(receiptId: string): Promise<unknown>;
   listReceiptVerifications(receiptId: string): Promise<unknown>;
+  verifyReceipt(receiptId: string, given: { spec?: string; output?: string }): Promise<unknown>;
+  /** GET /v1/check: pre-payment check of an x402 URL, wallet or did:key. */
+  check(query: { target: string; method?: string }): Promise<unknown>;
 }
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
@@ -39,6 +42,8 @@ export type ReadTool = {
   title: string;
   description: string;
   shape: z.ZodRawShape;
+  /** Overrides READ_ONLY (e.g. openWorldHint for a tool that reaches outside the registry). */
+  annotations?: { openWorldHint?: boolean };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- args are validated against `shape` by the SDK
   handler: (args: any) => Promise<ToolResult>;
 };
@@ -99,6 +104,38 @@ export function readTools(reader: RegistryReader): ReadTool[] {
         ]);
         return { receipt, ...(verifications as object) };
       }),
+    },
+    {
+      name: "inam_verify_receipt",
+      title: "Verify receipt",
+      description:
+        "Runs the registry's integrity checks on one receipt and returns a verdict ('pass' or 'fail') with per-check results: finalized, agent_b_signature, " +
+        "agent_a_signature, receipt_id (content-addressed id), transparency_log (leaf present, inclusion proof, logged content matches), spec_hash and " +
+        "output_hash (only when the spec or output text is supplied; otherwise 'skipped'), parties_not_revoked and no_active_dispute. Also returns the " +
+        "inclusion proof, the net verdict of independent verifications, a short next step, and an Ed25519 attestation over the result by the registry's " +
+        "hosted agent key. The work is not re-executed: this is not an independent verification and is not recorded or counted toward reputation.",
+      shape: {
+        receiptId: z.string().describe("sha256:... receipt id"),
+        spec: z.string().optional().describe("exact task spec text; checked against the receipt's task.specHash"),
+        output: z.string().optional().describe("exact output text; checked against the receipt's result.outputHash"),
+      },
+      handler: guarded(({ receiptId, spec, output }: { receiptId: string; spec?: string; output?: string }) => reader.verifyReceipt(receiptId, { spec, output })),
+    },
+    {
+      name: "inam_check",
+      title: "Pre-payment check",
+      description:
+        "Checks an x402 endpoint URL, an EVM wallet or a did:key before paying it, from public signals: the URL's 402 payment requirements " +
+        "(payTo, price, network), whether payTo owns an ERC-8004 identity and has feedback, whether payTo is proven by an INAM ID and that ID's " +
+        "reputation, a Web Bot Auth key directory, HTTPS and the domain's registration age. Works when INAM has no data on the target. Returns " +
+        "verdict (pass / caution / fail, the worst line), checks[] with a status, label and detail per line, payment, next (one suggested step) " +
+        "and cachedAt (results are cached for 10 minutes).",
+      shape: {
+        target: z.string().describe("x402 endpoint http(s) URL, 0x EVM wallet address, or did:key:z..."),
+        method: z.enum(["GET", "POST", "HEAD"]).optional().describe("HTTP method for a URL target; default GET, use POST for endpoints that only answer POST"),
+      },
+      annotations: { openWorldHint: true },
+      handler: guarded((q: { target: string; method?: string }) => reader.check(q)),
     },
   ];
 }

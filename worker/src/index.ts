@@ -33,7 +33,9 @@ import type { AppEnv } from "./types.js";
 import { mcpHandler } from "./mcp.js";
 import { a2aHandler, agentCard } from "./a2a.js";
 import * as demo from "./demo.js";
+import { checkReceipt } from "./receiptCheck.js";
 import { x402ReportHandler } from "./x402Report.js";
+import { checkHandler } from "./check.js";
 import { fromHex, keypairFromPrivateKey } from "../../sdk-js/src/crypto/keys.js";
 import { DIRECTORY_PATH, directoryResponseHeaders, httpMessageSignaturesDirectory } from "../../sdk-js/src/webBotAuth.js";
 
@@ -74,6 +76,7 @@ const PUBLIC_READ_PATHS = [
   "/v1/jobs/:id",
   "/v1/receipts/:id",
   "/v1/receipts/:id/verifications",
+  "/v1/receipts/:id/verify",
   "/v1/verifications/:id",
   "/v1/demo",
   "/v1/demo/*",
@@ -158,6 +161,9 @@ app.get("/v1/agents/:id/protocols", async (c) => {
 
 app.use("/v1/x402/*", cors({ origin: "*", exposeHeaders: ["PAYMENT-REQUIRED", "PAYMENT-RESPONSE"] }));
 app.get("/v1/x402/report/:id", rateLimitReadByIp, x402ReportHandler);
+
+// Pre-payment check of any x402 URL, wallet or did:key from public signals (see check.ts).
+app.get("/v1/check", cors({ origin: "*" }), rateLimitReadByIp, checkHandler(app));
 
 app.get("/v1/agents/:id/reputation", rateLimitReadByIp, async (c) => c.json(await computeReputation(c.env, c.req.param("id")!)));
 
@@ -338,6 +344,24 @@ app.get("/v1/receipts/:id/verifications", optionalSignedRequest, async (c) => {
   const isVerifier = callerDid ? records.some((v) => v.verifier === callerDid) : false;
   receiptService.assertReceiptVisible(receipt, callerDid, isVerifier);
   return c.json({ verifications: records });
+});
+
+// Hosted receipt check (see receiptCheck.ts): a signed answer, not a
+// Verification record and not a log entry. Unsigned callers welcome; a signed
+// caller may check a participants_only receipt it is entitled to see.
+const MAX_CHECK_TEXT = 1_000_000;
+app.post("/v1/receipts/:id/verify", optionalSignedRequest, rateLimitReadByIp, async (c) => {
+  const body = (c.get("parsedBody") ?? (await c.req.json().catch(() => undefined)) ?? {}) as Record<string, unknown>;
+  const given: { spec?: string; output?: string } = {};
+  for (const k of ["spec", "output"] as const) {
+    const v = body[k];
+    if (v === undefined) continue;
+    if (typeof v !== "string" || v.length > MAX_CHECK_TEXT) throw badRequest("VALIDATION_ERROR", `${k} must be a string of at most ${MAX_CHECK_TEXT} characters`);
+    given[k] = v;
+  }
+  const receipt = await receiptService.getReceipt(c.env, c.req.param("id")!);
+  receiptService.assertReceiptVisible(receipt, c.get("agentDid"), await callerIsVerifierOf(c, receipt.receiptId, c.get("agentDid")));
+  return c.json(await checkReceipt(c.env, receipt, given));
 });
 
 app.post("/v1/receipts/:id/countersign", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {

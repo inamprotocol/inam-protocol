@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../src/index.js";
+import { route as a2aRoute } from "../src/a2a.js";
 import { generateKeypair, sha256Hex, sign, toBase64, fromBase64, publicKeyToDid, verify, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { generateP256Keypair, p256Sign } from "../../sdk-js/src/crypto/p256.js";
 import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
@@ -2561,7 +2562,7 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
   it("lists only the read tools -- no tool that would need the caller's private key", async () => {
     const res = await mcp("tools/list");
     const names = (res.json.result.tools as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual(["inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents"]);
+    expect(names).toEqual(["inam_check", "inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents", "inam_verify_receipt"]);
     for (const t of res.json.result.tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
   });
 
@@ -2622,7 +2623,7 @@ describe("hosted A2A endpoint (POST /a2a)", () => {
     expect(status).toBe(200);
     const card = json as { supportedInterfaces: { url: string; protocolBinding: string }[]; skills: { id: string }[] };
     expect(card.supportedInterfaces[0]).toMatchObject({ url: "https://api.inamprotocol.org/a2a", protocolBinding: "JSONRPC" });
-    expect(card.skills.map((s) => s.id).sort()).toEqual(["check_reputation", "get_receipt", "search_agents"]);
+    expect(card.skills.map((s) => s.id).sort()).toEqual(["check", "check_reputation", "get_receipt", "search_agents", "verify_receipt"]);
   });
 
   it("answers a did:key in text with the same reputation as the REST route (v1.0)", async () => {
@@ -2654,6 +2655,98 @@ describe("hosted A2A endpoint (POST /a2a)", () => {
   it("replies with usage help instead of guessing at prose", async () => {
     const res = await a2a("SendMessage", { messageId: "m4", role: "ROLE_USER", parts: [{ text: "who should I hire?" }] });
     expect(res.json.result.message.parts[0].text).toContain("did:key");
+  });
+});
+
+describe("hosted receipt check (POST /v1/receipts/:id/verify)", () => {
+  const SPEC = "Translate 'merhaba' to English.";
+  const OUTPUT = "hello";
+  type CheckBody = { verdict: string; checks: { name: string; result: string }[]; log: { leafIndex: number } | null; independentVerification: string; nextStep: string; attestation: { signer: string; signature: string } };
+  const results = (b: CheckBody) => Object.fromEntries(b.checks.map((x) => [x.name, x.result]));
+
+  async function finalized() {
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+    const base = job();
+    const input = { ...base, task: { ...base.task, specHash: `sha256:${sha256Hex(SPEC)}` }, result: { ...base.result, outputHash: `sha256:${sha256Hex(OUTPUT)}` } };
+    const content = buildSignableContent(requester.did, worker_.did, input as never);
+    const bytes = new TextEncoder().encode(canonicalize({ ...content, dispute: undefined }));
+    const draft = await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `receipt:${input.jobId}`, body: { ...input, agentAId: requester.did, signature: toBase64(sign(bytes, worker_.privateKey)) } });
+    const receiptId = (draft.json as { receiptId: string }).receiptId;
+    await call("POST", `/v1/receipts/${encodeURIComponent(receiptId)}/countersign`, { keypair: requester, idempotencyKey: `countersign:${receiptId}`, body: { signature: toBase64(sign(bytes, requester.privateKey)) } });
+    return { receiptId, requester, worker_ };
+  }
+  const check = (id: string, body?: unknown) => call("POST", `/v1/receipts/${encodeURIComponent(id)}/verify`, { body });
+
+  it("passes a finalized receipt, binds supplied spec/output, signs the answer, and records nothing", async () => {
+    const { receiptId, worker_ } = await finalized();
+    const sthBefore = (await call("GET", "/v1/transparency/sth")).json as { treeSize: number };
+    const repBefore = (await call("GET", `/v1/agents/${worker_.did}/reputation`)).json as { trustScore: number; evidenceLevel: string };
+
+    const res = await check(receiptId, { spec: SPEC, output: OUTPUT });
+    expect(res.status).toBe(200);
+    const body = res.json as CheckBody;
+    expect(body.verdict).toBe("pass");
+    expect(results(body)).toEqual({
+      finalized: "pass", agent_b_signature: "pass", agent_a_signature: "pass", receipt_id: "pass", transparency_log: "pass",
+      spec_hash: "pass", output_hash: "pass", parties_not_revoked: "pass", no_active_dispute: "pass",
+    });
+    expect(body.independentVerification).toBe("none");
+    const { attestation, ...signed } = body;
+    expect(attestation.signer).toBe(((await call("GET", "/v1/demo")).json as { demoAgentId: string }).demoAgentId);
+    expect(verify(fromBase64(attestation.signature), new TextEncoder().encode(canonicalize(signed)), attestation.signer)).toBe(true);
+
+    // Without text the hash checks are skipped, not failed.
+    expect(results((await check(receiptId)).json as CheckBody)).toMatchObject({ spec_hash: "skipped", output_hash: "skipped" });
+
+    // Not a Verification, not a log leaf, no reputation change.
+    expect(((await call("GET", "/v1/transparency/sth")).json as { treeSize: number }).treeSize).toBe(sthBefore.treeSize);
+    expect(((await call("GET", `/v1/receipts/${encodeURIComponent(receiptId)}/verifications`)).json as { verifications: unknown[] }).verifications).toEqual([]);
+    const repAfter = (await call("GET", `/v1/agents/${worker_.did}/reputation`)).json as { trustScore: number; evidenceLevel: string };
+    expect(repAfter.trustScore).toBe(repBefore.trustScore);
+    expect(repAfter.evidenceLevel).toBe("countersigned");
+  });
+
+  it("fails on wrong output text, an open dispute, or a tampered stored receipt", async () => {
+    const { receiptId, requester } = await finalized();
+    const wrong = (await check(receiptId, { output: "goodbye" })).json as CheckBody;
+    expect(wrong.verdict).toBe("fail");
+    expect(results(wrong).output_hash).toBe("fail");
+    expect(wrong.nextStep).toContain("output_hash");
+
+    await call("POST", `/v1/receipts/${encodeURIComponent(receiptId)}/dispute`, { keypair: requester, idempotencyKey: `dispute:${receiptId}`, body: { reason: "wrong" } });
+    expect(results((await check(receiptId)).json as CheckBody)).toMatchObject({ no_active_dispute: "fail", transparency_log: "pass" });
+
+    const other = await finalized();
+    await env.DB.prepare("UPDATE receipts SET data = json_set(data, '$.result.outputHash', ?) WHERE receipt_id = ?").bind(`sha256:${"1".repeat(64)}`, other.receiptId).run();
+    expect(results((await check(other.receiptId)).json as CheckBody)).toMatchObject({ agent_a_signature: "fail", agent_b_signature: "fail", receipt_id: "fail", transparency_log: "fail" });
+  });
+
+  it("404s an unknown receipt and rejects non-string text", async () => {
+    expect((await check("sha256:" + "0".repeat(64))).status).toBe(404);
+    const { receiptId } = await finalized();
+    expect((await check(receiptId, { spec: 42 })).status).toBe(400);
+  });
+
+  it("is reachable as the MCP tool inam_verify_receipt and the A2A skill verify_receipt", async () => {
+    const { receiptId } = await finalized();
+    const mcpReq = new Request("http://worker.test/mcp", {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "cf-connecting-ip": crypto.randomUUID() },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "inam_verify_receipt", arguments: { receiptId, output: OUTPUT } } }),
+    });
+    const mcpRes = (await (await worker.fetch(mcpReq, env, createExecutionContext())).json()) as { result: { content: { text: string }[] } };
+    expect(JSON.parse(mcpRes.result.content[0].text)).toMatchObject({ verdict: "pass", receiptId });
+
+    const a2aReq = new Request("http://worker.test/a2a", {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": crypto.randomUUID() },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "SendMessage", params: { message: { messageId: "v1", role: "ROLE_USER", parts: [{ text: `please verify ${receiptId}` }] } } }),
+    });
+    const a2aRes = (await (await worker.fetch(a2aReq, env, createExecutionContext())).json()) as { result: { message: { parts: { data: { skill: string; result: { verdict: string } } }[] } } };
+    expect(a2aRes.result.message.parts[0].data).toMatchObject({ skill: "verify_receipt", result: { verdict: "pass" } });
   });
 });
 
@@ -2842,5 +2935,72 @@ describe("Web Bot Auth key directory", () => {
     const sig = fromBase64(res.headers.get("signature")!.match(/^sig1=:(.+):$/)![1]);
     const base = `"@authority";req: api.inamprotocol.org\n"@signature-params": ${params}`;
     expect(verifyRawEd25519(sig, new TextEncoder().encode(base), kp.publicKey)).toBe(true);
+  });
+});
+
+describe("hosted pre-payment check (GET /v1/check)", () => {
+  const PAYTO = "0x1111111111111111111111111111111111111111";
+  const required = { x402Version: 2, resource: { url: "https://seller.example/api" }, accepts: [{ scheme: "exact", network: "eip155:8453", amount: "10000", asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", payTo: PAYTO, extra: { name: "USDC" } }] };
+  const seen: { url: string; headers: Record<string, string> }[] = [];
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    seen.length = 0;
+  });
+  function stubOutbound() {
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      seen.push({ url: String(input), headers: (init.headers ?? {}) as Record<string, string> });
+      if (String(input).startsWith("https://seller.example/api")) return new Response("{}", { status: 402, headers: { "payment-required": btoa(JSON.stringify(required)) } });
+      if (String(input).startsWith("https://api.8004scan.io/")) return Response.json({ items: [] });
+      if (String(input) === "https://mainnet.base.org") return Response.json({ jsonrpc: "2.0", id: 1, result: "0x" + "0".repeat(64) });
+      return new Response("not found", { status: 404 });
+    });
+  }
+  async function check(query: string, e: object = env) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(new Request(`http://worker.test/v1/check?${query}`, { headers: { "cf-connecting-ip": crypto.randomUUID() } }), e as typeof env, ctx);
+    await waitOnExecutionContext(ctx);
+    return { status: res.status, cors: res.headers.get("access-control-allow-origin"), json: (await res.json()) as any };
+  }
+
+  it("checks an x402 URL with no INAM data: caution, per-line checks, a next step, cached on repeat", async () => {
+    stubOutbound();
+    const target = `https://seller.example/api?n=${crypto.randomUUID()}`;
+    const first = await check(`target=${encodeURIComponent(target)}&rdap=0`);
+    expect(first.status).toBe(200);
+    expect(first.cors).toBe("*");
+    expect(first.json).toMatchObject({ target, kind: "url", verdict: "caution", payment: { accepts: [{ payTo: PAYTO, price: "0.01 USDC" }] } });
+    expect(first.json.checks.find((c: { id: string }) => c.id === "inam.link").status).toBe("warn");
+    expect(first.json.next).toMatch(/ERC-8004|INAM ID/);
+    expect(first.json.cachedAt).toBeTypeOf("string");
+    // The registry lookup ran in-process, not over the network.
+    expect(seen.some((s) => new URL(s.url).host === "worker.test")).toBe(false);
+
+    const calls = seen.length;
+    const second = await check(`target=${encodeURIComponent(target)}&rdap=0`);
+    expect(second.json.cachedAt).toBe(first.json.cachedAt);
+    expect(seen.length).toBe(calls);
+  });
+
+  it("signs outbound requests with Web Bot Auth when WEB_BOT_AUTH_KEY is set", async () => {
+    stubOutbound();
+    await check(`target=${encodeURIComponent(`https://seller.example/api?n=${crypto.randomUUID()}`)}&rdap=0`, { ...env, WEB_BOT_AUTH_KEY: "04".repeat(32) });
+    const seller = seen.find((s) => s.url.startsWith("https://seller.example/api"))!;
+    expect(seller.headers["Signature-Agent"]).toBe('"https://worker.test"');
+    expect(seller.headers.Signature).toBeTruthy();
+  });
+
+  it("is reachable as the A2A check skill from a URL or wallet in text, or a target data part", () => {
+    expect(a2aRoute({ parts: [{ text: "check https://seller.example/api before I pay" }] })).toEqual({ skill: "check", arg: { target: "https://seller.example/api" } });
+    expect(a2aRoute({ parts: [{ text: `is ${PAYTO} safe?` }] })).toEqual({ skill: "check", arg: { target: PAYTO } });
+    expect(a2aRoute({ parts: [{ data: { target: PAYTO, method: "POST" } }] })).toEqual({ skill: "check", arg: { target: PAYTO, method: "POST" } });
+  });
+
+  it("tells the caller what input is expected", async () => {
+    const missing = await check("");
+    expect(missing.status).toBe(400);
+    expect(missing.json.error.message).toMatch(/http\(s\) URL.*0x EVM wallet.*did:key/);
+    const bad = await check("target=hello");
+    expect(bad.status).toBe(400);
+    expect(bad.json.error.message).toMatch(/unrecognized target/);
   });
 });

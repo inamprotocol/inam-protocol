@@ -598,6 +598,72 @@ paths:
                 type: object
                 properties: { verifications: { type: array, items: { $ref: "#/components/schemas/Verification" } } }
 
+  /receipts/{id}/verify:
+    post:
+      operationId: verifyReceipt
+      summary: Registry-side integrity checks on one receipt (optional; not a Verification, not logged, no reputation effect)
+      description: >
+        Checks both signatures, the content-addressed id, the transparency-log leaf and inclusion proof, that neither party
+        is revoked, that no dispute is active, and, when supplied, that spec/output text hashes to task.specHash /
+        result.outputHash. The work is not re-executed. The response is signed with the registry's hosted agent key
+        (attestation is null where the registry has none) and is not recorded anywhere.
+      tags: [receipts]
+      security: []
+      parameters: [{ $ref: "#/components/parameters/ReceiptId" }]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                spec: { type: string, maxLength: 1000000 }
+                output: { type: string, maxLength: 1000000 }
+      responses:
+        "200":
+          description: Check result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type: { type: string, enum: [inam.receipt_check.v1] }
+                  receiptId: { type: string }
+                  checkedAt: { type: string, format: date-time }
+                  verdict: { type: string, enum: [pass, fail] }
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string, enum: [finalized, agent_b_signature, agent_a_signature, receipt_id, transparency_log, spec_hash, output_hash, parties_not_revoked, no_active_dispute] }
+                        result: { type: string, enum: [pass, fail, skipped] }
+                        detail: { type: string }
+                  log:
+                    type: object
+                    nullable: true
+                    properties:
+                      leafIndex: { type: integer }
+                      treeSize: { type: integer }
+                      rootHash: { type: string }
+                      leafHash: { type: string }
+                      proof: { type: array, items: { type: string } }
+                  independentVerification: { type: string, enum: [verified, rejected, none] }
+                  scope: { type: string }
+                  nextStep: { type: string }
+                  attestation:
+                    type: object
+                    nullable: true
+                    description: Ed25519 signature (base64) by `signer` over the JCS form of every other field
+                    properties:
+                      signer: { type: string }
+                      alg: { type: string, enum: [Ed25519] }
+                      signature: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "404": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
   /receipts/{id}/countersign:
     post:
       operationId: countersignReceipt
@@ -794,6 +860,42 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
+
+  /check:
+    get:
+      operationId: checkTarget
+      summary: Pre-payment check of an x402 URL, EVM wallet or did:key from public signals (same report as `npx inamprotocol check --json`)
+      security: []
+      parameters:
+        - { name: target, in: query, required: true, schema: { type: string }, description: "x402 endpoint http(s) URL, 0x EVM wallet (40 hex), or did:key" }
+        - { name: method, in: query, required: false, schema: { type: string, enum: [GET, POST, HEAD], default: GET }, description: HTTP method used to request a URL target }
+        - { name: rdap, in: query, required: false, schema: { type: string, enum: ["0"] }, description: "0 skips the domain-age (RDAP) lookup" }
+      responses:
+        "200":
+          description: "Check report; cached up to 10 minutes (see cachedAt)"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  target: { type: string }
+                  kind: { type: string, enum: [url, wallet, did] }
+                  verdict: { type: string, enum: [pass, caution, fail], description: Worst status among the checks }
+                  checkedAt: { type: string, format: date-time }
+                  cachedAt: { type: string, format: date-time }
+                  next: { type: string, description: One suggested next step }
+                  payment: { type: object, description: "Parsed 402 payment requirements (URL targets)" }
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        status: { type: string, enum: [pass, warn, fail, info] }
+                        label: { type: string }
+                        detail: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
 
   /x402/report/{id}:
     get:

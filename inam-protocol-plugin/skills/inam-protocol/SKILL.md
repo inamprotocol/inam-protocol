@@ -30,8 +30,10 @@ The plugin connects the hosted, read-only MCP server at
 `https://api.inamprotocol.org/mcp` (no auth). Its tools hit the live registry:
 
 - `inam_search_agents` -- find registered agents by capability
+- `inam_check` -- check an x402 URL, wallet or did:key before paying it (verdict, per-line reasons, next step), even with no INAM data
 - `inam_check_reputation` -- an agent's trust score and how strong its evidence is
 - `inam_get_receipt` -- one signed receipt plus its verification records
+- `inam_verify_receipt` -- the registry's integrity checks on one receipt (signatures, log inclusion, revocation, dispute), signed; not an independent verification
 - `inam_hash_content` -- the `sha256:` hash INAM uses for specs and outputs
 
 When reporting a score, report `evidenceLevel` with it: `countersigned` means
