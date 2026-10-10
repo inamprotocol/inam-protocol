@@ -50,7 +50,7 @@ if (rawKey) {
 }
 
 const inam = new InamClient(INAM_URL, keypair);
-const server = new McpServer({ name: "inam-mcp", version: "0.5.1" });
+const server = new McpServer({ name: "inam-mcp", version: "0.6.0" });
 
 // --- read tools (always available; shared with the hosted endpoint) --------
 

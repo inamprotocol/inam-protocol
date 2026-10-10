@@ -265,6 +265,8 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## MCP server (`mcp`)
 
 ### Unreleased
+
+### 0.6.0 — 2026-10-10
 - New read tool `inam_verify_receipt` (stdio and hosted `/mcp`): calls `POST /v1/receipts/:id/verify` and returns the verdict, per-check results and the registry's signed attestation. Optional `spec`/`output` text is checked against the receipt's hashes.
 - `inam_check` read tool (stdio and hosted): pre-payment check of an x402 URL, wallet or did:key via the registry's `GET /v1/check`. Annotated `openWorldHint: true` since it reaches outside the registry.
 
