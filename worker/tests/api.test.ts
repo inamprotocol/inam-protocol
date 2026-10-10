@@ -161,7 +161,23 @@ describe("health", () => {
   it("responds ok", async () => {
     const { status, json } = await call("GET", "/v1/health");
     expect(status).toBe(200);
-    expect(json).toEqual({ status: "ok", version: expect.any(String) });
+    expect(json).toEqual({
+      status: "ok",
+      version: expect.any(String),
+      versions: { registry: expect.any(String), spec: expect.stringMatching(/^\d+\.\d+$/), mcp: expect.any(String), sdkJs: expect.any(String), sdkPython: expect.any(String) },
+      gitSha: null,
+    });
+    const body = json as { version: string; versions: { registry: string } };
+    expect(body.versions.registry).toBe(body.version);
+  });
+});
+
+describe("transparency head alias", () => {
+  it("GET /v1/transparency/head returns the same tree head as /sth", async () => {
+    const sth = (await call("GET", "/v1/transparency/sth")).json as { treeSize: number; rootHash: string };
+    const head = await call("GET", "/v1/transparency/head");
+    expect(head.status).toBe(200);
+    expect(head.json).toMatchObject({ treeSize: sth.treeSize, rootHash: sth.rootHash });
   });
 });
 
@@ -2694,7 +2710,7 @@ describe("hosted receipt check (POST /v1/receipts/:id/verify)", () => {
     expect(body.verdict).toBe("pass");
     expect(results(body)).toEqual({
       finalized: "pass", agent_b_signature: "pass", agent_a_signature: "pass", receipt_id: "pass", transparency_log: "pass",
-      spec_hash: "pass", output_hash: "pass", parties_not_revoked: "pass", no_active_dispute: "pass",
+      hash_format: "pass", spec_hash: "pass", output_hash: "pass", parties_not_revoked: "pass", no_active_dispute: "pass",
     });
     expect(body.independentVerification).toBe("none");
     const { attestation, ...signed } = body;
@@ -2725,6 +2741,29 @@ describe("hosted receipt check (POST /v1/receipts/:id/verify)", () => {
     const other = await finalized();
     await env.DB.prepare("UPDATE receipts SET data = json_set(data, '$.result.outputHash', ?) WHERE receipt_id = ?").bind(`sha256:${"1".repeat(64)}`, other.receiptId).run();
     expect(results((await check(other.receiptId)).json as CheckBody)).toMatchObject({ agent_a_signature: "fail", agent_b_signature: "fail", receipt_id: "fail", transparency_log: "fail" });
+  });
+
+  it("flags (not crashes on) a stored pre-v0.32 record with placeholder hashes", async () => {
+    const { receiptId } = await finalized();
+    await env.DB.prepare("UPDATE receipts SET data = json_set(data, '$.task.specHash', 'sha256:spec', '$.result.outputHash', 'sha256:out') WHERE receipt_id = ?").bind(receiptId).run();
+    const res = await check(receiptId, { output: "out" });
+    expect(res.status).toBe(200);
+    const body = res.json as CheckBody & { checks: { name: string; detail: string }[] };
+    expect(body.verdict).toBe("fail");
+    expect(results(body)).toMatchObject({ hash_format: "fail", output_hash: "fail" });
+    expect(body.checks.find((x) => x.name === "hash_format")!.detail).toContain("pre-v0.32 test record: placeholder hashes");
+    expect(body.nextStep).toContain("hash_format");
+  });
+
+  it("rejects malformed spec/output hashes at receipt creation", async () => {
+    const requester = generateKeypair();
+    const worker_ = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
+    const base = job();
+    const input = { ...base, task: { ...base.task, specHash: "sha256:spec" }, result: { ...base.result, outputHash: "sha256:out" } };
+    const res = await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `receipt:${input.jobId}`, body: { ...input, agentAId: requester.did, signature: "AA==" } });
+    expect(res.status).toBe(400);
+    expect((res.json as { error: { code: string } }).error.code).toBe("VALIDATION_ERROR");
   });
 
   it("404s an unknown receipt and rejects non-string text", async () => {

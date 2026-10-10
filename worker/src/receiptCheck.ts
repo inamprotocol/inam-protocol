@@ -21,6 +21,8 @@ import * as db from "./db.js";
 import { attestationVerdict } from "./verificationService.js";
 import type { Env, ExecutionReceipt } from "./types.js";
 
+const HASH_RE = /^sha256:[0-9a-f]{64}$/;
+
 export type CheckResult = "pass" | "fail" | "skipped";
 export interface Check {
   name: string;
@@ -80,6 +82,12 @@ export async function checkReceipt(env: Env, r: ExecutionReceipt, given: { spec?
     const how = entry.payload === null ? " (payload withheld: leaf only, content not compared)" : " and matches the stored receipt";
     add("transparency_log", problem === null, `included at leaf ${entry.leafIndex} of ${leaves.length}${how}`, problem ?? "");
   }
+
+  // Creation has required this format since spec v0.32 (draftReceiptSchema); records
+  // older than that (e.g. live log leaf 0) carry placeholders like "sha256:spec".
+  const badHashes = [["task.specHash", r.task?.specHash], ["result.outputHash", r.result?.outputHash]].filter(([, h]) => !HASH_RE.test(String(h)));
+  add("hash_format", badHashes.length === 0, "specHash and outputHash are sha256: + 64 lowercase hex",
+    `pre-v0.32 test record: placeholder hashes, not content hashes (${badHashes.map(([k, h]) => `${k} ${JSON.stringify(h)}`).join(", ")})`);
 
   const hashCheck = (name: string, text: string | undefined, expected: string, what: string) =>
     add(name, text === undefined ? null : `sha256:${sha256Hex(text)}` === expected, text === undefined ? `no ${what} text supplied` : `${what} text hashes to ${expected}`, `${what} text does not hash to ${expected}`);

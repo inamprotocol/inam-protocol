@@ -252,6 +252,9 @@ export interface Env {
   /** Hex Ed25519 private key of the hosted demo counterparty (SPEC.md §14),
    * set with `wrangler secret put`. Unset = the /v1/demo routes answer 503. */
   DEMO_PRIVATE_KEY?: string;
+  /** Commit the deployed code was built from, set by deploy-api.yml
+   * (`wrangler deploy --var GIT_SHA:...`). Unset = null in /v1/health. */
+  GIT_SHA?: string;
   /** Hex Ed25519 private key the INAM agent signs Web Bot Auth requests with,
    * published at /.well-known/http-message-signatures-directory. Set with
    * `wrangler secret put`. Unset = that route answers 404. */
