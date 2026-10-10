@@ -51,6 +51,8 @@ export interface CheckOptions {
   linkedWallets?: Map<string, string>;
   /** Skip the RDAP domain-age lookup. */
   noRdap?: boolean;
+  /** Retries after HTTP 429 from the indexer and RDAP (default 1). The bulk scan raises it. */
+  retries?: number;
 }
 
 export const ERC8004 = {
@@ -83,10 +85,14 @@ const short = (a: string) => (a.length > 14 ? `${a.slice(0, 8)}…${a.slice(-4)}
 function timedFetch(url: string, init: RequestInit = {}, timeoutMs = 10000) {
   return fetch(url, { ...init, headers: { "user-agent": UA, ...(init.headers as Record<string, string>) }, signal: AbortSignal.timeout(timeoutMs) });
 }
-async function getJson(url: string, timeoutMs?: number): Promise<any> {
-  const res = await timedFetch(url, { headers: { accept: "application/json" } }, timeoutMs);
-  if (!res.ok) throw new Error(`GET ${url} -> ${res.status}`);
-  return res.json();
+/** GET JSON; on 429 waits (Retry-After, else 15 s, doubling) and retries up to `retries` times. */
+async function getJson(url: string, timeoutMs?: number, retries = 1): Promise<any> {
+  for (let i = 0; ; i++) {
+    const res = await timedFetch(url, { headers: { accept: "application/json" } }, timeoutMs);
+    if (res.ok) return res.json();
+    if (res.status !== 429 || i >= retries) throw new Error(`GET ${url} -> ${res.status}`);
+    await new Promise((r) => setTimeout(r, (Number(res.headers.get("retry-after")) || 15 * 2 ** i) * 1000));
+  }
 }
 
 // ---------- x402 ----------
@@ -179,8 +185,8 @@ export interface Erc8004Agent {
 }
 
 /** Agents a wallet owns, from the indexer (on-chain ERC-721 has no enumeration by owner). */
-export async function erc8004AgentsByOwner(indexerUrl: string, wallet: string, timeoutMs?: number): Promise<Erc8004Agent[]> {
-  const j = await getJson(`${indexerUrl}/api/v1/agents?owner_address=${wallet.toLowerCase()}&limit=100`, timeoutMs);
+export async function erc8004AgentsByOwner(indexerUrl: string, wallet: string, timeoutMs?: number, retries?: number): Promise<Erc8004Agent[]> {
+  const j = await getJson(`${indexerUrl}/api/v1/agents?owner_address=${wallet.toLowerCase()}&limit=100`, timeoutMs, retries);
   return (j.items ?? [])
     .filter((i: any) => String(i.owner_address).toLowerCase() === wallet.toLowerCase())
     .map((i: any) => ({ chainId: Number(i.chain_id), agentId: Number(i.token_id), name: i.name, feedbacks: Number(i.total_feedbacks ?? 0), testnet: Boolean(i.is_testnet) }));
@@ -200,7 +206,7 @@ export async function walletErc8004(wallet: string, chainId: number | null, opts
   const rpc = (typeof process !== "undefined" && process.env?.[`INAM_RPC_${chain}`]) || rpcs[chain];
   const errors: string[] = [];
   const [agents, balance] = await Promise.all([
-    erc8004AgentsByOwner(indexer, wallet, opts.timeoutMs).catch((e) => (errors.push(`indexer: ${e.message}`), null)),
+    erc8004AgentsByOwner(indexer, wallet, opts.timeoutMs, opts.retries).catch((e) => (errors.push(`indexer: ${e.message}`), null)),
     rpc ? erc8004Balance(rpc, chain, wallet, opts.timeoutMs).catch((e) => (errors.push(`rpc ${chainName(chain)}: ${e.message}`), null)) : null,
   ]);
   let feedback: WalletErc8004["feedback"] = null;
@@ -285,6 +291,7 @@ export async function directoryItem(origin: string, timeoutMs?: number): Promise
     const res = await timedFetch(`${origin}${DIRECTORY_PATH}`, { headers: { accept: "application/http-message-signatures-directory+json, application/json" }, redirect: "manual" }, timeoutMs);
     if (res.status !== 200) return { id: "webbotauth.directory", status: "info", label: `No Web Bot Auth key directory (HTTP ${res.status})`, detail: "Common for sellers: Web Bot Auth mostly identifies callers." };
     const v = verifyDirectoryResponse(host, res.headers, await res.text());
+    if (!v.keys) return { id: "webbotauth.directory", status: "info", label: "No Web Bot Auth key directory (HTTP 200, but not a JWKS of Ed25519 keys)" };
     return v.valid
       ? { id: "webbotauth.directory", status: "pass", label: `Web Bot Auth key directory: ${v.keys} key${v.keys === 1 ? "" : "s"}, signature valid`, detail: `keyid ${v.keyid}` }
       : { id: "webbotauth.directory", status: "warn", label: "Web Bot Auth key directory present but not validly signed", detail: v.reason };
@@ -301,12 +308,12 @@ export function registrableDomain(host: string): string {
   return p.slice(-n).join(".");
 }
 
-export async function domainItem(host: string, timeoutMs?: number): Promise<CheckItem> {
+export async function domainItem(host: string, timeoutMs?: number, retries?: number): Promise<CheckItem> {
   if (/^(localhost|[\d.]+|\[.*\])$/.test(host)) return { id: "domain.age", status: "info", label: `Domain age: n/a for ${host}` };
   if (SHARED_HOSTING.test(host)) return { id: "domain.age", status: "info", label: `${host} is a subdomain of a shared hosting platform`, detail: "Anyone can create one in minutes; the platform domain's age says nothing about the seller." };
   const domain = registrableDomain(host);
   try {
-    const j = await getJson(`https://rdap.org/domain/${domain}`, timeoutMs);
+    const j = await getJson(`https://rdap.org/domain/${domain}`, timeoutMs, retries);
     const reg = (j.events ?? []).find((e: any) => e.eventAction === "registration")?.eventDate;
     if (!reg) return { id: "domain.age", status: "info", label: `Domain age: RDAP has no registration date for ${domain}` };
     const days = Math.floor((Date.now() - Date.parse(reg)) / 86400000);

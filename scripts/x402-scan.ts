@@ -66,20 +66,21 @@ async function main() {
   const evm = wallets.filter(isEvmAddress);
 
   const linked = await inamLinkedWallets();
-  const erc = await pool(evm, 4, async (w) => {
-    const chains = [...payTo.get(w)!.chains].sort((a, b) => b[1] - a[1]).map(([c]) => c);
-    const chain = chains.find((c) => c === 8453) ?? chains[0] ?? 8453;
-    let r: WalletErc8004 = await walletErc8004(w, chain);
-    if (r.errors.length) r = await walletErc8004(w, chain); // one retry: public RPCs and the indexer rate-limit
-    return { wallet: w, chain, listings: payTo.get(w)!.listings, inam: linked.get(w) ?? null, ...r };
-  }, "payTo");
-
-  const dirs = await pool(hostList, 8, async (h) => ({ host: h, ...(await directoryItem(`https://${h}`, 8000)) }), "directory");
-  // One RDAP query per registrable domain; a shared-platform domain (workers.dev, ...) answers without a query.
+  // 8004scan allows 30 requests/min and 1,000/day per IP, so one wallet at a time with long 429 retries (~25 min for 650 wallets).
+  // The three phases hit different services, so they run side by side.
   const byDomain = new Map<string, string[]>();
   for (const h of hostList) byDomain.set(registrableDomain(h), [...(byDomain.get(registrableDomain(h)) ?? []), h]);
   const domains = RDAP ? [...byDomain.keys()] : [];
-  const domainRows = await pool(domains, 2, async (dom) => ({ domain: dom, hosts: byDomain.get(dom)!.length, ...(await domainItem(byDomain.get(dom)![0], 10000)) }), "rdap");
+  const [erc, dirs, domainRows] = await Promise.all([pool(evm, 1, async (w) => {
+    const chains = [...payTo.get(w)!.chains].sort((a, b) => b[1] - a[1]).map(([c]) => c);
+    const chain = chains.find((c) => c === 8453) ?? chains[0] ?? 8453;
+    let r: WalletErc8004 = await walletErc8004(w, chain, { retries: 4 });
+    if (r.errors.length) r = await walletErc8004(w, chain, { retries: 4 }); // public RPCs fail transiently too
+    return { wallet: w, chain, listings: payTo.get(w)!.listings, inam: linked.get(w) ?? null, ...r };
+  }, "payTo"),
+  pool(hostList, 8, async (h) => ({ host: h, ...(await directoryItem(`https://${h}`, 8000)) }), "directory"),
+  // One RDAP query per registrable domain; a shared-platform domain (workers.dev, ...) answers without a query.
+  pool(domains, 1, async (dom) => ({ domain: dom, hosts: byDomain.get(dom)!.length, ...(await domainItem(byDomain.get(dom)![0], 10000, 4)) }), "rdap")]);
   const sharedHosts = domainRows.filter((d) => /shared hosting/.test(d.label)).reduce((s, d) => s + d.hosts, 0);
   const owns = (r: (typeof erc)[number]) => Math.max(r.agents?.length ?? 0, r.onchain?.balance ?? 0) > 0;
   const checked = erc.filter((r) => r.agents !== null || r.onchain !== null);
@@ -120,6 +121,7 @@ async function main() {
       nonEvm: wallets.length - evm.length,
       erc8004Checked: checked.length,
       lookupErrors: erc.length - checked.length,
+      indexerErrors: erc.filter((r) => r.agents === null).length,
       noIdentity: noIdentity.length,
       noIdentitySharePct: pct(noIdentity.length, checked.length),
       noIdentityListingSharePct: pct(listingsOf(noIdentity), totalListings),
@@ -150,6 +152,7 @@ async function main() {
         }
       : null,
     erc8004Payees: withId.map((r) => ({ payTo: r.wallet, listings: r.listings, chain: r.chain, agents: r.agents?.length ?? null, onchainBalance: r.onchain?.balance ?? null, feedback: r.feedback })),
+    domainRows: domainRows.map((d) => ({ domain: d.domain, hosts: d.hosts, status: d.status, label: d.label, ...(d.detail ? { detail: d.detail } : {}) })),
     rows: erc.map((r) => ({ payTo: r.wallet, listings: r.listings, chain: r.chain, inam: r.inam, agents: r.agents?.map((a) => `${a.chainId}:${a.agentId}`) ?? null, onchain: r.onchain, feedback: r.feedback, errors: r.errors })),
   };
   mkdirSync(DIR, { recursive: true });
@@ -166,7 +169,7 @@ async function main() {
 | | |
 | --- | --- |
 | Distinct payTo scanned | ${p.scanned} (${p.evm} EVM, ${p.nonEvm} Solana/other) |
-| EVM payTo checked (lookups succeeded) | ${p.erc8004Checked} (${p.lookupErrors} lookup errors) |
+| EVM payTo checked | ${p.erc8004Checked} (${p.lookupErrors} with no answer at all; ${p.indexerErrors} without an 8004scan answer, on-chain only) |
 | **No identity at all** (no ERC-8004 agent, no INAM link) | **${p.noIdentity} (${p.noIdentitySharePct}%)**, covering ${p.noIdentityListingSharePct}% of EVM listings |
 | Own an ERC-8004 agent | ${p.withErc8004Identity} (${p.withErc8004IdentitySharePct}%) |
 | ...with no feedback | ${p.erc8004NoFeedback} |
