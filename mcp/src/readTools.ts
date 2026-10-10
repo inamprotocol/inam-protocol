@@ -110,7 +110,8 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       title: "Verify receipt",
       description:
         "Runs the registry's integrity checks on one receipt and returns a verdict ('pass' or 'fail') with per-check results: finalized, agent_b_signature, " +
-        "agent_a_signature, receipt_id (content-addressed id), transparency_log (leaf present, inclusion proof, logged content matches), spec_hash and " +
+        "agent_a_signature, receipt_id (content-addressed id), transparency_log (leaf present, inclusion proof, logged content matches), hash_format (specHash/outputHash are sha256: + 64 hex; " +
+        "fails on pre-v0.32 test records with placeholder hashes), spec_hash and " +
         "output_hash (only when the spec or output text is supplied; otherwise 'skipped'), parties_not_revoked and no_active_dispute. Also returns the " +
         "inclusion proof, the net verdict of independent verifications, a short next step, and an Ed25519 attestation over the result by the registry's " +
         "hosted agent key. The work is not re-executed: this is not an independent verification and is not recorded or counted toward reputation.",

@@ -39,7 +39,21 @@ paths:
           description: Registry is up
           content:
             application/json:
-              schema: { type: object, properties: { status: { const: ok }, version: { type: string, description: "Registry implementation version (worker/package.json); not the spec version." } } }
+              schema:
+                type: object
+                properties:
+                  status: { const: ok }
+                  version: { type: string, description: "Registry implementation version (worker/package.json); not the spec version. Kept for compatibility; same as versions.registry." }
+                  versions:
+                    type: object
+                    description: "Each component is versioned independently; differing numbers are expected, not drift (scripts/check-versions.mjs guards each against its source)."
+                    properties:
+                      registry: { type: string, description: "This registry implementation (worker/package.json)" }
+                      spec: { type: string, description: "Protocol specification implemented (SPEC.md title), e.g. 0.41" }
+                      mcp: { type: string, description: "inam-mcp server (mcp/package.json)" }
+                      sdkJs: { type: string, description: "inamprotocol npm SDK (sdk-js/package.json)" }
+                      sdkPython: { type: string, description: "inamprotocol PyPI SDK (sdk-python/pyproject.toml)" }
+                  gitSha: { type: [string, "null"], description: "Commit the deployed Worker was built from; null when not deployed via CI." }
         "404": { $ref: "#/components/responses/Error" }
 
   /agents:
@@ -636,7 +650,7 @@ paths:
                     items:
                       type: object
                       properties:
-                        name: { type: string, enum: [finalized, agent_b_signature, agent_a_signature, receipt_id, transparency_log, spec_hash, output_hash, parties_not_revoked, no_active_dispute] }
+                        name: { type: string, enum: [finalized, agent_b_signature, agent_a_signature, receipt_id, transparency_log, hash_format, spec_hash, output_hash, parties_not_revoked, no_active_dispute] }
                         result: { type: string, enum: [pass, fail, skipped] }
                         detail: { type: string }
                   log:
@@ -962,6 +976,24 @@ paths:
       responses:
         "200":
           description: Tree head
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  treeSize: { type: integer }
+                  rootHash: { type: string }
+                  timestamp: { type: string, format: date-time }
+
+  /transparency/head:
+    get:
+      operationId: getTransparencyHead
+      summary: Alias of /transparency/sth
+      tags: [transparency]
+      security: []
+      responses:
+        "200":
+          description: Tree head (identical to /transparency/sth)
           content:
             application/json:
               schema:

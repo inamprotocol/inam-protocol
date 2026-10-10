@@ -1,6 +1,8 @@
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 import pkg from "../package.json";
+import mcpPkg from "../../mcp/package.json";
+import sdkJsPkg from "../../sdk-js/package.json";
 import type { ZodType } from "zod";
 import { requireSignedRequest, optionalSignedRequest } from "./signedRequest.js";
 import { requireIdempotencyKey } from "./idempotency.js";
@@ -100,7 +102,18 @@ app.onError((err, c) => {
 
 app.notFound((c) => c.json({ error: { code: "ROUTE_NOT_FOUND", message: `No route for ${c.req.method} ${c.req.path}` } }, 404));
 
-app.get("/v1/health", (c) => c.json({ status: "ok", version: pkg.version }));
+// SPEC.md and pyproject.toml aren't JSON-importable; scripts/check-versions.mjs
+// fails CI if these two literals drift from them.
+const SPEC_VERSION = "0.41";
+const SDK_PYTHON_VERSION = "0.13.0";
+app.get("/v1/health", (c) =>
+  c.json({
+    status: "ok",
+    version: pkg.version,
+    versions: { registry: pkg.version, spec: SPEC_VERSION, mcp: mcpPkg.version, sdkJs: sdkJsPkg.version, sdkPython: SDK_PYTHON_VERSION },
+    gitSha: c.env.GIT_SHA ?? null,
+  }),
+);
 
 // Evidence breakdown of the whole registry (statsService.ts): demo vs.
 // maintainer-only vs. other receipts, countersigned/verified/disputed/paid.
@@ -403,6 +416,7 @@ app.post("/v1/verifications", requireSignedRequest, rateLimitWriteByAgent, requi
 app.get("/v1/verifications/:id", async (c) => c.json(await verificationService.getVerification(c.env, c.req.param("id")!)));
 
 app.get("/v1/transparency/sth", rateLimitReadByIp, async (c) => c.json(await transparencyService.getSTH(c.env)));
+app.get("/v1/transparency/head", rateLimitReadByIp, async (c) => c.json(await transparencyService.getSTH(c.env))); // alias: agents guess "head"
 
 app.get("/v1/transparency/entries", rateLimitReadByIp, async (c) => {
   const { limit, offset } = parsePageParams(c.req.query("limit"), c.req.query("offset"));

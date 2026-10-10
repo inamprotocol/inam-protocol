@@ -376,6 +376,16 @@ function renderEvidenceLevel(level) {
   return `<div style="margin:8px 0 14px"><span class="tag ${e[0]}">${e[1]}</span> <span class="faint">${e[2]}</span></div>`;
 }
 
+// Hash format has been enforced at creation since spec v0.32; older test
+// records (e.g. log leaf 0) carry placeholders like "sha256:spec". They stay
+// in the log unaltered and are labelled, never removed.
+const LEGACY_LABEL = "pre-v0.32 test record";
+const HASH_RE = /^sha256:[0-9a-f]{64}$/;
+function isLegacyTestRecord(r) {
+  return !!r && !(HASH_RE.test((r.task && r.task.specHash) || "") && HASH_RE.test((r.result && r.result.outputHash) || ""));
+}
+const legacyPill = (r) => (isLegacyTestRecord(r) ? ` <span class="pill">${LEGACY_LABEL}</span>` : "");
+
 function renderReceiptsTable(receipts, agentId) {
   if (receipts.length === 0) return stateBox("No receipts recorded for this agent yet.");
   return `<div class="table-wrap"><table class="data">
@@ -386,7 +396,7 @@ function renderReceiptsTable(receipts, agentId) {
         const counterparty = isA ? (r.agentB && r.agentB.id) : (r.agentA && r.agentA.id);
         const role = isA ? "as requester, worked by" : "as worker, requested by";
         return `<tr>
-          <td class="mono">${receiptLink(r.receiptId)}</td>
+          <td class="mono">${receiptLink(r.receiptId)}${legacyPill(r)}</td>
           <td>${agentLink(counterparty)} <span class="faint">(${role})</span></td>
           <td>${escapeHtml((r.task && r.task.capability) || "—")}</td>
           <td>${statusTag(r.status)}</td>
@@ -415,6 +425,7 @@ function activityLabels(receipt, agents) {
   const cap = (receipt.task && receipt.task.capability) || "";
   if (cap.startsWith("demo.")) labels.add("demo");
   if (cap.startsWith("test.")) labels.add("test");
+  if (isLegacyTestRecord(receipt)) labels.add(LEGACY_LABEL);
   for (const a of agents) {
     const m = (a && a.metadata) || {};
     if (m.test) labels.add("test");
@@ -457,7 +468,7 @@ async function renderActivity() {
     }));
     const draw = () => {
       const showAll = readShowTest();
-      const shown = showAll ? rows : rows.filter((r) => !r.labels.some((l) => l === "test" || l === "demo"));
+      const shown = showAll ? rows : rows.filter((r) => !r.labels.some((l) => l === "test" || l === "demo" || l === LEGACY_LABEL));
       const hidden = rows.length - shown.length;
       body.innerHTML = `<p class="faint">${entries.length} entries in the log${entries.length > ACTIVITY_ROWS ? `, showing the latest ${ACTIVITY_ROWS}` : ""}${hidden ? `; ${hidden} test/demo hidden` : ""}.
         <button id="activity-toggle" class="secondary" type="button" aria-pressed="${showAll}">Show test/demo</button></p>
@@ -623,7 +634,7 @@ async function renderReceiptDetail(id) {
   body.innerHTML = `
     <section class="block">
       <dl class="kv">
-        <div><dt>Status</dt><dd>${statusTag(receipt.status)}</dd></div>
+        <div><dt>Status</dt><dd>${statusTag(receipt.status)}${legacyPill(receipt)}</dd></div>
         <div><dt>Job</dt><dd>${jobLink(receipt.jobId)}</dd></div>
         <div><dt>Agent A (requester)</dt><dd>${agentLink(receipt.agentA && receipt.agentA.id, receipt.agentA && receipt.agentA.id)}</dd></div>
         <div><dt>Agent B (worker)</dt><dd>${agentLink(receipt.agentB && receipt.agentB.id, receipt.agentB && receipt.agentB.id)}</dd></div>

@@ -426,7 +426,7 @@ Base path `/v1`. A `(signed)` endpoint **MUST** reject a request missing a valid
 
 | Method & path | Description |
 |---|---|
-| `GET /health` | Liveness check. |
+| `GET /health` | Liveness check. `version` is the registry implementation; `versions` labels each independently versioned component (`registry`, `spec`, `mcp`, `sdkJs`, `sdkPython`), plus `gitSha` of the deployed build (or `null`). |
 | `POST /agents` *(signed)* | Register the calling INAM ID with a capability list and free-form metadata. |
 | `GET /agents/:id` | Fetch an agent's public profile. |
 | `GET /agents/:id/protocols` | Fetch an agent's linked external identities (`linked`) and their per-link assurance metadata (`linkedProof`, §2). |
@@ -456,6 +456,7 @@ Base path `/v1`. A `(signed)` endpoint **MUST** reject a request missing a valid
 | `GET /receipts/:id/verifications` | List verifications referencing a receipt. `RECEIPT_NOT_VISIBLE` (403) applies the same as `GET /receipts/:id` (§4.4). |
 | `POST /agents/:id/verifier-status` *(signed, caller = operator only)* | Grant or revoke `:id`'s verifier authorization (§12.3, §12.6). |
 | `GET /transparency/sth` | Current transparency log tree size + root hash (§13). Unsigned. |
+| `GET /transparency/head` | Alias of `GET /transparency/sth`. |
 | `GET /transparency/entries?limit=&offset=` | List raw log entries, oldest first. `limit` defaults to 50, clamped to 200; response includes `hasMore`. Each entry has `data` (the canonical entry bytes its `leafHash` covers) and `payload` (v0.34: the canonical payload its `dataHash` commits to, or `null` if withheld or erased, §13.3). |
 | `GET /transparency/proof/inclusion?leafIndex=&treeSize=` | Merkle audit path proving `leafIndex` is included in the tree at `treeSize` (defaults to current size). |
 | `GET /demo` *(optional, §14)* | The hosted demo counterparty's INAM ID and the steps to use it. `503 DEMO_DISABLED` where the registry runs no demo. |

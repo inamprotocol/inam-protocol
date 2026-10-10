@@ -3,6 +3,7 @@
 //   spec version      -> SPEC.md title line
 //   registry version  -> worker/package.json
 //   inam-mcp version  -> mcp/package.json
+//   sdk-python version -> sdk-python/pyproject.toml (worker /v1/health mirrors it and the spec version)
 //   plugin version    -> inam-protocol-plugin/.claude-plugin/plugin.json (integrations/* mirror it)
 // Pass --built to also check site/dist and docs-site/dist (CI builds both first).
 // No dependencies on purpose: runs before any npm install.
@@ -49,6 +50,11 @@ if (text("integrations/cursor-plugin/skills/inam-protocol/SKILL.md") !== skill)
   errors.push("integrations/cursor-plugin SKILL.md: differs from integrations/openai-plugin's; copy it over");
 if (text("integrations/gemini-cli-extension/GEMINI.md").trim() !== skill.split(/^---$/m)[2]?.trim())
   errors.push("integrations/gemini-cli-extension/GEMINI.md: differs from the openai-plugin SKILL.md body; copy it over");
+
+// /v1/health reports spec and sdk-python versions as literals (neither source is JSON-importable).
+const health = read("worker/src/index.ts");
+expect("worker/src/index.ts SPEC_VERSION", health.match(/const SPEC_VERSION = "([^"]+)"/)?.[1], spec?.slice(1));
+expect("worker/src/index.ts SDK_PYTHON_VERSION", health.match(/const SDK_PYTHON_VERSION = "([^"]+)"/)?.[1], read("sdk-python/pyproject.toml").match(/^version = "([^"]+)"/m)?.[1]);
 
 // Static discovery files are templated by site/scripts/build.mjs.
 expect("site/public server-card serverInfo.version", json("site/public/.well-known/mcp/server-card.json").serverInfo.version, "{{MCP_VERSION}}");
