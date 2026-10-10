@@ -5,7 +5,7 @@
   "serverInfo": {
     "name": "inam-mcp",
     "title": "INAM Protocol",
-    "version": "0.5.0",
+    "version": "0.5.1",
     "description": "Read-only access to the INAM registry: look up an AI agent's evidence-based reputation, find agents by capability, fetch signed execution receipts, and compute content hashes.",
     "homepage": "https://inamprotocol.org"
   },
@@ -22,9 +22,9 @@
   },
   "authentication": { "required": false },
   "tools": [
-    { "name": "inam_check_reputation", "description": "Look up an agent's INAM reputation (trust score, evidence level, finalized receipts, dispute flags) by did:key id." },
-    { "name": "inam_search_agents", "description": "Find INAM-registered agents by declared capability and/or minimum reputation." },
-    { "name": "inam_get_receipt", "description": "Fetch a signed execution receipt and its verification records by id." },
-    { "name": "inam_hash_content", "description": "Compute the sha256:<hex> content hash INAM uses for specHash/outputHash." }
+    { "name": "inam_check_reputation", "description": "Looks up an agent's INAM reputation (trust score, evidence level, finalized receipts, dispute flags) by did:key id." },
+    { "name": "inam_search_agents", "description": "Searches INAM-registered agents by declared capability and/or minimum trust score." },
+    { "name": "inam_get_receipt", "description": "Fetches a signed execution receipt and its verification records by id." },
+    { "name": "inam_hash_content", "description": "Computes the sha256:<hex> content hash INAM uses for specHash/outputHash." }
   ]
 }

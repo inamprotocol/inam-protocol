@@ -50,7 +50,7 @@ if (rawKey) {
 }
 
 const inam = new InamClient(INAM_URL, keypair);
-const server = new McpServer({ name: "inam-mcp", version: "0.5.0" });
+const server = new McpServer({ name: "inam-mcp", version: "0.5.1" });
 
 // --- read tools (always available; shared with the hosted endpoint) --------
 
@@ -58,7 +58,7 @@ for (const t of readTools(inam)) server.tool(t.name, t.description, t.shape, { .
 
 server.tool(
   "inam_whoami",
-  "Report this MCP server's own INAM identity (did:key) and whether it can perform signed writes (register / post job / submit receipt).",
+  "Returns this MCP server's own INAM identity (did:key), the registry URL it is connected to, and whether signed writes (register / post job / submit receipt) are enabled.",
   {},
   async () => ok({ did: keypair.did, registryUrl: INAM_URL, writeEnabled }),
 );
@@ -68,7 +68,7 @@ server.tool(
 if (writeEnabled) {
   server.tool(
     "inam_register_agent",
-    "Register this agent's identity in the INAM registry so other agents can discover and trust it. Idempotent — safe to call once at startup.",
+    "Registers this server's identity in the INAM registry with the given capabilities and optional name and description, making it discoverable in agent search. Idempotent.",
     {
       capabilities: z.array(z.string()).min(1).describe("declared capabilities, e.g. ['code-review']"),
       name: z.string().optional(),
@@ -88,10 +88,10 @@ if (writeEnabled) {
 
   server.tool(
     "inam_post_job",
-    "Post an open job to the INAM registry that other agents can discover and offer to work on.",
+    "Posts an open job to the INAM registry for a capability and spec hash. Other agents can discover the job and submit offers on it.",
     {
       capability: z.string().describe("capability the job needs"),
-      specHash: z.string().describe("sha256:<64 hex> of the job spec text; use inam_hash_content"),
+      specHash: z.string().describe("sha256:<64 hex> of the job spec text"),
     },
     async ({ capability, specHash }) => {
       try {
@@ -104,10 +104,10 @@ if (writeEnabled) {
 
   server.tool(
     "inam_submit_offer",
-    "Offer to work on an open job (as the worker). The job's poster must then accept the offer before a receipt can be submitted.",
+    "Submits an offer, as the worker, to work on an open job. A receipt for the job can be submitted only after the job's poster accepts the offer.",
     {
       jobId: z.string(),
-      message: z.string().optional().describe("optional note to the job poster"),
+      message: z.string().optional().describe("optional note shown to the job poster"),
     },
     async ({ jobId, message }) => {
       try {
@@ -120,7 +120,7 @@ if (writeEnabled) {
 
   server.tool(
     "inam_accept_offer",
-    "Accept another agent's offer on a job this agent posted. This commits the two parties and lets the worker submit a receipt.",
+    "Accepts another agent's offer on a job this identity posted. Acceptance binds the two parties to the job and enables the worker to submit a receipt.",
     {
       jobId: z.string(),
       agentId: z.string().describe("did:key of the offering agent to accept"),
@@ -136,14 +136,13 @@ if (writeEnabled) {
 
   server.tool(
     "inam_countersign_receipt",
-    "Countersign a draft receipt (as the requester) to finalize it. A receipt only counts toward reputation once both parties have signed. " +
-      "State what you expect to be approving BEFORE calling this — expectedJobId and expectedOutputHash must match the fetched draft, " +
-      "or the call is rejected. Do not derive these from the draft itself; use what you already know about the job you posted (from " +
-      "inam_post_job's result or your own conversation with the user) so a malicious or unexpected draft can't be blindly signed.",
+    "Countersigns a draft receipt as the requester, finalizing it. A receipt counts toward reputation only once both parties have signed. " +
+      "The draft is fetched and its jobId and result.outputHash are compared with expectedJobId and expectedOutputHash; on any mismatch " +
+      "nothing is signed and an error is returned. The check protects against signing a draft whose content differs from the job the requester posted.",
     {
       receiptId: z.string().describe("sha256:... id of the draft receipt to finalize"),
-      expectedJobId: z.string().describe("The jobId this receipt should belong to, from your own knowledge of the job"),
-      expectedOutputHash: z.string().describe("The result.outputHash you expect this receipt to carry, from your own knowledge of the job"),
+      expectedJobId: z.string().describe("the jobId the receipt is expected to belong to; compared with the draft before signing"),
+      expectedOutputHash: z.string().describe("the result.outputHash the receipt is expected to carry; compared with the draft before signing"),
     },
     async ({ receiptId, expectedJobId, expectedOutputHash }) => {
       try {
@@ -157,13 +156,13 @@ if (writeEnabled) {
 
   server.tool(
     "inam_submit_receipt",
-    "Emit a signed draft execution receipt for work this agent just completed, for the requester to countersign. This is the proof-of-work-done artifact.",
+    "Submits a draft execution receipt, signed by this identity as the worker, for a completed job. The receipt records the task, the output hash and optional settlement, and becomes final when the requester countersigns it.",
     {
       requesterId: z.string().describe("did:key of the requesting agent (agentA)"),
       jobId: z.string().describe("id of the job this receipt settles"),
       capability: z.string(),
-      specHash: z.string().describe("sha256:<64 hex> of the job spec text; use inam_hash_content"),
-      outputHash: z.string().describe("sha256:<64 hex> of the actual work output; use inam_hash_content"),
+      specHash: z.string().describe("sha256:<64 hex> of the job spec text"),
+      outputHash: z.string().describe("sha256:<64 hex> of the work output"),
       amount: z.string().optional().describe("settlement amount, e.g. '40.00'"),
       currency: z.string().optional().describe("settlement currency, e.g. 'USDC'"),
     },
@@ -187,10 +186,9 @@ if (writeEnabled) {
 
   server.tool(
     "inam_revoke_agent",
-    "Retire this agent's own INAM identity (one-way). Drops it from default search results and blocks any further signed writes from this key, " +
-      "while its past finalized receipts stay on record. Use this to clean up a test/demo identity after a trial run — the identity disappears " +
-      "from casual browsing but the work it actually did remains provable.",
-    { reason: z.string().describe("why this identity is being retired, e.g. 'demo run complete'") },
+    "Retires this server's own INAM identity (one-way). A revoked identity is excluded from default search results and can make no further " +
+      "signed writes; its past finalized receipts remain on record and verifiable, and its reputation carries the revoked flag.",
+    { reason: z.string().describe("reason recorded with the revocation, e.g. 'demo run complete'") },
     async ({ reason }) => {
       try {
         return ok(await inam.revoke(reason));
