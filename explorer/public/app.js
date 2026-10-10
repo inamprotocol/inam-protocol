@@ -711,9 +711,8 @@ function renderVerificationsTable(verifications) {
 
 // ==================== Stats ====================
 
-const STATS_CACHE_KEY = "inam_explorer_stats_v1";
+const STATS_CACHE_KEY = "inam_explorer_stats_v2";
 const STATS_TTL_MS = 3 * 60 * 1000; // recompute at most every 3 minutes
-const STATS_AGENT_CAP = 500; // defensive cap on how many agents we iterate for receipts
 
 function statTile(label, num, sub) {
   return `<div class="stat-tile">
@@ -731,71 +730,42 @@ function statTileUnavailable(label, note) {
   </div>`;
 }
 
-// Registry-wide totals aren't a single endpoint -- /agents/search and
-// /jobs/search return every match with no result cap today (confirmed
-// against worker/src/index.ts), so an unfiltered call's array length is
-// an accurate total. Receipts/verifications have no system-wide listing
-// at all, only per-agent / per-receipt, so getting a real count means
-// iterating agents and deduping by receiptId (a receipt names both
-// agentA and agentB, so it shows up in both parties' lists).
-async function computeRegistryStats() {
-  const agentsData = await apiGet("/agents/search");
-  const allAgents = agentsData.agents || [];
-  const agentCapped = allAgents.length > STATS_AGENT_CAP;
-  const agents = agentCapped ? allAgents.slice(0, STATS_AGENT_CAP) : allAgents;
+// Search endpoints paginate (hasMore), so walk every page for a true total.
+async function fetchAll(path, key) {
+  const out = [];
+  for (let offset = 0; ; offset += 100) {
+    const d = await apiGet(`${path}${path.includes("?") ? "&" : "?"}limit=100&offset=${offset}`);
+    out.push(...(d[key] || []));
+    if (!d.hasMore) return out;
+  }
+}
 
-  const jobsData = await apiGet("/jobs/search");
-  const jobs = jobsData.jobs || [];
+// Agent and receipt totals come from GET /v1/stats (statsPromise, shared with
+// the evidence panel) so the page shows one set of numbers. The agent list is
+// only used to split that total by label; nothing is filtered out.
+async function computeRegistryStats(statsPromise) {
+  const [s, agents, jobs] = await Promise.all([
+    statsPromise,
+    fetchAll("/agents/search?include_demo=true&include_revoked=true", "agents"),
+    fetchAll("/jobs/search", "jobs"),
+  ]);
+  const ops = new Set(s.operatorAgents || []);
+  let operator = 0, labelled = 0;
+  for (const a of agents) {
+    const m = a.metadata || {};
+    if (ops.has(a.id)) operator++;
+    else if (m.demo === true || m.test === true) labelled++;
+  }
   const jobsByStatus = {};
   for (const j of jobs) jobsByStatus[j.status] = (jobsByStatus[j.status] || 0) + 1;
-
-  // Batch the per-agent receipt fetches so a large registry someday
-  // doesn't fire hundreds of parallel requests at once.
-  const receiptsById = new Map();
-  const BATCH = 15;
-  for (let i = 0; i < agents.length; i += BATCH) {
-    const batch = agents.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map((a) =>
-        apiGet(`/agents/${encodeURIComponent(a.id)}/receipts`).catch(() => ({ receipts: [] }))
-      )
-    );
-    for (const r of results) {
-      for (const receipt of r.receipts || []) {
-        if (receipt.receiptId) receiptsById.set(receipt.receiptId, receipt);
-      }
-    }
-  }
-  const receipts = [...receiptsById.values()];
-  const receiptsByStatus = {};
-  for (const r of receipts) receiptsByStatus[r.status] = (receiptsByStatus[r.status] || 0) + 1;
-
-  // Independent verifications (SPEC.md §12) are per-receipt only. Cap how
-  // many receipts we probe so this stays cheap as the registry grows.
-  const VERIF_CAP = 500;
-  const verifTargets = receipts.slice(0, VERIF_CAP).map((r) => r.receiptId);
-  let verificationCount = 0;
-  for (let i = 0; i < verifTargets.length; i += BATCH) {
-    const batch = verifTargets.slice(i, i + BATCH);
-    const results = await Promise.all(
-      batch.map((id) =>
-        apiGet(`/receipts/${encodeURIComponent(id)}/verifications`).catch(() => ({ verifications: [] }))
-      )
-    );
-    for (const r of results) verificationCount += (r.verifications || []).length;
-  }
-
   return {
     computedAt: new Date().toISOString(),
-    totalAgents: allAgents.length,
-    agentCapped,
-    agentsScanned: agents.length,
+    totalAgents: s.agents.registered,
+    operatorAgents: operator,
+    labelledAgents: labelled,
+    otherAgents: s.agents.registered - operator - labelled,
     jobsByStatus,
     totalJobs: jobs.length,
-    totalReceipts: receipts.length,
-    receiptsByStatus,
-    receiptsCapped: receipts.length > VERIF_CAP,
-    verificationCount,
   };
 }
 
@@ -845,15 +815,17 @@ async function renderStats() {
     <p class="dim">A receipt count alone says little. This splits it by who the parties are and what backs each receipt, from <a href="${escapeHtml(API_BASE.replace(/\/$/, ""))}/stats" target="_blank" rel="noopener"><code>GET /v1/stats</code></a>. Numbers overlap; they are not meant to add up.</p>
     <div id="evidence-body"><p class="spinner-text">Loading…</p></div>
     <h2 class="h" style="margin-top:26px">Registry &amp; adoption stats</h2>
-    <p class="dim">A live snapshot of the public registry, computed client-side from the same API anyone can query, plus package/community signal from npm, PyPI, and GitHub's own public APIs. Not a real-time feed -- see the timestamp below.</p>
+    <p class="dim">The agent total is the same <code>/v1/stats</code> figure as above, split by label (nothing is hidden); jobs come from <code>/v1/jobs/search</code>. Plus package/community signal from npm, PyPI, and GitHub's own public APIs. Not a real-time feed -- see the timestamp below.</p>
     <div id="stats-asof"></div>
     <div id="stats-body"><p class="spinner-text">Loading stats…</p></div>
   `);
   wireLookupForm();
-  renderEvidence();
-  await loadAndRenderStats(false);
+  const statsPromise = apiGet("/stats");
+  statsPromise.catch(() => {}); // each consumer reports its own error
+  renderEvidence(statsPromise);
+  await loadAndRenderStats(false, statsPromise);
   document.getElementById("stats-asof").addEventListener("click", (e) => {
-    if (e.target && e.target.id === "stats-refresh") loadAndRenderStats(true);
+    if (e.target && e.target.id === "stats-refresh") loadAndRenderStats(true, apiGet("/stats"));
   });
 }
 
@@ -867,7 +839,7 @@ function renderStatsAsOf(iso, fromCache) {
   </div>`;
 }
 
-async function loadAndRenderStats(forceRefresh) {
+async function loadAndRenderStats(forceRefresh, statsPromise) {
   const body = document.getElementById("stats-body");
   const cached = !forceRefresh && readStatsCache();
 
@@ -887,7 +859,7 @@ async function loadAndRenderStats(forceRefresh) {
     registry = cached;
   } else {
     try {
-      registry = await computeRegistryStats();
+      registry = await computeRegistryStats(statsPromise);
       writeStatsCache(registry);
     } catch (err) {
       body.innerHTML = errorBox(err, "Couldn't compute registry stats.");
@@ -897,8 +869,6 @@ async function loadAndRenderStats(forceRefresh) {
   renderStatsAsOf(registry.computedAt, !!cached);
 
   const jobDone = (registry.jobsByStatus.completed || 0);
-  const receiptFinal = (registry.receiptsByStatus.finalized || 0);
-  const receiptDisputed = (registry.receiptsByStatus.disputed || 0);
 
   const external = await externalPromise;
   const gh = external.github;
@@ -907,10 +877,11 @@ async function loadAndRenderStats(forceRefresh) {
   body.innerHTML = `
     <h3 class="h">Registry activity</h3>
     <div class="stat-grid">
-      ${statTile("Registered agents", registry.totalAgents, registry.agentCapped ? `computed from the first ${registry.agentsScanned}` : "")}
+      ${statTile("Registered agents", registry.totalAgents, "all of them, labelled or not")}
+      ${statTile("Operator agents", registry.operatorAgents, "on the published operator list: maintainer, demo, reference")}
+      ${statTile("Labelled demo/test", registry.labelledAgents, "self-declared <code>metadata.demo</code> or <code>metadata.test</code>")}
+      ${statTile("Other agents", registry.otherAgents, "unlabelled, not on the operator list; not proven independent")}
       ${statTile("Jobs posted", registry.totalJobs, `${jobDone} completed`)}
-      ${statTile("Finalized receipts", receiptFinal, `${registry.totalReceipts} total, ${receiptDisputed} disputed`)}
-      ${statTile("Independent verifications", registry.verificationCount, registry.receiptsCapped ? "capped scan" : "SPEC.md §12")}
     </div>
 
     <h3 class="h" style="margin-top:26px">Jobs by status</h3>
@@ -932,11 +903,11 @@ async function loadAndRenderStats(forceRefresh) {
 }
 
 // Evidence breakdown (GET /v1/stats). Each row: number, what it counts, what it doesn't.
-async function renderEvidence() {
+async function renderEvidence(statsPromise) {
   const el = document.getElementById("evidence-body");
   let s;
   try {
-    s = await apiGet("/stats");
+    s = await statsPromise;
   } catch (err) {
     el.innerHTML = err.status === 404
       ? stateBox("This registry does not serve GET /v1/stats yet.", false)
