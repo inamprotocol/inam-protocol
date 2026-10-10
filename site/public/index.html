@@ -217,6 +217,7 @@ dl.terms dd strong { color: var(--ink); font-weight: 600; }
 /* -- install -- */
 .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
 @media (max-width: 620px) { .install-grid { grid-template-columns: 1fr; } }
+.install-grid > * { min-width: 0; }
 pre {
   background: var(--code-bg);
   border: 1px solid var(--line);
@@ -253,7 +254,7 @@ table.data thead th {
 }
 table.data tbody tr { border-bottom: 1px solid var(--line); }
 table.data tbody tr:last-child { border-bottom: none; }
-table.data td.mono { font-family: "IBM Plex Mono", monospace; font-size: 13px; }
+table.data td.mono { font-family: "IBM Plex Mono", monospace; font-size: 13px; overflow-wrap: anywhere; }
 table.data td.dim, table.data span.dim { color: var(--ink-dim); }
 .status-tag {
   font-family: "IBM Plex Mono", monospace;
