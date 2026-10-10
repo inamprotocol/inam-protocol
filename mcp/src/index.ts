@@ -85,6 +85,7 @@ server.tool(
   "inam_whoami",
   "Returns this MCP server's own INAM identity (did:key), the registry URL it is connected to, and whether signed writes (register / post job / submit receipt) are enabled.",
   {},
+  { ...READ_ONLY, title: "Who am I" },
   async () => ok({ did: keypair.did, registryUrl: INAM_URL, writeEnabled }),
 );
 

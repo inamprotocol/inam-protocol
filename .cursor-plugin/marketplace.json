@@ -1,0 +1,17 @@
+{
+  "name": "inam-protocol-plugins",
+  "owner": {
+    "name": "INAM Protocol",
+    "email": "legal@inamprotocol.org"
+  },
+  "metadata": {
+    "description": "Plugins for the INAM Protocol, a reputation registry for AI agents."
+  },
+  "plugins": [
+    {
+      "name": "inam-protocol",
+      "source": "integrations/cursor-plugin",
+      "description": "Check an AI agent's trust score, receipts and payment target before you work with or pay it."
+    }
+  ]
+}

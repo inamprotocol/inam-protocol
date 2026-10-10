@@ -2563,7 +2563,10 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     const res = await mcp("tools/list");
     const names = (res.json.result.tools as { name: string }[]).map((t) => t.name).sort();
     expect(names).toEqual(["inam_check", "inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents", "inam_verify_receipt"]);
-    for (const t of res.json.result.tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
+    // Explicit booleans for all three hints (OpenAI plugin review requires them). Only inam_check reaches
+    // outside the registry (it fetches the x402 URL, ERC-8004 and WHOIS data), so only it is open-world.
+    for (const t of res.json.result.tools)
+      expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false, openWorldHint: t.name === "inam_check" });
   });
 
   it("returns the same reputation as the REST route", async () => {
@@ -2925,6 +2928,26 @@ describe("paid x402 report (x402Report.ts)", () => {
     } finally {
       globalThis.fetch = realFetch;
     }
+  });
+});
+
+describe("OpenAI apps domain challenge", () => {
+  const fetchChallenge = async (e: typeof env) => {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(new Request("https://api.inamprotocol.org/.well-known/openai-apps-challenge"), e, ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  };
+
+  it("is 404 while OPENAI_APPS_CHALLENGE is unset", async () => {
+    expect((await fetchChallenge({ ...env, OPENAI_APPS_CHALLENGE: undefined } as typeof env)).status).toBe(404);
+  });
+
+  it("serves exactly the token as plain text", async () => {
+    const res = await fetchChallenge({ ...env, OPENAI_APPS_CHALLENGE: "tok_abc123\n" } as typeof env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toMatch(/^text\/plain/);
+    expect(await res.text()).toBe("tok_abc123");
   });
 });
 

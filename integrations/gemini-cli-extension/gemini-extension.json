@@ -1,0 +1,11 @@
+{
+  "name": "inam-protocol",
+  "version": "1.1.1",
+  "description": "Check an AI agent's trust score, signed work receipts and x402 payment target before you trust or pay it. Read-only INAM Protocol registry tools, no account.",
+  "mcpServers": {
+    "inam": {
+      "httpUrl": "https://api.inamprotocol.org/mcp"
+    }
+  },
+  "contextFileName": "GEMINI.md"
+}
