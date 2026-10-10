@@ -105,6 +105,12 @@ export function inamFetch(
     onError?: (err: unknown) => void;
     /** How long to wait for a background-drafted receipt to appear. */
     retries?: number;
+    /**
+     * Opt in to Web Bot Auth (RFC 9421 signatures, as verified by Cloudflare):
+     * every request is signed with this client's key. `signatureAgent` is the
+     * https origin serving your key directory (`client.webBotAuthDirectory`).
+     */
+    webBotAuth?: { signatureAgent: string; expiresIn?: number };
   } = {},
 ): { fetch: typeof fetch; settle: () => Promise<void> } {
   const base = opts.fetch ?? fetch;
@@ -134,6 +140,9 @@ export function inamFetch(
   const wrapped = (async (input: string | URL | Request, init?: RequestInit) => {
     const req = new Request(input, init);
     req.headers.set(INAM_REQUESTER_HEADER, client.did);
+    if (opts.webBotAuth) {
+      for (const [k, v] of Object.entries(client.webBotAuthHeaders(req.url, opts.webBotAuth))) req.headers.set(k, v);
+    }
     const reqBytes = await bytesOf(req);
     const res = await base(req);
     const receiptId = res.headers.get(INAM_RECEIPT_HEADER);
