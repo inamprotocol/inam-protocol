@@ -12,6 +12,14 @@
 
 <img src="site/public/x402-demo.svg" width="880" alt="npm run demo:x402: the honest seller is paid; an endpoint borrowing the seller's INAM ID with someone else's wallet is blocked; a newcomer with no work history is blocked">
 
+Check any x402 endpoint, wallet or agent before paying it, no key and no INAM data needed:
+
+```
+npx inamprotocol check https://x402.coinstats.app/markets
+```
+
+It reads the 402 (payTo, network, price), looks the payTo up in ERC-8004 (identity and whether any feedback is tied to delivered work), the INAM registry, the host's Web Bot Auth key directory and the domain's RDAP age, and prints what it found. Exit code 1 when a key check fails, so it can gate a payment or a CI step. Details: [`sdk-js/README.md`](./sdk-js/README.md#inam-check-before-you-pay).
+
 Try it (one command, local, no real money, no signup):
 
 ```

@@ -214,7 +214,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
-### Unreleased
+### 0.21.0 — 2026-10-10
+- `npx inamprotocol check <url | 0x wallet | did:key>`: a pre-payment check that works with no INAM data. For an x402 URL it reads the 402 (v2 `PAYMENT-REQUIRED` header or v1 body: payTo, network, asset, amount, resource, description), then for each EVM payTo checks ERC-8004 (owner lookup via the 8004scan index, `balanceOf` on the chain's Identity Registry and `getSummary` on the Reputation Registry through keyless public RPCs, counting feedback tagged `inam-receipt` as task-tied), the INAM wallet link and receipts, the `inam` extension binding (`decideX402`), a Web Bot Auth key directory on the host, and the domain's RDAP registration date. Wallets and DIDs get the identity/reputation subset. Human report by default, `--json`, exit 1 when a key check fails (`--strict`: also on caution). Bins `inamprotocol` and `inam` (the `inam` npm name belongs to another package, so `npx inam` only works with `inamprotocol` installed). The same engine is exported: `checkTarget`, `checkUrl`, `checkWallet`, `checkDid`, `formatReport`, `walletErc8004`, `inamLinkedWallets`, `parsePaymentRequired`, `paymentOptions`.
+- `verifyDirectoryResponse(authority, headers, body)` checks a fetched Web Bot Auth key directory: Ed25519 JWKS, signature tagged `http-message-signatures-directory` over `"@authority";req` by a listed key (by JWK thumbprint), not expired. Verified against Cloudflare's research directory.
 - `new InamClient(url)` without a keypair now works for reads (GETs go unsigned; the registry already accepts that). Signing calls throw `This InamClient has no keypair, so it can only read...` instead of `Cannot read properties of undefined (reading 'privateKey')`.
 
 ### 0.20.0 — 2026-10-10
