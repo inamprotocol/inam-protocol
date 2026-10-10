@@ -400,7 +400,8 @@ function renderReceiptsTable(receipts, agentId) {
 
 // ==================== Activity ====================
 // Every finalized receipt, newest first, from the public transparency log.
-// Test, demo and reference traffic is labelled, never hidden: the log is the record.
+// Test, demo and reference traffic is labelled; test/demo rows are hidden from
+// this view by default (per-viewer toggle), never deleted: the log is the record.
 
 const ACTIVITY_ROWS = 50;
 const agentCache = new Map();
@@ -423,10 +424,20 @@ function activityLabels(receipt, agents) {
   return [...labels];
 }
 
+const SHOW_TEST_KEY = "inam_explorer_show_test";
+let showTestFallback = false; // used when localStorage is unavailable
+function readShowTest() {
+  try {
+    const v = localStorage.getItem(SHOW_TEST_KEY);
+    if (v !== null) return v === "1";
+  } catch (_) { /* ignore */ }
+  return showTestFallback;
+}
+
 async function renderActivity() {
   setApp(`
     <h2 class="h">Activity</h2>
-    <p class="dim">Every receipt both parties signed, newest first, straight from the <a href="https://docs.inamprotocol.org/spec/#13-transparency-log-v030">transparency log</a>. Tests and demos stay in the log and are labelled here; nothing is removed.</p>
+    <p class="dim">Every receipt both parties signed, newest first, straight from the <a href="https://docs.inamprotocol.org/spec/#13-transparency-log-v030">transparency log</a>. Tests and demos stay in the log and are labelled; they are hidden here by default, but nothing is removed.</p>
     <div id="activity-body"><p class="spinner-text">Loading the log…</p></div>
   `);
   const body = document.getElementById("activity-body");
@@ -444,19 +455,32 @@ async function renderActivity() {
       const agents = receipt ? await Promise.all([getAgentCached(receipt.agentA.id), getAgentCached(receipt.agentB.id)]) : [];
       return { e, receipt, labels: receipt ? activityLabels(receipt, agents) : ["private"] };
     }));
-    body.innerHTML = `<p class="faint">${entries.length} entries in the log${entries.length > ACTIVITY_ROWS ? `, showing the latest ${ACTIVITY_ROWS}` : ""}.</p>
-    <div class="table-wrap"><table class="data">
-      <thead><tr><th>#</th><th>Receipt</th><th>Requester</th><th>Worker</th><th>Capability</th><th>Label</th><th>Logged</th></tr></thead>
-      <tbody>${rows.map(({ e, receipt, labels }) => `<tr>
-        <td class="mono">${e.leafIndex}</td>
-        <td class="mono">${receiptLink(e.refId)}</td>
-        <td>${receipt ? agentLink(receipt.agentA.id) : "—"}</td>
-        <td>${receipt ? agentLink(receipt.agentB.id) : "—"}</td>
-        <td>${escapeHtml((receipt && receipt.task && receipt.task.capability) || "—")}</td>
-        <td>${labels.length ? pillRow(labels) : '<span class="faint">live</span>'}</td>
-        <td>${fmtDate(e.createdAt)}</td>
-      </tr>`).join("")}</tbody>
-    </table></div>`;
+    const draw = () => {
+      const showAll = readShowTest();
+      const shown = showAll ? rows : rows.filter((r) => !r.labels.some((l) => l === "test" || l === "demo"));
+      const hidden = rows.length - shown.length;
+      body.innerHTML = `<p class="faint">${entries.length} entries in the log${entries.length > ACTIVITY_ROWS ? `, showing the latest ${ACTIVITY_ROWS}` : ""}${hidden ? `; ${hidden} test/demo hidden` : ""}.
+        <button id="activity-toggle" class="secondary" type="button" aria-pressed="${showAll}">Show test/demo</button></p>
+      ${shown.length ? `<div class="table-wrap"><table class="data">
+        <thead><tr><th>#</th><th>Receipt</th><th>Requester</th><th>Worker</th><th>Capability</th><th>Label</th><th>Logged</th></tr></thead>
+        <tbody>${shown.map(({ e, receipt, labels }) => `<tr>
+          <td class="mono">${e.leafIndex}</td>
+          <td class="mono">${receiptLink(e.refId)}</td>
+          <td>${receipt ? agentLink(receipt.agentA.id) : "—"}</td>
+          <td>${receipt ? agentLink(receipt.agentB.id) : "—"}</td>
+          <td>${escapeHtml((receipt && receipt.task && receipt.task.capability) || "—")}</td>
+          <td>${labels.length ? pillRow(labels) : '<span class="faint">live</span>'}</td>
+          <td>${fmtDate(e.createdAt)}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>` : '<p class="faint">No non-test receipts among the latest entries.</p>'}`;
+      document.getElementById("activity-toggle").addEventListener("click", () => {
+        try { localStorage.setItem(SHOW_TEST_KEY, showAll ? "0" : "1"); } catch (_) { /* ignore */ }
+        showTestFallback = !showAll;
+        draw();
+        document.getElementById("activity-toggle").focus(); // keep keyboard focus across the re-render
+      });
+    };
+    draw();
   } catch (err) {
     body.innerHTML = errorBox(err, "the transparency log");
   }
