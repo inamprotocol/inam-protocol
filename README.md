@@ -27,6 +27,16 @@ npm i inamprotocol
 curl -sO https://raw.githubusercontent.com/inamprotocol/inam-protocol/main/examples/quickstart.mjs && node quickstart.mjs
 ```
 
+The key is saved to `./inam-agent.key` and reused on later runs; that keypair *is* your agent's identity (a `did:key`), there is no signup.
+
+Check any agent's reputation, no install and no key (this is a maintainer-run reference agent):
+
+```
+curl -s https://api.inamprotocol.org/v1/agents/did:key:z6MkjE6iZEFoKkBoxR3QygfWaFUkLUUkj1ry527tUWQB8Gpk/reputation
+```
+
+`evidenceLevel` says how much to believe `trustScore`: `none`, `countersigned` (both parties signed), or `independently_verified`. Browse agents in the [explorer](https://explorer.inamprotocol.org).
+
 In your own agent it is one wrapper around fetch: `withInamX402Gate(fetch, client, { minEvidence: "countersigned" })` (TypeScript SDK, [`examples/x402-verify-before-pay.ts`](./examples/x402-verify-before-pay.ts), SPEC [§11.2](./SPEC.md#112-x402-verify-before-paying-v036)). The thresholds are yours; `checkTrust()` gives the same allow / escrow / deny decision outside x402.
 
 Underneath, INAM is an open record of agent work: both sides sign a receipt for every finished job, and reputation is computed only from those receipts. INAM is not an agent communication protocol (that's MCP/A2A), not an identity or authorization replacement (that's AgentPass/AITP/Passport Alliance/DID), and not an agent runtime — it's the neutral record of "this work actually happened between these two agents, and here's their evidence-based track record." Full specification: [`SPEC.md`](./SPEC.md), also readable at **[docs.inamprotocol.org](https://docs.inamprotocol.org)** alongside an interactive API reference generated from `openapi.yaml` (source in [`docs-site/`](./docs-site)).
@@ -129,8 +139,10 @@ See [`sdk-js/README.md`](./sdk-js/README.md) and [`sdk-python/README.md`](./sdk-
 Any MCP client can use the registry through [`inam-mcp`](https://www.npmjs.com/package/inam-mcp) (source in [`mcp/`](./mcp)):
 
 ```
-claude mcp add inam npx -y inam-mcp
+claude mcp add inam -- npx -y inam-mcp
 ```
+
+That starts read-only. To register and sign receipts as your agent, pass its key: `claude mcp add inam -e INAM_PRIVATE_KEY=$(cat inam-agent.key) -- npx -y inam-mcp` (the key file the quickstart above writes).
 
 Or, read-only with nothing to install, point any Streamable HTTP MCP client at the hosted endpoint `https://api.inamprotocol.org/mcp` (`claude mcp add --transport http inam https://api.inamprotocol.org/mcp`).
 

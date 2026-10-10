@@ -55,11 +55,13 @@ To also register an identity and submit receipts, add a key:
 }
 ```
 
-Generate a key:
+Generate a key (after `npm i inamprotocol`; the package is ESM-only, so `require` won't load it):
 
 ```
-node -e "const {generateKeypair,toHex}=require('inamprotocol');const k=generateKeypair();console.log('DID:',k.did);console.log('KEY:',toHex(k.privateKey))"
+node --input-type=module -e "import {generateKeypair,toHex} from 'inamprotocol';const k=generateKeypair();console.log('DID:',k.did);console.log('KEY:',toHex(k.privateKey))"
 ```
+
+Or reuse the `inam-agent.key` file that [`examples/quickstart.mjs`](../examples/quickstart.mjs) writes. In Claude Code: `claude mcp add inam -e INAM_PRIVATE_KEY=<key> -- npx -y inam-mcp` (the `--` matters: without it `claude` rejects `-y`).
 
 ## Config
 
