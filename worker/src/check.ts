@@ -40,7 +40,10 @@ export function checkHandler(app: Hono<AppEnv>) {
       if (url.startsWith(`${self.origin}/v1/agents`))
         return app.request(url.slice(self.origin.length), { ...init, headers: { ...headers, "cf-connecting-ip": ip } }, c.env, c.executionCtx);
       const signed = signer ? webBotAuthHeaders(url, signer, { signatureAgent: `https://${self.host}` }) : {};
-      return fetch(url, { ...init, headers: { ...headers, ...signed } });
+      const res = await fetch(url, { ...init, headers: { ...headers, ...signed } });
+      // A 429 makes the engine sleep for Retry-After (CLI behaviour, minutes on shared egress IPs).
+      // A hosted request can't wait that long, so surface it as a plain failure: that line becomes unknown.
+      return res.status === 429 ? new Response(null, { status: 503, statusText: "rate limited upstream" }) : res;
     }) as typeof fetch;
 
     let report;

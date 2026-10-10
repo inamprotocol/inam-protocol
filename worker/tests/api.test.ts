@@ -3008,6 +3008,21 @@ describe("hosted pre-payment check (GET /v1/check)", () => {
     expect(seller.headers.Signature).toBeTruthy();
   });
 
+  it("does not wait out an upstream 429 (RDAP on shared egress): the line is reported, the request returns", async () => {
+    vi.stubGlobal("fetch", async (input: string) => {
+      if (String(input).startsWith("https://rdap.org/")) return new Response(null, { status: 429, headers: { "retry-after": "3600" } });
+      if (String(input).startsWith("https://seller.example/api")) return new Response("{}", { status: 402, headers: { "payment-required": btoa(JSON.stringify(required)) } });
+      if (String(input).startsWith("https://api.8004scan.io/")) return Response.json({ items: [] });
+      if (String(input) === "https://mainnet.base.org") return Response.json({ jsonrpc: "2.0", id: 1, result: "0x" + "0".repeat(64) });
+      return new Response("not found", { status: 404 });
+    });
+    const started = Date.now();
+    const res = await check(`target=${encodeURIComponent(`https://seller.example/api?n=${crypto.randomUUID()}`)}`);
+    expect(res.status).toBe(200);
+    expect(Date.now() - started).toBeLessThan(5000);
+    expect(res.json.checks.some((c: { id: string }) => c.id === "domain.age")).toBe(true);
+  });
+
   it("is reachable as the A2A check skill from a URL or wallet in text, or a target data part", () => {
     expect(a2aRoute({ parts: [{ text: "check https://seller.example/api before I pay" }] })).toEqual({ skill: "check", arg: { target: "https://seller.example/api" } });
     expect(a2aRoute({ parts: [{ text: `is ${PAYTO} safe?` }] })).toEqual({ skill: "check", arg: { target: PAYTO } });
