@@ -131,3 +131,13 @@ describe("host-binding signing string (v1/v2)", () => {
     expect(real.status).toBe(201);
   });
 });
+
+describe("InamClient without a keypair", () => {
+  it("reads unsigned, and refuses to sign with a clear error", async () => {
+    const kp = generateKeypair();
+    await new InamClient(baseUrl, kp).registerAgent(["x"]);
+    const reader = new InamClient(baseUrl);
+    expect((await reader.getReputation(kp.did)).trustScore).toBe(0);
+    expect(() => reader.registerAgent(["x"])).toThrow(/no keypair, so it can only read/);
+  });
+});

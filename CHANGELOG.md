@@ -214,6 +214,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### Unreleased
+- `new InamClient(url)` without a keypair now works for reads (GETs go unsigned; the registry already accepts that). Signing calls throw `This InamClient has no keypair, so it can only read...` instead of `Cannot read properties of undefined (reading 'privateKey')`.
+
 ### 0.20.0 — 2026-10-10
 - Optional Web Bot Auth signatures (RFC 9421, the profile Cloudflare verifies for signed agents, draft-meunier-web-bot-auth-architecture): `inamFetch(client, { webBotAuth: { signatureAgent: "https://..." } })` signs every request with the agent's Ed25519 key, sending `Signature-Agent`, `Signature-Input` (`tag="web-bot-auth"`, `keyid` = JWK thumbprint, `created`/`expires`, covering `@authority` and `signature-agent`) and `Signature`. Off by default. `client.webBotAuthDirectory(host)` returns the JWKS body and signed headers to serve at `/.well-known/http-message-signatures-directory`. Also `webBotAuthHeaders`, `directoryResponseHeaders`, `httpMessageSignaturesDirectory`, `jwkThumbprint`. Tested against the draft's Ed25519 vector. No new dependency.
 
@@ -527,6 +530,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### Unreleased
+- `InamClient(url)` without a keypair now works for reads (GETs go unsigned). Signing calls raise a `ValueError` saying the client has no keypair, instead of a `TypeError` at construction.
 
 ### 0.13.0 — 2026-10-09
 - x402 verify-before-pay (SPEC.md §11.2): `counterparty_context()`, `decide_x402()`, `x402_policy_input()`. Same policy input, JCS bytes, `policy_input_hash`, decision and reason as `sdk-js`, checked against all 8 vectors in `tests/vectors/x402-counterparty-context.json` (new `tests/test_x402_context.py`).

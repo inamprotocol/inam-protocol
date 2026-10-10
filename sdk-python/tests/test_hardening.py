@@ -55,3 +55,21 @@ def test_accept_work_refuses_to_sign_on_expected_mismatch():
         client.accept_work(receipt, expected={"jobId": "job_other"})
     with pytest.raises(ValueError, match="expected outputHash"):
         client.accept_work(receipt, expected={"outputHash": "sha256:9d6f965ac832e40a5df6c06afe983e3b449c07b843ff51ce76204de05c690d11"})
+
+
+def test_client_without_keypair_reads_unsigned_and_refuses_to_sign(monkeypatch):
+    import io
+    import urllib.request
+
+    sent = {}
+
+    def fake_urlopen(req):
+        sent.update({k.lower(): v for k, v in req.header_items()})
+        return io.BytesIO(b'{"trustScore": 0}')
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_urlopen)
+    reader = InamClient("https://registry.example")
+    assert reader.get_reputation("did:key:z6Mkexample")["trustScore"] == 0
+    assert "inam-signature" not in sent
+    with pytest.raises(ValueError, match="no keypair, so it can only read"):
+        reader.register_agent(["x"])

@@ -27,12 +27,22 @@ export class InamClient {
 
   constructor(
     private readonly baseUrl: string,
-    private readonly keypair: Keypair,
+    private readonly signer?: Keypair,
   ) {
     // Signed for automatically (SPEC.md v0.28, host-binding) -- derived from
     // the same baseUrl the request actually goes to, so this can't drift
     // from what the server sees as the request's real Host header.
     this.host = new URL(baseUrl).host;
+  }
+
+  // Reads are public (GETs are optionally signed), so a client with no keypair
+  // can still look up reputations, receipts and jobs. Anything that signs
+  // needs one.
+  private get keypair(): Keypair {
+    if (!this.signer) {
+      throw new Error("This InamClient has no keypair, so it can only read. To sign, pass one: new InamClient(url, generateKeypair())");
+    }
+    return this.signer;
   }
 
   get did(): string {
@@ -56,20 +66,20 @@ export class InamClient {
     const rawBody = body !== undefined ? JSON.stringify(body) : "";
     const timestamp = Date.now().toString();
     const bodyHash = sha256Hex(rawBody);
-    const signingString = buildSigningStringV2(method, path, this.host, timestamp, bodyHash);
-    const signature = toBase64(sign(new TextEncoder().encode(signingString), this.keypair.privateKey));
-
     const headers: Record<string, string> = {
       "content-type": "application/json",
-      "inam-agent": this.keypair.did,
-      "inam-timestamp": timestamp,
-      "inam-signature": signature,
-      [SIG_VERSION_HEADER]: CURRENT_SIG_VERSION,
       // Same as the Python SDK: Cloudflare's bot protection challenges
       // anonymous-looking clients from datacenter IPs (e.g. CI runners), so
       // identify honestly. Browsers ignore this header, which is fine.
       "user-agent": "inamprotocol-js-sdk",
     };
+    if (this.signer || method !== "GET") {
+      const signingString = buildSigningStringV2(method, path, this.host, timestamp, bodyHash);
+      headers["inam-agent"] = this.keypair.did;
+      headers["inam-timestamp"] = timestamp;
+      headers["inam-signature"] = toBase64(sign(new TextEncoder().encode(signingString), this.keypair.privateKey));
+      headers[SIG_VERSION_HEADER] = CURRENT_SIG_VERSION;
+    }
     if (opts?.idempotencyKey) headers["idempotency-key"] = opts.idempotencyKey;
 
     const res = await fetch(`${this.baseUrl}${path}`, {
