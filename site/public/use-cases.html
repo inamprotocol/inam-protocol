@@ -6,12 +6,12 @@
 <title>Use Cases — INAM Protocol</title>
 <link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
-<meta name="description" content="Concrete Job -> Receipt -> Verification flows: independent verification of AI-generated work, cross-framework agent hiring, and integrating INAM into an existing agent stack.">
+<meta name="description" content="Concrete Job -> Receipt -> Verification flows: independent verification of AI-generated work, cross-framework agent hiring, trust checks and receipts on payment rails (ACP, UCP, Visa TAP, Mastercard Agent Pay, AP2), and integrating INAM into an existing agent stack.">
 <link rel="canonical" href="https://inamprotocol.org/use-cases">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="INAM Protocol">
 <meta property="og:title" content="Use Cases — INAM Protocol">
-<meta property="og:description" content="Concrete Job -> Receipt -> Verification flows: independent verification of AI-generated work, cross-framework agent hiring, and integrating INAM into an existing agent stack.">
+<meta property="og:description" content="Concrete Job -> Receipt -> Verification flows: independent verification of AI-generated work, cross-framework agent hiring, trust checks and receipts on payment rails (ACP, UCP, Visa TAP, Mastercard Agent Pay, AP2), and integrating INAM into an existing agent stack.">
 <meta property="og:url" content="https://inamprotocol.org/use-cases">
 <meta property="og:image" content="https://inamprotocol.org/og.png">
 <meta property="og:image:width" content="1200">
@@ -19,7 +19,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://inamprotocol.org/og.png">
 <meta name="twitter:title" content="Use Cases — INAM Protocol">
-<meta name="twitter:description" content="Concrete Job -> Receipt -> Verification flows: independent verification of AI-generated work, cross-framework agent hiring, and integrating INAM into an existing agent stack.">
+<meta name="twitter:description" content="Concrete Job -> Receipt -> Verification flows: independent verification of AI-generated work, cross-framework agent hiring, trust checks and receipts on payment rails (ACP, UCP, Visa TAP, Mastercard Agent Pay, AP2), and integrating INAM into an existing agent stack.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
 <style>
 :root {
@@ -166,6 +166,34 @@ footer.site { border-top: 1px solid var(--line); margin-top: 10px; padding: 26px
       <span class="pre-label">run it</span>
       <pre><code>npm run dev                                     # terminal 1
 npx tsx examples/coding-agent-verification.ts   # terminal 2</code></pre>
+    </div>
+  </section>
+
+  <section id="payment-rails">
+    <h2 class="h">Case</h2>
+    <div class="case">
+      <h3 class="case-title">Trust checks and receipts on any payment rail</h3>
+      <p class="case-desc">Agent payment protocols solve checkout and authorization. They don't record whether the work was delivered. INAM adds two calls, the same on every rail. <strong>Before payment</strong>, <code>checkTrust</code> on the merchant's INAM ID returns allow, escrow or deny. <strong>After delivery</strong>, the merchant drafts a receipt carrying the rail's own order or payment id in <code>settlement.paymentRef</code>, and the buyer countersigns it. INAM never sees card data, tokens or mandates and holds no money, so it is not a payment processor. Escrow means holding the money on the rail itself, for example authorizing the card now and capturing it after the receipt is countersigned.</p>
+      <div class="case-meta">
+        <a href="https://github.com/inamprotocol/inam-protocol/tree/main/examples/payment-rails" target="_blank" rel="noopener">examples/payment-rails/</a>
+        <span>Receipt &rarr; settlement.paymentRef (&sect;4.1)</span>
+      </div>
+      <span class="pre-label">what goes into paymentRef</span>
+      <pre><code>Stripe ACP            acp:&lt;order.id&gt;                  POST /checkout_sessions/{id}/complete
+UCP (Google, Shopify) ucp:&lt;order.id&gt;                  POST /checkout-sessions/{id}/complete
+Visa TAP              visa-tap:&lt;merchant order no.&gt;   Signature-Input tag="agent-payer-auth"
+Mastercard Agent Pay  mastercard-agent-pay:&lt;PSP id&gt;   Signature-Input tag="agent-pay-auth"
+Google AP2            ap2:&lt;payment_id&gt;                Payment Mandate in, Payment Receipt out</code></pre>
+      <span class="pre-label" style="margin-top:14px">the two calls</span>
+      <pre><code>const trust = await checkTrust(merchantDid, inam);           // allow | escrow | deny
+if (trust.decision !== "deny") {
+  const { paymentRef, amount, currency } = await acp(merchant); // any rail
+  // ...after delivery, the merchant drafts and the buyer countersigns:
+  const draft = await writeReceipt(merchantInam, buyerDid, "research.report", request, output, { paymentRef, amount, currency });
+  await inam.acceptWork(draft, { amount, currency });
+}</code></pre>
+      <span class="pre-label" style="margin-top:14px">run it (mocked checkouts, throwaway local registry)</span>
+      <pre><code>npx tsx examples/payment-rails/demo.ts</code></pre>
     </div>
   </section>
 
