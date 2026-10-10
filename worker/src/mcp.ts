@@ -3,6 +3,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { readTools, READ_ONLY, type RegistryReader } from "../../mcp/src/readTools.js";
 import type { AppEnv } from "./types.js";
+import mcpPkg from "../../mcp/package.json";
 
 /**
  * Hosted, read-only MCP endpoint (`POST /mcp`, Streamable HTTP, stateless).
@@ -42,7 +43,7 @@ export function mcpHandler(app: Hono<AppEnv>) {
     };
 
     // Stateless: a fresh server + transport per request, no session ids.
-    const server = new McpServer({ name: "inam-mcp", version: "0.5.1" });
+    const server = new McpServer({ name: "inam-mcp", version: mcpPkg.version });
     for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, { ...READ_ONLY, ...t.annotations, title: t.title }, t.handler);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);

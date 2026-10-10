@@ -20,6 +20,7 @@ on:
       - "SPEC.md"
       - "worker/package.json"
       - "sdk-js/package.json"
+      - "mcp/package.json"
       - "sdk-python/pyproject.toml"
       - "site/**"
       - ".github/workflows/deploy-site.yml"

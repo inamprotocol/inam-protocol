@@ -161,7 +161,7 @@ describe("health", () => {
   it("responds ok", async () => {
     const { status, json } = await call("GET", "/v1/health");
     expect(status).toBe(200);
-    expect(json).toEqual({ status: "ok" });
+    expect(json).toEqual({ status: "ok", version: expect.any(String) });
   });
 });
 
