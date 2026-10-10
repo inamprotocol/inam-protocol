@@ -336,6 +336,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## Node reference server & Cloudflare Worker
 
 ### Unreleased (Worker)
+- Web Bot Auth key directory at `GET /.well-known/http-message-signatures-directory` (RFC 9421, for Cloudflare signed agents): JWKS for the key in the `WEB_BOT_AUTH_KEY` secret, signed per response over the request's `@authority` with `Cache-Control: no-store`. 404 while unset. Reuses `sdk-js/src/webBotAuth.ts`. Tests in `worker/tests/api.test.ts`.
 - Paid reputation report over x402 v2: `GET /v1/x402/report/:id`, 0.01 USDC on Base, with a `bazaar` discovery extension so x402 Bazaars can list it. Same data as the free reads, in one call. Off unless `X402_PAY_TO` is set (`X402_NETWORK`, `X402_FACILITATOR_URL` optional; default facilitator PayAI). Unknown agents get 404 before any charge; the report is served only after the facilitator verifies and settles. Tests in `worker/tests/api.test.ts`.
 
 ### 0.12.0 (Node) / 0.12.0 (Worker) — 2026-10-01

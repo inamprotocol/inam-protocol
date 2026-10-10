@@ -95,6 +95,8 @@ Registers a TypeScript-side "requester" and a Python-side "worker" (see `sdk-pyt
 
 Currently live at `https://api.inamprotocol.org` (custom domain, bound via `worker/wrangler.jsonc`; the `*.workers.dev` URL still works too as a fallback).
 
+The Worker also serves `GET /.well-known/http-message-signatures-directory`, the Web Bot Auth key directory for [Cloudflare signed agents](https://developers.cloudflare.com/bots/concepts/bot/signed-agents/): a JWKS with the key the INAM agent signs requests with (`inamFetch(client, { webBotAuth })`), signed per response. Set the key with `npx wrangler secret put WEB_BOT_AUTH_KEY` (hex Ed25519 private key); unset, the route answers 404.
+
 ```
 cd worker
 npm install

@@ -11,5 +11,5 @@
     "resolveJsonModule": true,
     "noEmit": true
   },
-  "include": ["src/**/*.ts", "../sdk-js/src/crypto/**/*.ts", "../sdk-js/src/core/**/*.ts"]
+  "include": ["src/**/*.ts", "../sdk-js/src/crypto/**/*.ts", "../sdk-js/src/core/**/*.ts", "../sdk-js/src/webBotAuth.ts"]
 }
