@@ -34,6 +34,8 @@ import { mcpHandler } from "./mcp.js";
 import { a2aHandler, agentCard } from "./a2a.js";
 import * as demo from "./demo.js";
 import { x402ReportHandler } from "./x402Report.js";
+import { fromHex, keypairFromPrivateKey } from "../../sdk-js/src/crypto/keys.js";
+import { DIRECTORY_PATH, directoryResponseHeaders, httpMessageSignaturesDirectory } from "../../sdk-js/src/webBotAuth.js";
 
 const app = new Hono<AppEnv>();
 
@@ -407,5 +409,18 @@ app.use("/a2a", cors({ origin: "*" }));
 app.post("/a2a", a2aHandler(app));
 app.use("/.well-known/agent-card.json", cors({ origin: "*" }));
 app.get("/.well-known/agent-card.json", (c) => c.json(agentCard));
+
+// Web Bot Auth key directory (RFC 9421) for Cloudflare signed agents: the key
+// the INAM agent signs outbound requests with. Signed per request over its
+// @authority, so never cached. 404 until WEB_BOT_AUTH_KEY is set.
+app.get(DIRECTORY_PATH, (c) => {
+  if (!c.env.WEB_BOT_AUTH_KEY) return c.notFound();
+  const privateKey = fromHex(c.env.WEB_BOT_AUTH_KEY);
+  const headers = directoryResponseHeaders(new URL(c.req.url).host, privateKey);
+  return c.body(JSON.stringify(httpMessageSignaturesDirectory([keypairFromPrivateKey(privateKey).publicKey])), 200, {
+    ...headers,
+    "Cache-Control": "no-store",
+  });
+});
 
 export default app;

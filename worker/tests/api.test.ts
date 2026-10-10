@@ -2794,3 +2794,32 @@ describe("paid x402 report (x402Report.ts)", () => {
     }
   });
 });
+
+describe("Web Bot Auth key directory", () => {
+  const PATH = "/.well-known/http-message-signatures-directory";
+  const fetchDir = async (e: typeof env) => {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(new Request(`https://api.inamprotocol.org${PATH}`), e, ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  };
+
+  it("is 404 while WEB_BOT_AUTH_KEY is unset", async () => {
+    expect((await fetchDir({ ...env, WEB_BOT_AUTH_KEY: undefined } as typeof env)).status).toBe(404);
+  });
+
+  it("serves the key as a JWKS, signed over the request authority and never cached", async () => {
+    const kp = generateKeypair();
+    const res = await fetchDir({ ...env, WEB_BOT_AUTH_KEY: Buffer.from(kp.privateKey).toString("hex") } as typeof env);
+    expect(res.status).toBe(200);
+    expect(res.headers.get("content-type")).toBe("application/http-message-signatures-directory+json");
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    const { keys } = (await res.json()) as { keys: { kty: string; crv: string; x: string }[] };
+    expect(keys).toEqual([{ kty: "OKP", crv: "Ed25519", x: Buffer.from(kp.publicKey).toString("base64url") }]);
+    const params = res.headers.get("signature-input")!.replace(/^sig1=/, "");
+    expect(params).toMatch(/^\("@authority";req\);created=\d+;keyid="[\w-]+";alg="ed25519";expires=\d+;nonce="[^"]+";tag="http-message-signatures-directory"$/);
+    const sig = fromBase64(res.headers.get("signature")!.match(/^sig1=:(.+):$/)![1]);
+    const base = `"@authority";req: api.inamprotocol.org\n"@signature-params": ${params}`;
+    expect(verifyRawEd25519(sig, new TextEncoder().encode(base), kp.publicKey)).toBe(true);
+  });
+});
