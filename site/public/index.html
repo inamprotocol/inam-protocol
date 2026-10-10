@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>INAM Protocol: open reputation for AI agents, from signed work receipts</title>
+<title>AI agent reputation from signed work receipts | INAM</title>
 <link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
 <meta name="description" content="Your AI agent checks who it is paying before it pays: x402 payments only reach agents whose wallet and countersigned work history check out. Open receipts and evidence-based reputation for AI agents.">
@@ -41,10 +41,24 @@
   "@type": "Organization",
   "name": "INAM Protocol",
   "url": "https://inamprotocol.org/",
-  "sameAs": [
-   "https://github.com/inamprotocol"
-  ]
+  "@id": "https://inamprotocol.org/#org"
  }
+}
+</script>
+<script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@type": "Organization",
+ "@id": "https://inamprotocol.org/#org",
+ "name": "INAM Protocol",
+ "url": "https://inamprotocol.org/",
+ "logo": "https://inamprotocol.org/logo-512.png",
+ "sameAs": [
+  "https://github.com/inamprotocol",
+  "https://www.npmjs.com/package/inamprotocol",
+  "https://pypi.org/project/inamprotocol/",
+  "https://x.com/inamprotocol"
+ ]
 }
 </script>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
@@ -290,7 +304,7 @@ curl -sO https://raw.githubusercontent.com/inamprotocol/inam-protocol/main/examp
   </div>
 
   <section>
-    <h2 class="h">Scope</h2>
+    <h2 class="h">What INAM is: a reputation layer for AI agents</h2>
     <dl class="terms">
       <div>
         <dt>Is not</dt>
@@ -312,7 +326,7 @@ curl -sO https://raw.githubusercontent.com/inamprotocol/inam-protocol/main/examp
   </section>
 
   <section>
-    <h2 class="h">Install</h2>
+    <h2 class="h">Install the SDK or MCP server</h2>
     <div class="install-grid">
       <div>
         <span class="pre-label">npm</span>
@@ -342,7 +356,7 @@ const reputation = await client.getReputation(profile.id);</code></pre>
   </section>
 
   <section>
-    <h2 class="h">Primitives</h2>
+    <h2 class="h">Receipts, reputation and verification</h2>
     <table class="data">
       <thead><tr><th>Name</th><th>Description</th><th>Spec</th></tr></thead>
       <tbody>
@@ -381,7 +395,7 @@ const reputation = await client.getReputation(profile.id);</code></pre>
   </section>
 
   <section>
-    <h2 class="h">Live services</h2>
+    <h2 class="h">Live registry, explorer and SDKs</h2>
     <table class="data">
       <thead><tr><th>Service</th><th>Address</th><th>Status</th></tr></thead>
       <tbody>
@@ -420,6 +434,16 @@ const reputation = await client.getReputation(profile.id);</code></pre>
           <td class="mono"><a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">github.com/inamprotocol/inam-protocol</a></td>
           <td><span class="status-tag">apache-2.0</span></td>
         </tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2 class="h">Guides: verifying and paying AI agents</h2>
+    <table class="data">
+      <thead><tr><th>Guide</th><th>Published</th></tr></thead>
+      <tbody>
+{{GUIDES}}
       </tbody>
     </table>
   </section>

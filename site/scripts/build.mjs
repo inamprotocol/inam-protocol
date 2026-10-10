@@ -38,7 +38,7 @@ html = html
   .replaceAll("{{REGISTRY_VERSION}}", REGISTRY_VERSION)
   .replaceAll("{{JS_VERSION}}", JS_VERSION)
   .replaceAll("{{PY_VERSION}}", PY_VERSION);
-writeFileSync(path.join(DIST, "index.html"), html);
+// index.html is written after the blog build below, once {{GUIDES}} (links to every live post) is known.
 
 // Everything else in public/ (use-cases.html, robots.txt, sitemap.xml, llms.txt) ships as-is.
 cpSync(path.join(SITE_ROOT, "public"), DIST, {
@@ -99,29 +99,45 @@ const today = new Date().toISOString().slice(0, 10);
 const queued = posts.filter((p) => p.date > today).map((p) => `${p.slug} (${p.date})`);
 posts.splice(0, posts.length, ...posts.filter((p) => p.date <= today));
 
+const ldScript = (o) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, "\\u003c")}</script>`;
+const postItem = (p) => `<li><a class="post-title" href="/blog/${p.slug}">${esc(p.title)}</a><p>${esc(p.description)}</p><div class="post-meta">${p.date}</div></li>`;
 for (const p of posts) {
+  // Related: front matter `related: slug, slug` picks them; the newest other posts fill the rest.
+  const related = (p.related ? p.related.split(",").map((s) => posts.find((q) => q.slug === s.trim())).filter(Boolean) : [])
+    .concat(posts.filter((q) => q !== p)).filter((q, i, a) => a.indexOf(q) === i).slice(0, 3);
+  const breadcrumbs = { "@context": "https://schema.org", "@type": "BreadcrumbList", itemListElement: [
+    { "@type": "ListItem", position: 1, name: "Home", item: `${SITE}/` },
+    { "@type": "ListItem", position: 2, name: "Blog", item: `${SITE}/blog/` },
+    { "@type": "ListItem", position: 3, name: p.title, item: p.url }] };
   const jsonld = { "@context": "https://schema.org", "@type": "BlogPosting", headline: p.title, description: p.description,
     datePublished: p.date, dateModified: p.updated ?? p.date, url: p.url, image: `${SITE}/og.png`,
     author: { "@type": "Organization", name: "INAM Protocol", url: SITE }, publisher: { "@type": "Organization", name: "INAM Protocol", logo: `${SITE}/logo-512.png` } };
   writeFileSync(path.join(BLOG_DIST, `${p.slug}.html`), page({
     TITLE: esc(p.title), DESCRIPTION: esc(p.description), URL: p.url, OG_TYPE: "article",
-    JSONLD: `<script type="application/ld+json">${JSON.stringify(jsonld).replace(/</g, "\\u003c")}</script>`,
-    BODY: `<div class="masthead"><div class="post-meta"><time datetime="${p.date}">${p.date}</time></div><h1 class="title">${esc(p.title)}</h1><p class="lead">${esc(p.description)}</p></div>\n<article>\n${p.html}\n</article>`,
+    JSONLD: `${ldScript(jsonld)}\n${ldScript(breadcrumbs)}`,
+    BODY: `<div class="masthead"><div class="post-meta"><time datetime="${p.date}">${p.date}</time></div><h1 class="title">${esc(p.title)}</h1><p class="lead">${esc(p.description)}</p></div>\n<article>\n${p.html}\n</article>\n<section><h2 class="h">Related guides</h2><ul class="post-list">\n${related.map(postItem).join("\n")}\n</ul></section>`,
   }));
 }
 writeFileSync(path.join(BLOG_DIST, "index.html"), page({
-  TITLE: "Blog", DESCRIPTION: "Notes on agent reputation, execution receipts, and how INAM fits next to x402, A2A, MCP and ERC-8004.",
-  URL: `${SITE}/blog/`, OG_TYPE: "website", JSONLD: "",
-  BODY: `<div class="masthead"><div class="status-line"><span class="dot"></span>Blog</div><h1 class="title">Blog</h1><p class="lead">Notes on agent reputation, execution receipts, and how INAM fits next to x402, A2A, MCP and ERC-8004.</p></div>\n<ul class="post-list">\n${posts.map((p) =>
-    `<li><a class="post-title" href="/blog/${p.slug}">${esc(p.title)}</a><p>${esc(p.description)}</p><div class="post-meta">${p.date}</div></li>`).join("\n")}\n</ul>`,
+  TITLE: "Blog: AI agent reputation and receipts", DESCRIPTION: "Notes on agent reputation, execution receipts, and how INAM fits next to x402, A2A, MCP and ERC-8004.",
+  URL: `${SITE}/blog/`, OG_TYPE: "website",
+  JSONLD: ldScript({ "@context": "https://schema.org", "@type": "Blog", name: "INAM Protocol Blog", url: `${SITE}/blog/`,
+    publisher: { "@type": "Organization", name: "INAM Protocol", url: SITE },
+    blogPost: posts.map((p) => ({ "@type": "BlogPosting", headline: p.title, url: p.url, datePublished: p.date })) }),
+  BODY: `<div class="masthead"><div class="status-line"><span class="dot"></span>Blog</div><h1 class="title">Blog</h1><p class="lead">Notes on agent reputation, execution receipts, and how INAM fits next to x402, A2A, MCP and ERC-8004.</p></div>\n<ul class="post-list">\n${posts.map(postItem).join("\n")}\n</ul>`,
 }));
 writeFileSync(path.join(BLOG_DIST, "feed.xml"), `<?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0"><channel><title>INAM Protocol Blog</title><link>${SITE}/blog/</link><description>Notes on agent reputation and execution receipts.</description>
 ${posts.map((p) => `<item><title>${esc(p.title)}</title><link>${p.url}</link><guid>${p.url}</guid><pubDate>${new Date(p.date).toUTCString()}</pubDate><description>${esc(p.description)}</description></item>`).join("\n")}
 </channel></rss>
 `);
-const sitemap = readFileSync(path.join(DIST, "sitemap.xml"), "utf-8").replace("</urlset>",
-  [`  <url><loc>${SITE}/blog/</loc></url>`, ...posts.map((p) => `  <url><loc>${p.url}</loc><lastmod>${p.updated ?? p.date}</lastmod></url>`)].join("\n") + "\n</urlset>");
+// Home lists every post (Guides), so the newest post date is when it and /blog/ last changed.
+writeFileSync(path.join(DIST, "index.html"), html.replace("{{GUIDES}}", posts.map((p) =>
+  `        <tr><td><a href="/blog/${p.slug}">${esc(p.title)}</a></td><td class="mono dim">${p.date}</td></tr>`).join("\n")));
+const newest = posts[0]?.date ?? today;
+const sitemap = readFileSync(path.join(DIST, "sitemap.xml"), "utf-8")
+  .replace(`<loc>${SITE}/</loc></url>`, `<loc>${SITE}/</loc><lastmod>${newest}</lastmod></url>`).replace("</urlset>",
+  [`  <url><loc>${SITE}/blog/</loc><lastmod>${newest}</lastmod></url>`, ...posts.map((p) => `  <url><loc>${p.url}</loc><lastmod>${p.updated ?? p.date}</lastmod></url>`)].join("\n") + "\n</urlset>");
 writeFileSync(path.join(DIST, "sitemap.xml"), sitemap);
 
 // A leftover {{PLACEHOLDER}} (e.g. the legal pages' operator name) must never ship.

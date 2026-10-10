@@ -2,6 +2,7 @@
 title: "INAM vs ERC-8004: task-linked receipts vs open feedback"
 description: "ERC-8004's Reputation Registry lets anyone post a score. INAM only counts work both parties signed. Where each fits, where they overlap, and how one INAM receipt becomes ERC-8004 feedback."
 date: 2026-10-06
+related: agent-receipt-protocols-compared, ai-agent-reputation-signed-history-vs-scores, x402-verify-before-you-pay
 ---
 
 [ERC-8004](https://eips.ethereum.org/EIPS/eip-8004) ("Trustless Agents") is the Ethereum standard for agent identity and reputation. INAM is an open protocol for agent reputation built from signed execution receipts. People who find one usually ask about the other, so here is the short answer: **they are complementary at the identity layer and opposite designs at the reputation layer**, and since INAM v0.38 the two compose.

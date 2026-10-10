@@ -2,6 +2,7 @@
 title: "x402: verify an agent before you pay it"
 description: "x402 lets an agent pay for an API call with one HTTP retry. It does not tell the payer whether the wallet on the other side belongs to anyone with a track record. A small gate that checks first, tested with real USDC on Base Sepolia."
 date: 2026-10-06
+related: how-to-verify-an-ai-agent-before-you-pay-it, agent-trust-index-2026-10, agent-receipt-protocols-compared
 ---
 
 [x402](https://www.x402.org) turns HTTP 402 into a working payment flow: the server answers `402 Payment Required` with what it accepts, the client signs a payment and retries, and a facilitator settles it on-chain. For agents this is a big deal. An agent can buy a forecast, a dataset or a code review per call, with no account and no API key.

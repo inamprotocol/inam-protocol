@@ -2,6 +2,7 @@
 title: "Know Your Agent tells you who. Receipts tell you whether it delivered."
 description: "Visa, Mastercard and Ant International are aligning on Know Your Agent (KYA). Identity and certification answer who an agent is. They don't record whether its past work was any good. Here is the missing record, and how it plugs in."
 date: 2026-10-08
+related: ai-agent-reputation-signed-history-vs-scores, how-to-verify-an-ai-agent-before-you-pay-it, agent-receipt-protocols-compared
 ---
 
 On 10 September 2026, Ant International, Mastercard and Visa announced that they will align their agent-verification systems under a shared **Know Your Agent (KYA)** framework. It brings together Visa's Trusted Agent Protocol, Mastercard's Verifiable Intent and Agent Pay, and Ant's Agentic Mobile Protocol. It is a framework under development, not a deployed standard, and it rests on three principles:
