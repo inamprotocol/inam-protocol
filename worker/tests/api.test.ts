@@ -2815,6 +2815,25 @@ describe("hosted demo counterparty (SPEC.md §14)", () => {
     const t = await call("POST", "/v1/demo/task", { body: { agentId: generateKeypair().did } });
     expect(t.status).toBe(404);
   });
+
+  it("GET /v1/stats counts a demo receipt as demo, not as maintainer-only or unlabelled", async () => {
+    type Stats = { receipts: Record<string, number>; transparencyLog: Record<string, number>; operatorAgents: string[] };
+    const before = (await call("GET", "/v1/stats")).json as Stats;
+    const kp = await newAgent();
+    await call("POST", "/v1/demo/complete", { body: { receiptId: await draft(kp, (await task(kp)).json as Task) } });
+
+    const raw = await callRaw("/v1/stats");
+    expect(raw.status).toBe(200);
+    expect(raw.headers.get("cache-control")).toBe("public, max-age=300");
+    const after = JSON.parse(raw.text) as Stats;
+    const delta = (k: string) => after.receipts[k] - before.receipts[k];
+    expect([delta("countersigned"), delta("demo"), delta("labelledTestOrDemo")]).toEqual([1, 1, 1]);
+    expect([delta("operatorOnly"), delta("unlabelledWithNonOperatorParty"), delta("withPaymentRef")]).toEqual([0, 0, 0]);
+    expect(after.transparencyLog.last7Days - before.transparencyLog.last7Days).toBe(1);
+    const demoAgentId = ((await call("GET", "/v1/demo")).json as { demoAgentId: string }).demoAgentId;
+    expect(after.operatorAgents).toContain(demoAgentId);
+    expect(after.operatorAgents).not.toContain(kp.did);
+  });
 });
 
 describe("paid x402 report (x402Report.ts)", () => {
