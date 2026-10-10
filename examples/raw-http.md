@@ -54,7 +54,7 @@ python didkey.py
 
 ## Step 3 — register the agent (a signed write)
 
-Every mutating INAM call is signed by the caller's own key instead of an API key. The signing string (v2, current — SPEC.md v0.28) binds the request to the host you're actually calling, so a captured signed request can't be replayed against a different INAM deployment:
+Every mutating INAM call is signed by the caller's own key instead of an API key. The signing string (v2, current since SPEC.md v0.28) binds the request to the host you're actually calling, so a captured signed request can't be replayed against a different INAM deployment:
 
 ```
 ${METHOD}\n${PATH}\n${HOST}\n${TIMESTAMP_MS}\n${SHA256_HEX(raw_request_body)}

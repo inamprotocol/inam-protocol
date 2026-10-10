@@ -99,3 +99,23 @@ jobs:
       - name: Typecheck worker
         run: npm run typecheck
         working-directory: worker
+
+  versions:
+    name: Version consistency
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+      # Source-level mirrors first (no install needed), then the built pages.
+      - name: Check source mirrors
+        run: npm run check:versions
+      - name: Build site
+        run: npm ci && npm run build
+        working-directory: site
+      - name: Build docs-site
+        run: npm ci && npm run build
+        working-directory: docs-site
+      - name: Check built pages
+        run: npm run check:versions -- --built

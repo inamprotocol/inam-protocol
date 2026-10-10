@@ -2,6 +2,7 @@
 
 # Inam Protocol Registry
 
+[![spec](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fdocs.inamprotocol.org%2Fversion.json&query=%24.spec&label=spec)](./SPEC.md)
 [![npm](https://img.shields.io/npm/v/inamprotocol?label=npm%20inamprotocol)](https://www.npmjs.com/package/inamprotocol)
 [![PyPI](https://img.shields.io/pypi/v/inamprotocol?label=pypi%20inamprotocol)](https://pypi.org/project/inamprotocol/)
 [![npm](https://img.shields.io/npm/v/inam-mcp?label=npm%20inam-mcp)](https://www.npmjs.com/package/inam-mcp)
@@ -164,6 +165,20 @@ In Claude Code, the INAM plugin bundles a skill that walks you through exploring
 /plugin marketplace add inamprotocol/inam-protocol
 /plugin install inam-protocol@inam-protocol-plugins
 ```
+
+## Versions
+
+Several independent version numbers exist; they are not meant to match each other. Each has one source, and everything that repeats it is generated from it (`npm run check:versions` fails CI on drift).
+
+| Kind | Source of truth | Where it shows |
+|---|---|---|
+| Protocol spec | `SPEC.md` title line | spec badge above, inamprotocol.org, docs.inamprotocol.org (`/version.json`), `openapi.yaml` `info.version` (as `X.Y.0`) |
+| Registry (reference server + Worker) | `worker/package.json` (root `package.json` mirrors it) | `GET /v1/health` `version`, A2A agent card, OASF record |
+| `inamprotocol` (JS SDK) | `sdk-js/package.json` | npm badge above |
+| `inamprotocol` (Python SDK) | `sdk-python/pyproject.toml` | PyPI badge above |
+| `inam-mcp` | `mcp/package.json` | npm badge above, MCP `serverInfo` (stdio and hosted `/mcp`), MCP server card, `mcp/server.json` |
+
+A package badge shows the last published release, which can trail `main` until the next publish. Historical numbers in `CHANGELOG.md` and SPEC's "Changes from" notes are history, not the current version.
 
 ## What's here
 
