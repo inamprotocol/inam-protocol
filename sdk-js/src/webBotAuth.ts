@@ -7,7 +7,7 @@
  * `Signature-Agent` is sent as a structured-field string, the form Cloudflare
  * requires today; the draft's newer dictionary form is rejected there.
  */
-import { didToPublicKey, keypairFromPrivateKey, sign } from "./crypto/keys.js";
+import { didToPublicKey, keypairFromPrivateKey, sign, verifyRawEd25519 } from "./crypto/keys.js";
 import { sha256 } from "@noble/hashes/sha256";
 
 export const WEB_BOT_AUTH_TAG = "web-bot-auth";
@@ -106,4 +106,51 @@ export function directoryResponseHeaders(
     "Content-Type": DIRECTORY_CONTENT_TYPE,
     ...signComponents(privateKey, [['"@authority";req', authority.toLowerCase()]], DIRECTORY_TAG, opts),
   };
+}
+
+/**
+ * Checks a fetched key directory the way a verifier would: the body is a JWKS
+ * of Ed25519 keys, and the response carries an RFC 9421 signature tagged
+ * `http-message-signatures-directory`, covering `"@authority";req`, by a key
+ * the directory lists (matched by JWK thumbprint), not expired.
+ */
+export function verifyDirectoryResponse(
+  authority: string,
+  headers: Headers,
+  body: string,
+  now = Math.floor(Date.now() / 1000),
+): { valid: boolean; keys: number; keyid?: string; reason?: string } {
+  let keys: Uint8Array[];
+  try {
+    keys = (JSON.parse(body).keys ?? []).filter((k: Ed25519Jwk) => k?.kty === "OKP" && k.crv === "Ed25519").map((k: Ed25519Jwk) => new Uint8Array(Buffer.from(k.x, "base64url")));
+  } catch {
+    return { valid: false, keys: 0, reason: "body is not a JWKS" };
+  }
+  if (!keys.length) return { valid: false, keys: 0, reason: "no Ed25519 keys" };
+  const input = headers.get("signature-input");
+  const sigHeader = headers.get("signature");
+  if (!input || !sigHeader) return { valid: false, keys: keys.length, reason: "response is not signed" };
+  // ponytail: reads the first signature label only; directories carry one per key, the first is enough to show control.
+  const m = /^\s*([\w-]+)=(\(([^)]*)\)(.*))$/.exec(input.split(/,(?=\s*[\w-]+=\()/)[0]);
+  if (!m) return { valid: false, keys: keys.length, reason: "unreadable Signature-Input" };
+  const [, label, params, components, rest] = m;
+  const sig = new RegExp(`(?:^|,)[ ]*${label}=:([^:]+):`).exec(sigHeader)?.[1];
+  const param = (k: string) => new RegExp(`;${k}=("([^"]*)"|([0-9]+))`).exec(rest)?.slice(2).find((x) => x !== undefined);
+  if (!sig) return { valid: false, keys: keys.length, reason: `no Signature for ${label}` };
+  if (param("tag") !== DIRECTORY_TAG) return { valid: false, keys: keys.length, reason: `tag is not ${DIRECTORY_TAG}` };
+  const expires = param("expires");
+  if (expires && Number(expires) < now) return { valid: false, keys: keys.length, reason: "signature expired" };
+  const lines: string[] = [];
+  for (const c of components.trim().split(/\s+/)) {
+    if (c !== '"@authority";req' && c !== '"@authority"') return { valid: false, keys: keys.length, reason: `unsupported component ${c}` };
+    lines.push(`${c}: ${authority.toLowerCase()}`);
+  }
+  const base = new TextEncoder().encode([...lines, `"@signature-params": ${params}`].join("\n"));
+  const keyid = param("keyid");
+  const signature = new Uint8Array(Buffer.from(sig, "base64"));
+  const key = keys.find((k) => jwkThumbprint(k) === keyid);
+  if (!key) return { valid: false, keys: keys.length, keyid, reason: "keyid matches no listed key" };
+  return verifyRawEd25519(signature, base, key)
+    ? { valid: true, keys: keys.length, keyid }
+    : { valid: false, keys: keys.length, keyid, reason: "signature does not verify" };
 }

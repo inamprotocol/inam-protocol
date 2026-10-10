@@ -106,4 +106,7 @@ export {
   DIRECTORY_CONTENT_TYPE,
   type Ed25519Jwk,
   type SignatureOptions,
+  verifyDirectoryResponse,
 } from "./webBotAuth.js";
+export { checkTarget, checkUrl, checkWallet, checkDid, formatReport, parsePaymentRequired, paymentOptions, inamLinkedWallets, walletErc8004, erc8004AgentsByOwner, erc8004Balance, erc8004Feedback, ERC8004, DEFAULT_RPC } from "./check.js";
+export type { CheckReport, CheckItem, CheckStatus, CheckOptions, PaymentOption, WalletErc8004, Erc8004Agent } from "./check.js";

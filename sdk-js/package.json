@@ -1,6 +1,6 @@
 {
   "name": "inamprotocol",
-  "version": "0.20.0",
+  "version": "0.21.0",
   "description": "Reference TypeScript/JavaScript SDK for the INAM Protocol — agent identity, execution receipts, jobs, and reputation",
   "type": "module",
   "main": "./dist/index.js",
@@ -15,6 +15,10 @@
       "import": "./dist/aiSdk.js"
     }
   },
+  "bin": {
+    "inam": "dist/cli.js",
+    "inamprotocol": "dist/cli.js"
+  },
   "files": [
     "dist"
   ],
@@ -23,6 +27,9 @@
   },
   "license": "Apache-2.0",
   "keywords": [
+    "x402",
+    "erc-8004",
+    "cli",
     "inam",
     "agent",
     "ai-agent",
