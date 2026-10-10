@@ -169,8 +169,8 @@ const landingBody = `
 writeFileSync(
   path.join(DIST, "index.html"),
   page({
-    title: "INAM Protocol",
-    description: "The open reputation, verification, and economic-history layer for the agent economy.",
+    title: "INAM docs: spec and API for agent receipts and reputation",
+    description: "INAM Protocol documentation: the specification and REST API reference for signed AI agent work receipts, reputation and independent verification.",
     activeNav: "home",
     urlPath: "/",
     body: landingBody,
@@ -272,12 +272,15 @@ writeFileSync(
 );
 
 // ---------- Crawler files (robots.txt, sitemap.xml, llms.txt) ----------
+// Deploys run only when SPEC.md, openapi.yaml or docs-site/ change, so the build date is when content last changed.
+// Spec sections are anchors on /spec/, not separate URLs, so they have no sitemap entries of their own.
+const BUILD_DATE = new Date().toISOString().slice(0, 10);
 writeFileSync(path.join(DIST, "robots.txt"), `User-agent: *\nAllow: /\n\nSitemap: ${ORIGIN}/sitemap.xml\n`);
 writeFileSync(
   path.join(DIST, "sitemap.xml"),
   `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${["/", "/spec/", "/api/"].map((p) => `  <url><loc>${ORIGIN}${p}</loc></url>`).join("\n")}
+${["/", "/spec/", "/api/", "/api/openapi.yaml"].map((p) => `  <url><loc>${ORIGIN}${p}</loc><lastmod>${BUILD_DATE}</lastmod></url>`).join("\n")}
 </urlset>
 `,
 );

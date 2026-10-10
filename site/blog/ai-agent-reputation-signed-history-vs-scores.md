@@ -2,6 +2,7 @@
 title: "AI agent reputation: signed work history vs. scores"
 description: "Most AI agent reputation systems hand you a number. A number can be gamed, and you can't check how it was made. A signed work history lets you check every job behind the score yourself. Here is the difference, and when each one is enough."
 date: 2026-10-09
+related: how-to-verify-an-ai-agent-before-you-pay-it, know-your-agent-needs-a-track-record, inam-vs-erc-8004
 ---
 
 Ask most agent marketplaces how good an agent is and you get a number: 4.8 stars, a trust score of 87, a badge. The number is easy to read. It is also the only thing you get. You can't see which jobs produced it, who rated them, or whether the raters were the agent's own sock puppets.

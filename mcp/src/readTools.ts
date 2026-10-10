@@ -59,9 +59,11 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_check_reputation",
       title: "Check agent reputation",
       description:
-        "Look up an agent's INAM reputation (trust score, finalized-receipt count, success rate, dispute flags) before deciding whether to trust or transact with it. Takes a did:key agent id. " +
-        "Do not decide on trustScore alone: check evidenceLevel first. 'countersigned' means only the two parties vouched for the work; " +
-        "'independently_verified' (components.attestedReceipts > 0) means an operator-authorized verifier checked it. Treat any 'attestation_rejected' flag as a strong negative.",
+        "Looks up an agent's INAM reputation by did:key id. Returns trustScore, evidenceLevel, components (finalized-receipt count, success rate, " +
+        "attested and rejected attestation counts) and flags. evidenceLevel is 'none' (no finalized receipts), 'countersigned' (receipts signed by " +
+        "both parties, no independent check) or 'independently_verified' (at least one receipt verified by an operator-authorized verifier, " +
+        "components.attestedReceipts > 0). flags include attestation_rejected (a verifier rejected one of the agent's receipts), in_dispute, " +
+        "nonperformance_reported, revoked, concentrated_counterparty:<id> and unanchored_counterparty_volume.",
       shape: { agentId: z.string().describe("did:key:... id of the agent to check") },
       handler: guarded(({ agentId }: { agentId: string }) => reader.getReputation(agentId)),
     },
@@ -69,10 +71,10 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_search_agents",
       title: "Search agents",
       description:
-        "Find INAM-registered agents by declared capability and/or minimum reputation. Use this to discover a counterparty for a task and see how trusted they are.",
+        "Searches INAM-registered agents by declared capability and/or minimum trust score. Returns matching agent records (did:key id, declared capabilities, metadata); revoked agents and self-declared demo agents are excluded.",
       shape: {
         capability: z.string().optional().describe("e.g. 'translation.tr-en', 'code-review'"),
-        minReputation: z.number().optional().describe("only return agents with at least this trust score"),
+        minReputation: z.number().optional().describe("minimum trust score; agents below it are excluded"),
       },
       handler: guarded((q: { capability?: string; minReputation?: number }) => reader.searchAgents(q)),
     },
@@ -80,7 +82,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_hash_content",
       title: "Hash content",
       description:
-        "Compute the 'sha256:<64 hex>' content hash INAM requires for specHash/outputHash. Pass the exact spec or output text; anyone holding that text can recompute and check the hash.",
+        "Computes the 'sha256:<64 hex>' content hash of the given text, the format INAM uses for specHash and outputHash. Hashing is local; anyone holding the same text can recompute the same hash.",
       shape: { content: z.string().describe("the exact spec or output text to hash") },
       handler: guarded(async ({ content }: { content: string }) => ({ hash: `sha256:${await sha256Hex(content)}` })),
     },
@@ -88,7 +90,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_get_receipt",
       title: "Get receipt",
       description:
-        "Fetch a single execution receipt by id and its verification records. Use this to check a specific claim — 'agent X says it did job Y' — against the signed, countersigned record.",
+        "Fetches a single execution receipt by id together with its verification records. The receipt is the record of a job signed by the worker and, once finalized, countersigned by the requester; verification records are verdicts from operator-authorized verifiers.",
       shape: { receiptId: z.string().describe("sha256:... receipt id") },
       handler: guarded(async ({ receiptId }: { receiptId: string }) => {
         const [receipt, verifications] = await Promise.all([

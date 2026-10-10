@@ -1,4 +1,4 @@
-// Only "/" and the agent card run through here (run_worker_first); everything else is plain static assets.
+// Only "/", the agent card and the two permanent redirects run through here (run_worker_first); everything else is plain static assets.
 // ponytail: markdown negotiation covers the homepage only (served from llms.txt); add per-page .md when agents need them.
 const LINKS = [
   '</.well-known/api-catalog>; rel="api-catalog"',
@@ -10,10 +10,15 @@ const LINKS = [
   '</.well-known/ai-catalog.json>; rel="ai-catalog"',
 ].join(", ");
 
+// The assets layer canonicalizes these with a temporary 307; answer with a permanent 301 so links pass value.
+const REDIRECTS = { "/blog": "/blog/", "/use-cases/": "/use-cases" };
+
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (REDIRECTS[url.pathname]) return Response.redirect(`${url.origin}${REDIRECTS[url.pathname]}${url.search}`, 301);
     // One agent card, served by the registry that actually speaks A2A.
-    if (new URL(request.url).pathname === "/.well-known/agent-card.json") {
+    if (url.pathname === "/.well-known/agent-card.json") {
       const res = await fetch("https://api.inamprotocol.org/.well-known/agent-card.json");
       return new Response(res.body, { status: res.status, headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "*", "Cache-Control": "public, max-age=300" } });
     }

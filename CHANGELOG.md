@@ -261,6 +261,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## MCP server (`mcp`)
 
+### 0.5.1 — 2026-10-10
+- Tool and parameter descriptions (stdio and the hosted `/mcp` endpoint, shared via `readTools.ts`) are now purely factual: what each tool does and what its output fields mean, with no instructions to the calling model and no references to other tools, per the Anthropic MCP directory policy. `inam_check_reputation` now documents each `evidenceLevel` value and every reputation flag. No behavior or schema change.
+
 ### 0.5.0 — 2026-09-28
 - The read tools now live in `src/readTools.ts`, shared with the new hosted endpoint at `https://api.inamprotocol.org/mcp` (Streamable HTTP, read-only). No behavior change for the stdio package.
 - `server.json` lists the hosted endpoint under `remotes`.
