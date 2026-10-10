@@ -2775,6 +2775,27 @@ describe("paid x402 report (x402Report.ts)", () => {
     }
   });
 
+  it("signs facilitator calls with Web Bot Auth when WEB_BOT_AUTH_KEY is set", async () => {
+    const kp = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `x402wba:${kp.did}`, body: { capabilities: ["x"] } });
+    const signer = generateKeypair();
+    const keyed = { ...enabled, WEB_BOT_AUTH_KEY: Buffer.from(signer.privateKey).toString("hex") } as typeof env;
+    let headers: Headers | undefined;
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      headers = new Headers(init?.headers);
+      return Response.json({ isValid: false, invalidReason: "x" });
+    }) as typeof fetch;
+    try {
+      await get(`/v1/x402/report/${kp.did}`, keyed, { "payment-signature": btoa(JSON.stringify({ x402Version: 2 })) });
+      expect(headers?.get("signature-agent")).toMatch(/^"https?:\/\/[^"]+"$/);
+      expect(headers?.get("signature-input")).toContain('tag="web-bot-auth"');
+      expect(headers?.get("signature")).toMatch(/^sig1=:/);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
   it("does not serve or settle when the facilitator rejects the payment", async () => {
     const kp = generateKeypair();
     await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `x402bad:${kp.did}`, body: { capabilities: ["x"] } });
