@@ -2973,7 +2973,7 @@ describe("hosted pre-payment check (GET /v1/check)", () => {
     expect(first.json.next).toMatch(/ERC-8004|INAM ID/);
     expect(first.json.cachedAt).toBeTypeOf("string");
     // The registry lookup ran in-process, not over the network.
-    expect(seen.some((s) => s.url.startsWith("http://worker.test"))).toBe(false);
+    expect(seen.some((s) => new URL(s.url).host === "worker.test")).toBe(false);
 
     const calls = seen.length;
     const second = await check(`target=${encodeURIComponent(target)}&rdap=0`);
