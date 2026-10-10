@@ -70,7 +70,7 @@ const CHAIN_NAMES: Record<number, string> = { 1: "Ethereum", 8453: "Base", 84532
 // x402 v1 network names.
 const V1_NETWORKS: Record<string, number> = { base: 8453, "base-sepolia": 84532, ethereum: 1, sepolia: 11155111, polygon: 137, "polygon-amoy": 80002, avalanche: 43114, "avalanche-fuji": 43113 };
 const USDC_ASSETS = new Set(["0x833589fcd6edb6e08f4c7c32d4f71b54bda02913", "0x036cbd53842c5426634e7929541ec2318f3dcf7e", "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v", "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU"]);
-const SHARED_HOSTING = /(^|\.)(workers\.dev|pages\.dev|vercel\.app|netlify\.app|onrender\.com|herokuapp\.com|fly\.dev|railway\.app|replit\.app|repl\.co|github\.io|deno\.dev|run\.app|azurewebsites\.net|ngrok-free\.app|ngrok\.app|trycloudflare\.com|amazonaws\.com|cloudfront\.net|web\.app|firebaseapp\.com|supabase\.co|modal\.run|lovable\.app|up\.railway\.app)$/i;
+export const SHARED_HOSTING = /(^|\.)(workers\.dev|pages\.dev|vercel\.app|netlify\.app|onrender\.com|herokuapp\.com|fly\.dev|railway\.app|replit\.app|repl\.co|github\.io|deno\.dev|run\.app|azurewebsites\.net|ngrok-free\.app|ngrok\.app|trycloudflare\.com|amazonaws\.com|cloudfront\.net|web\.app|firebaseapp\.com|supabase\.co|modal\.run|lovable\.app|up\.railway\.app|ngrok-free\.dev|ondigitalocean\.app|convex\.site|chatgpt\.site|hstgr\.cloud|zuplo\.dev|deno\.net|val\.run|duckdns\.org|ddns\.net|servehttp\.com|contaboserver\.net|sslip\.io|nip\.io)$/i;
 const UA = "inam-check/1 (+https://github.com/inamprotocol/inam-protocol)";
 const STATUS_RANK: Record<CheckStatus, number> = { info: 0, pass: 0, warn: 1, fail: 2 };
 
@@ -319,7 +319,8 @@ export async function domainItem(host: string, timeoutMs?: number, retries?: num
     const days = Math.floor((Date.now() - Date.parse(reg)) / 86400000);
     return { id: "domain.age", status: days < 30 ? "warn" : "pass", label: `${domain} registered ${String(reg).slice(0, 10)} (${days} days ago)` };
   } catch (e) {
-    return { id: "domain.age", status: "info", label: `Domain age: RDAP lookup failed for ${domain}`, detail: (e as Error).message };
+    const noService = /-> 404$/.test((e as Error).message);
+    return { id: "domain.age", status: "info", label: noService ? `Domain age: no public RDAP record for ${domain} (common for .io, .co, .ch, .ru)` : `Domain age: RDAP lookup failed for ${domain}`, detail: (e as Error).message };
   }
 }
 
