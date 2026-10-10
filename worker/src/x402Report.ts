@@ -16,6 +16,8 @@ import type { AppEnv } from "./types.js";
 import * as agentService from "./agentService.js";
 import * as receiptService from "./receiptService.js";
 import { computeReputation } from "./reputationService.js";
+import { fromHex } from "../../sdk-js/src/crypto/keys.js";
+import { webBotAuthHeaders } from "../../sdk-js/src/webBotAuth.js";
 
 const USDC: Record<string, { asset: string; name: string }> = {
   "eip155:8453": { asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", name: "USD Coin" },
@@ -67,9 +69,14 @@ function paymentRequired(c: Context<AppEnv>, error?: string) {
 
 async function facilitator(c: Context<AppEnv>, step: "verify" | "settle", paymentPayload: unknown, paymentRequirements: unknown) {
   const base = (c.env.X402_FACILITATOR_URL ?? "https://facilitator.payai.network").replace(/\/$/, "");
-  const res = await fetch(`${base}/${step}`, {
+  const url = `${base}/${step}`;
+  // Signed with the Web Bot Auth key the Worker publishes at DIRECTORY_PATH, when set.
+  const signed = c.env.WEB_BOT_AUTH_KEY
+    ? webBotAuthHeaders(url, fromHex(c.env.WEB_BOT_AUTH_KEY), { signatureAgent: `https://${new URL(c.req.url).host}` })
+    : {};
+  const res = await fetch(url, {
     method: "POST",
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...signed },
     body: JSON.stringify({ x402Version: 2, paymentPayload, paymentRequirements }),
   });
   return (await res.json().catch(() => ({}))) as { isValid?: boolean; invalidReason?: string; success?: boolean; errorReason?: string };
