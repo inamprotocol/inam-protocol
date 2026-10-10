@@ -94,3 +94,16 @@ export type { TrustPolicy, TrustDecision, TrustDecisionKind } from "./trust.js";
 export { INAM_FEEDBACK_TAG, buildErc8004Feedback, verifyErc8004Feedback } from "./erc8004.js";
 export type { Erc8004Target, Erc8004Feedback, Erc8004FeedbackCheck } from "./erc8004.js";
 export { inamReceipts, inamFetch, httpSpecHash, httpOutputHash, INAM_REQUESTER_HEADER, INAM_RECEIPT_HEADER } from "./http.js";
+export {
+  webBotAuthHeaders,
+  directoryResponseHeaders,
+  httpMessageSignaturesDirectory,
+  jwkThumbprint,
+  ed25519Jwk,
+  WEB_BOT_AUTH_TAG,
+  DIRECTORY_TAG,
+  DIRECTORY_PATH,
+  DIRECTORY_CONTENT_TYPE,
+  type Ed25519Jwk,
+  type SignatureOptions,
+} from "./webBotAuth.js";

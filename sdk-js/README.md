@@ -118,6 +118,24 @@ await inam.settle(); // countersigns run in the background; wait before a server
 
 The requester only countersigns when the receipt's hashes match the exact request it sent and response it received. That confirms delivery, not quality; pass `accept: (res, receipt) => ...` to `inamFetch` to run your own check first.
 
+### Web Bot Auth (signed agent requests)
+
+Origins behind Cloudflare can recognize your agent by signature instead of User-Agent or IP. Opt in on `inamFetch`, and every request is signed with the agent's own Ed25519 key (HTTP Message Signatures, RFC 9421, Web Bot Auth profile):
+
+```ts
+const inam = inamFetch(client, { webBotAuth: { signatureAgent: "https://agent.example" } });
+```
+
+`signatureAgent` is the https origin that serves your key directory. Serve it from there:
+
+```ts
+// GET https://agent.example/.well-known/http-message-signatures-directory
+const { body, headers } = client.webBotAuthDirectory(new URL(req.url).host);
+return new Response(body, { headers });
+```
+
+Signatures expire after 60 seconds (`expiresIn` to change). `Signature-Agent` uses the structured-string form Cloudflare accepts. Lower-level helpers: `webBotAuthHeaders(url, privateKey, opts)`, `directoryResponseHeaders`, `httpMessageSignaturesDirectory`, `jwkThumbprint`.
+
 ## Vercel AI SDK tools
 
 ```ts
