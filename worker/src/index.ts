@@ -457,4 +457,10 @@ app.get(DIRECTORY_PATH, (c) => {
   });
 });
 
+// OpenAI plugin domain verification: the portal's token, plain text, on the
+// MCP URL's host. 404 until OPENAI_APPS_CHALLENGE is set.
+app.get("/.well-known/openai-apps-challenge", (c) =>
+  c.env.OPENAI_APPS_CHALLENGE ? c.text(c.env.OPENAI_APPS_CHALLENGE.trim()) : c.notFound(),
+);
+
 export default app;

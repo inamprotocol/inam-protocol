@@ -18,6 +18,11 @@ const names = tools.map((t) => t.name).sort();
 console.log("tools:", names);
 assert(names.includes("inam_check_reputation"), "read tool missing");
 assert(names.includes("inam_whoami"), "whoami missing");
+const READ = ["inam_whoami", "inam_check", "inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents", "inam_verify_receipt"];
+for (const t of tools.filter((t) => READ.includes(t.name))) {
+  const a = t.annotations ?? {};
+  assert(a.readOnlyHint === true && a.destructiveHint === false && a.openWorldHint === (t.name === "inam_check"), `${t.name}: annotations ${JSON.stringify(a)}`);
+}
 
 const who = await client.callTool({ name: "inam_whoami", arguments: {} });
 console.log("whoami:", who.content[0].text);

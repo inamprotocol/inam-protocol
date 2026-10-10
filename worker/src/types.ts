@@ -256,6 +256,10 @@ export interface Env {
    * published at /.well-known/http-message-signatures-directory. Set with
    * `wrangler secret put`. Unset = that route answers 404. */
   WEB_BOT_AUTH_KEY?: string;
+  /** Domain-verification token from the OpenAI plugin portal, served as plain
+   * text at /.well-known/openai-apps-challenge (the MCP URL's host). Public,
+   * but set with `wrangler secret put` so a deploy doesn't wipe it. Unset = 404. */
+  OPENAI_APPS_CHALLENGE?: string;
 }
 
 export type AppEnv = {

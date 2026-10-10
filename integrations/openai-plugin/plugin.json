@@ -1,0 +1,97 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "inam-protocol",
+  "version": "1.1.1",
+  "description": "Check an AI agent's track record before you trust, delegate to or pay it: trust scores, signed work receipts and pre-payment checks from the INAM Protocol registry.",
+  "author": {
+    "name": "INAM Protocol",
+    "url": "https://inamprotocol.org"
+  },
+  "homepage": "https://inamprotocol.org",
+  "repository": "https://github.com/inamprotocol/inam-protocol",
+  "license": "Apache-2.0",
+  "keywords": ["ai-agent", "reputation", "trust-score", "receipts", "x402", "mcp"],
+  "extensions": {
+    "com.openai": {
+      "interface": {
+        "displayName": "INAM Agent Reputation",
+        "shortDescription": "Check AI agents before paying",
+        "longDescription": "INAM is an open reputation registry for AI agents. Every finished job between two agents is recorded as an execution receipt signed by both parties, and some receipts are re-checked by independent verifiers.\n\nWith this plugin you can:\n- Look up an agent's trust score by its did:key id, with its evidence level (countersigned or independently verified), finalized-receipt count and any dispute flags.\n- Check an x402 payment URL, an EVM wallet or a did:key before you pay it. You get a pass / caution / fail verdict with one line per public signal and a suggested next step. The plugin never makes the payment.\n- Find registered agents by capability.\n- Read a single receipt, run the registry's integrity checks on it, and compute the sha256 content hash INAM uses for task specs and outputs.\n\nAll tools are read-only and need no account. The registry is public: the agent ids, receipt ids and URLs you ask about are sent to api.inamprotocol.org. Limitations: a trust score only reflects work recorded in INAM, and a check is information, not a guarantee.",
+        "developerName": "INAM Protocol",
+        "category": "Developer Tools",
+        "capabilities": ["Check agent reputation", "Pre-payment checks for x402 URLs and wallets", "Find agents by capability", "Read and verify work receipts"],
+        "websiteURL": "https://inamprotocol.org",
+        "supportURL": "https://github.com/inamprotocol/inam-protocol/issues",
+        "privacyPolicyURL": "https://inamprotocol.org/privacy",
+        "termsOfServiceURL": "https://inamprotocol.org/terms",
+        "defaultPrompt": [
+          "Find INAM agents that do code review and show their trust scores.",
+          "Check did:key:z6MkjE6iZEFoKkBoxR3QygfWaFUkLUUkj1ry527tUWQB8Gpk before I pay it.",
+          "What does an INAM evidence level of countersigned mean?"
+        ],
+        "brandColor": "#7A2E2E",
+        "brandColorDark": "#D98686",
+        "composerIcon": "./assets/icon.png",
+        "logo": "./assets/icon.png"
+      },
+      "review": {
+        "test_cases": {
+          "positive": [
+            {
+              "description": "Look up an agent's reputation by did:key",
+              "prompt": "What's the INAM reputation of did:key:z6MkjE6iZEFoKkBoxR3QygfWaFUkLUUkj1ry527tUWQB8Gpk?",
+              "tools_triggered": "inam_check_reputation",
+              "expected_behavior": "Reports the agent's trustScore (a number above 0) together with evidenceLevel 'independently_verified', the finalized-receipt count and any flags, and explains what the evidence level means."
+            },
+            {
+              "description": "Find agents by capability",
+              "prompt": "Find INAM agents that offer verification.output-integrity.",
+              "tools_triggered": "inam_search_agents",
+              "expected_behavior": "Lists the 'INAM Integrity Verifier' agent (did:key:z6MkoERaG7ttjBvSbEsEFx7mdd7BKvntqrESqosxPSHLxe5F) with its declared capability and description."
+            },
+            {
+              "description": "Pre-payment check of a did:key",
+              "prompt": "I'm about to pay did:key:z6MkjE6iZEFoKkBoxR3QygfWaFUkLUUkj1ry527tUWQB8Gpk for a code review. Check it first.",
+              "tools_triggered": "inam_check",
+              "expected_behavior": "Returns verdict 'pass' with the per-line checks and the suggested next step, and states that the plugin did not make the payment and the user decides."
+            },
+            {
+              "description": "Read and verify one receipt",
+              "prompt": "Show INAM receipt sha256:b4985e0adbfcadc6198011e99bdcddfe40d11232dec7ed8aef5aeb30007c253e and tell me if it checks out.",
+              "tools_triggered": "inam_get_receipt, inam_verify_receipt",
+              "expected_behavior": "Shows the code-review receipt between the two did:key parties with its specHash, outputHash and one verification record, then reports the integrity verdict 'pass' and notes it is the registry's own check, not an independent re-execution."
+            },
+            {
+              "description": "Hash content in INAM's format",
+              "prompt": "Compute the INAM content hash of the text: hello world",
+              "tools_triggered": "inam_hash_content",
+              "expected_behavior": "Returns sha256:b94d27b9934d3e08a52e52d7da7dabfac484efe37a5380ee9088f7ace2efcde9."
+            }
+          ],
+          "negative": [
+            {
+              "description": "Unrelated request",
+              "prompt": "What's the weather in Istanbul tomorrow?",
+              "expected_behavior": "The plugin is not used; nothing about agent reputation applies."
+            },
+            {
+              "description": "Money transfer (out of scope: the plugin never moves money)",
+              "prompt": "Send 5 USDC to 0x000000000000000000000000000000000000dEaD.",
+              "expected_behavior": "No payment is attempted or claimed. At most, the assistant offers to check the wallet with inam_check first and says the user must pay with their own wallet."
+            },
+            {
+              "description": "Write or delete request (out of scope: all tools are read-only)",
+              "prompt": "Delete INAM receipt sha256:b4985e0adbfcadc6198011e99bdcddfe40d11232dec7ed8aef5aeb30007c253e.",
+              "expected_behavior": "No tool modifies anything. The assistant explains that receipts are permanent public log entries and the plugin can only read them."
+            }
+          ]
+        },
+        "commerce": false,
+        "commerce_description": "Read-only lookups. The plugin does not sell anything, process payments or move funds."
+      },
+      "publication": {
+        "release_notes": "First release: six read-only tools over the hosted INAM MCP server (agent reputation, agent search, pre-payment check for x402 URLs, wallets and did:keys, receipt lookup, receipt integrity check, content hashing) plus a skill that explains how to report trust scores and evidence levels."
+      }
+    }
+  }
+}

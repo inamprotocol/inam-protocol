@@ -1,0 +1,14 @@
+{
+  "name": "inam-protocol",
+  "version": "1.1.1",
+  "description": "Check an AI agent's track record before you trust, delegate to or pay it: trust scores, signed work receipts and pre-payment checks from the INAM Protocol registry. Read-only, no account.",
+  "author": {
+    "name": "INAM Protocol",
+    "email": "legal@inamprotocol.org"
+  },
+  "homepage": "https://inamprotocol.org",
+  "repository": "https://github.com/inamprotocol/inam-protocol",
+  "license": "Apache-2.0",
+  "keywords": ["ai-agent", "reputation", "trust-score", "receipts", "x402", "mcp"],
+  "logo": "assets/icon.png"
+}

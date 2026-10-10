@@ -3,6 +3,7 @@
 //   spec version      -> SPEC.md title line
 //   registry version  -> worker/package.json
 //   inam-mcp version  -> mcp/package.json
+//   plugin version    -> inam-protocol-plugin/.claude-plugin/plugin.json (integrations/* mirror it)
 // Pass --built to also check site/dist and docs-site/dist (CI builds both first).
 // No dependencies on purpose: runs before any npm install.
 import { readFileSync, existsSync } from "node:fs";
@@ -37,6 +38,18 @@ for (const file of ["mcp/src/index.ts", "worker/src/mcp.ts", "worker/src/a2a.ts"
   if (/new McpServer\(\{[^}]*version:\s*["'`]/.test(src) || /^\s+version:\s*["'`]\d/m.test(src))
     errors.push(`${file}: hard-coded version literal; import it from package.json`);
 }
+// Platform plugin packages mirror the Claude Code plugin's version and share one
+// skill text (integrations/openai-plugin is the source; Gemini's GEMINI.md is its body).
+const plugin = json("inam-protocol-plugin/.claude-plugin/plugin.json").version;
+for (const f of ["integrations/openai-plugin/plugin.json", "integrations/cursor-plugin/.cursor-plugin/plugin.json", "integrations/gemini-cli-extension/gemini-extension.json"])
+  expect(`${f} version`, json(f).version, plugin);
+const text = (p) => read(p).replace(/\r\n/g, "\n");
+const skill = text("integrations/openai-plugin/skills/inam-protocol/SKILL.md");
+if (text("integrations/cursor-plugin/skills/inam-protocol/SKILL.md") !== skill)
+  errors.push("integrations/cursor-plugin SKILL.md: differs from integrations/openai-plugin's; copy it over");
+if (text("integrations/gemini-cli-extension/GEMINI.md").trim() !== skill.split(/^---$/m)[2]?.trim())
+  errors.push("integrations/gemini-cli-extension/GEMINI.md: differs from the openai-plugin SKILL.md body; copy it over");
+
 // Static discovery files are templated by site/scripts/build.mjs.
 expect("site/public server-card serverInfo.version", json("site/public/.well-known/mcp/server-card.json").serverInfo.version, "{{MCP_VERSION}}");
 
