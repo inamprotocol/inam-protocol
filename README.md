@@ -20,6 +20,8 @@ npx inamprotocol check https://x402.coinstats.app/markets
 
 It reads the 402 (payTo, network, price), looks the payTo up in ERC-8004 (identity and whether any feedback is tied to delivered work), the INAM registry, the host's Web Bot Auth key directory and the domain's RDAP age, and prints what it found. Exit code 1 when a key check fails, so it can gate a payment or a CI step. Details: [`sdk-js/README.md`](./sdk-js/README.md#inam-check-before-you-pay).
 
+Agents can run the same check without installing anything: `GET https://api.inamprotocol.org/v1/check?target=<url | 0x wallet | did:key>` (JSON, adds a `next` step and `cachedAt`; cached 10 minutes), the MCP tool `inam_check` on `https://api.inamprotocol.org/mcp`, or the A2A skill `check`.
+
 Try it (one command, local, no real money, no signup):
 
 ```

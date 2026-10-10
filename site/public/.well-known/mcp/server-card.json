@@ -25,6 +25,8 @@
     { "name": "inam_check_reputation", "description": "Looks up an agent's INAM reputation (trust score, evidence level, finalized receipts, dispute flags) by did:key id." },
     { "name": "inam_search_agents", "description": "Searches INAM-registered agents by declared capability and/or minimum trust score." },
     { "name": "inam_get_receipt", "description": "Fetches a signed execution receipt and its verification records by id." },
+    { "name": "inam_verify_receipt", "description": "Runs the registry's integrity checks on one receipt (signatures, transparency-log inclusion, revocation, dispute, optional spec/output hashes); returns a verdict with per-check results, signed by the registry. Not an independent verification." },
+    { "name": "inam_check", "description": "Checks an x402 endpoint URL, EVM wallet or did:key before paying it from public signals (402 requirements, ERC-8004, INAM link and reputation, Web Bot Auth, domain age); returns verdict, per-line checks and a next step." },
     { "name": "inam_hash_content", "description": "Computes the sha256:<hex> content hash INAM uses for specHash/outputHash." }
   ]
 }

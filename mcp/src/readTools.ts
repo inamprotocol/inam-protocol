@@ -15,6 +15,8 @@ export interface RegistryReader {
   getReceipt(receiptId: string): Promise<unknown>;
   listReceiptVerifications(receiptId: string): Promise<unknown>;
   verifyReceipt(receiptId: string, given: { spec?: string; output?: string }): Promise<unknown>;
+  /** GET /v1/check: pre-payment check of an x402 URL, wallet or did:key. */
+  check(query: { target: string; method?: string }): Promise<unknown>;
 }
 
 type ToolResult = { content: { type: "text"; text: string }[]; isError?: boolean };
@@ -40,6 +42,8 @@ export type ReadTool = {
   title: string;
   description: string;
   shape: z.ZodRawShape;
+  /** Overrides READ_ONLY (e.g. openWorldHint for a tool that reaches outside the registry). */
+  annotations?: { openWorldHint?: boolean };
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- args are validated against `shape` by the SDK
   handler: (args: any) => Promise<ToolResult>;
 };
@@ -116,6 +120,22 @@ export function readTools(reader: RegistryReader): ReadTool[] {
         output: z.string().optional().describe("exact output text; checked against the receipt's result.outputHash"),
       },
       handler: guarded(({ receiptId, spec, output }: { receiptId: string; spec?: string; output?: string }) => reader.verifyReceipt(receiptId, { spec, output })),
+    },
+    {
+      name: "inam_check",
+      title: "Pre-payment check",
+      description:
+        "Checks an x402 endpoint URL, an EVM wallet or a did:key before paying it, from public signals: the URL's 402 payment requirements " +
+        "(payTo, price, network), whether payTo owns an ERC-8004 identity and has feedback, whether payTo is proven by an INAM ID and that ID's " +
+        "reputation, a Web Bot Auth key directory, HTTPS and the domain's registration age. Works when INAM has no data on the target. Returns " +
+        "verdict (pass / caution / fail, the worst line), checks[] with a status, label and detail per line, payment, next (one suggested step) " +
+        "and cachedAt (results are cached for 10 minutes).",
+      shape: {
+        target: z.string().describe("x402 endpoint http(s) URL, 0x EVM wallet address, or did:key:z..."),
+        method: z.enum(["GET", "POST", "HEAD"]).optional().describe("HTTP method for a URL target; default GET, use POST for endpoints that only answer POST"),
+      },
+      annotations: { openWorldHint: true },
+      handler: guarded((q: { target: string; method?: string }) => reader.check(q)),
     },
   ];
 }

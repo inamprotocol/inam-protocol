@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { checkTarget, formatReport, paymentOptions, registrableDomain } from "../sdk-js/src/check.js";
+import { checkTarget, formatReport, nextStep, paymentOptions, registrableDomain } from "../sdk-js/src/check.js";
 import { keypairFromPrivateKey } from "../sdk-js/src/crypto/keys.js";
 import { directoryResponseHeaders, httpMessageSignaturesDirectory, verifyDirectoryResponse } from "../sdk-js/src/webBotAuth.js";
 
@@ -148,5 +148,26 @@ describe("verifyDirectoryResponse", () => {
     const other = keypairFromPrivateKey(new Uint8Array(32).fill(7));
     const h = new Headers(directoryResponseHeaders("agent.example", other.privateKey));
     expect(verifyDirectoryResponse("agent.example", h, body).reason).toBe("keyid matches no listed key");
+  });
+});
+
+describe("injected fetch and next step (hosted check)", () => {
+  it("routes every outbound request through opts.fetch, with the same result as global fetch", async () => {
+    stub({ linked: PAYTO, erc8004Owned: 1 });
+    const viaGlobal = await run("https://seller.example/api");
+    const stubbed = globalThis.fetch;
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", () => Promise.reject(new Error("global fetch used")));
+    const viaOpt = await checkTarget("https://seller.example/api", { registryUrl: REG, fetch: ((u: string, i?: RequestInit) => (urls.push(u), stubbed(u, i))) as typeof fetch });
+    expect({ ...viaOpt, checkedAt: "" }).toEqual({ ...viaGlobal, checkedAt: "" });
+    expect(urls).toContain(`${REG}/v1/agents/${encodeURIComponent(DID)}/reputation`);
+  });
+
+  it("suggests a step from the worst line", async () => {
+    stub({});
+    expect(nextStep(await run("https://seller.example/api"))).toMatch(/ERC-8004/);
+    stub({ status: 200 });
+    expect(nextStep(await run("https://seller.example/api"))).toMatch(/x402 paywall/);
+    expect(nextStep({ target: "x", kind: "url", verdict: "pass", checkedAt: "", checks: [{ id: "tls", status: "pass", label: "ok" }] })).toMatch(/Nothing failed/);
   });
 });
