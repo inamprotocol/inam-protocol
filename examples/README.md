@@ -74,3 +74,23 @@ SPEC.md §11.3 for a [Google ADK](https://google.github.io/adk-docs/) agent: `ch
 ## `erc8004-feedback.ts`
 
 SPEC.md §11.1 end to end, no chain writes: a requester and a provider each link an EVM address, finish one job, and the requester builds ERC-8004 `giveFeedback` arguments and the feedback file from the countersigned receipt. A reader then checks it with `verifyErc8004Feedback`: valid from the requester's wallet, rejected when the same file is replayed from another wallet. Send the printed arguments from any wallet in real use. Local registry only (`npm run dev`).
+
+## `payment-rails/`
+
+INAM is a receipt layer that works on any payment rail. Every agent checkout touches it at two points: **before payment**, `checkTrust` on the merchant's INAM ID returns allow, escrow or deny; **after delivery**, the merchant drafts a receipt whose `settlement.paymentRef` is the rail's own id and the buyer countersigns it (`acceptWork` refuses a different amount or currency). INAM never sees card data, tokens or mandates and moves no money, so it is not a payment processor.
+
+[`rails.ts`](./payment-rails/rails.ts) holds the shared `writeReceipt` helper and one short function per rail. Each function sends that protocol's documented request shape and returns the id to record:
+
+| Rail | What the agent sends | Recorded as `paymentRef` |
+|---|---|---|
+| [Stripe ACP](https://developers.openai.com/commerce/specs/checkout) | `POST /checkout_sessions`, then `/complete` with `payment_data: { token: "spt_…", provider: "stripe" }` | `acp:` + `order.id` |
+| [UCP](https://ucp.dev/specification/shopping/checkout/) (Google, Shopify) | `POST /checkout-sessions`, then `/complete` with `payment.instruments[]` (`handler_id`, `credential`) | `ucp:` + `order.id` |
+| [Visa TAP](https://github.com/visa/trusted-agent-protocol) | the merchant's own order API, signed with RFC 9421 `Signature-Input` `tag="agent-payer-auth"` | `visa-tap:` + the merchant's order number |
+| [Mastercard Agent Pay](https://developer.mastercard.com/merchant-cloud/documentation/tutorials-and-guides/agentic-commerce-guide/21/) | an Agentic Token in the normal card fields, Web Bot Auth `tag="agent-pay-auth"` + `Signature-Agent` | `mastercard-agent-pay:` + the PSP payment id |
+| [Google AP2](https://github.com/google-agentic-commerce/AP2/tree/main/code/sdk/schemas/ap2) | a Payment Mandate (`transaction_id`, `payment_amount`, …); a Payment Receipt comes back | `ap2:` + `payment_id` |
+
+[`demo.ts`](./payment-rails/demo.ts) runs all five against a mocked merchant (no keys, no money) and a throwaway in-process registry. A merchant with countersigned history gets allow, a newcomer gets escrow, an ID the registry never saw gets deny. By the fourth checkout the established merchant's whole history comes from one buyer, so the `concentrated_counterparty` flag drops it to escrow as well. "Escrow" means holding the money on the rail, e.g. card authorize now and capture once the receipt is countersigned, because INAM holds no funds. `tests/paymentRails.test.ts` runs the demo in CI.
+
+```
+npx tsx examples/payment-rails/demo.ts
+```
