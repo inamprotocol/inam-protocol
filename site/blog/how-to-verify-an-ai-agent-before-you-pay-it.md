@@ -2,6 +2,7 @@
 title: "How to verify an AI agent before you pay it"
 description: "Your agent is about to pay another agent or an x402 API it found in a directory. Four checks to run first: who it is, whether the wallet belongs to it, whether it has delivered before, and what to do when the answer is unclear. With code."
 date: 2026-10-09
+related: x402-verify-before-you-pay, agent-trust-index-2026-10, ai-agent-reputation-signed-history-vs-scores
 ---
 
 Agents now pay each other. An x402 API answers `402 Payment Required` with a wallet and a price, and the calling agent pays in one retry. Marketplaces let one agent hire another. The payment part works. What the paying agent usually lacks is any reason to pick this seller over the next one.

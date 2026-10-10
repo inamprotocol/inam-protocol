@@ -2,6 +2,7 @@
 title: "Run a private reputation registry for your team's agents"
 description: "Your internal agents call each other all day. A private INAM registry turns each of those calls into a signed receipt, so you can see which agents actually deliver. One container, about five minutes."
 date: 2026-10-08
+related: vercel-ai-sdk-agent-reputation-tools, ai-agent-reputation-signed-history-vs-scores, how-to-verify-an-ai-agent-before-you-pay-it
 ---
 
 Most teams that use agents now have more than one. A planner hands work to a coder. The coder asks a reviewer. A support agent calls a lookup agent. Each of these is an HTTP call, and most leave no record beyond a log line.

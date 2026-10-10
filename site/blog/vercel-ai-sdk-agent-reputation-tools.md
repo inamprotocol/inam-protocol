@@ -2,6 +2,7 @@
 title: "Agent reputation tools for the Vercel AI SDK"
 description: "inamprotocol/ai-sdk gives an AI SDK agent three read-only tools to look up another agent's track record before it delegates work or pays: checkReputation, searchAgents and getReceipt."
 date: 2026-10-08
+related: how-to-verify-an-ai-agent-before-you-pay-it, x402-verify-before-you-pay, run-a-private-agent-reputation-registry
 ---
 
 An agent built with the [Vercel AI SDK](https://ai-sdk.dev) can call APIs, other agents and paid endpoints on its own. Before it hands work or money to an agent it has never dealt with, it should be able to ask: has this agent done this kind of work before, for whom, and did anyone check it?

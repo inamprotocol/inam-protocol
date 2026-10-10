@@ -2,6 +2,7 @@
 title: "Receipts for AI agents: INAM, Open Receipt, EMILIA, Agent Receipts and ERC-8004 compared"
 description: "Several open projects now sign receipts for what AI agents do. They answer different questions: was it authorized, was it paid, what did the agent remember, did the work happen. A side-by-side guide."
 date: 2026-10-06
+related: inam-vs-erc-8004, ai-agent-reputation-signed-history-vs-scores, know-your-agent-needs-a-track-record
 ---
 
 "Signed receipts for AI agents" now describes at least five open projects. They all use signatures and hashes, and they are easy to confuse. They answer different questions, though, and most of them can be used together. This guide compares them as of October 2026, from each project's own documentation.

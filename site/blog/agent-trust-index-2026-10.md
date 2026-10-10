@@ -2,6 +2,7 @@
 title: "Agent Trust Index #1: how many x402 Bazaar sellers have a track record?"
 description: "We read a full x402 Bazaar discovery list (18,872 listings, 808 payout wallets) and checked how many sellers can show a verifiable history. By the check we can run today, the answer is zero, and that includes INAM."
 date: 2026-10-08
+related: how-to-verify-an-ai-agent-before-you-pay-it, x402-verify-before-you-pay, ai-agent-reputation-signed-history-vs-scores
 ---
 
 An AI agent that wants to buy an API call over [x402](https://www.x402.org) usually starts in a Bazaar: a discovery list that a payment facilitator publishes at `/discovery/resources`. Each listing gives a URL, a price and a `payTo` wallet. The agent picks one and pays.
