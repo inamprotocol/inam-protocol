@@ -20,6 +20,7 @@ import type { AppEnv } from "./types.js";
 const BASE = "https://api.inamprotocol.org";
 const DID_KEY = /did:key:z[1-9A-HJ-NP-Za-km-z]+/;
 const RECEIPT_ID = /sha256:[0-9a-f]{64}/;
+const CHECK_TARGET = /https?:\/\/[^\s"'<>]+|\b0x[0-9a-fA-F]{40}\b/;
 
 export const agentCard = {
   name: "INAM Protocol Registry",
@@ -68,6 +69,14 @@ export const agentCard = {
       tags: ["discovery", "search", "agents"],
       examples: ["code-review", '{"capability": "translation.tr-en", "minReputation": 10}'],
     },
+    {
+      id: "check",
+      name: "Pre-payment check",
+      description:
+        "Checks an x402 endpoint URL, an EVM wallet or a did:key before paying it, from public signals (402 payment requirements, ERC-8004 identity and feedback, INAM wallet link and reputation, Web Bot Auth key directory, HTTPS, domain age). Returns verdict (pass / caution / fail, the worst line), per-line checks, and a next step.",
+      tags: ["x402", "payments", "due-diligence", "erc-8004"],
+      examples: ["Check https://seller.example/api before I pay", '{"target": "0x1111111111111111111111111111111111111111", "method": "GET"}'],
+    },
   ],
 };
 
@@ -80,6 +89,7 @@ export function route(message: A2AMessage): { skill: string; arg: Record<string,
   const parts = message.parts ?? [];
   const data = parts.find((p) => p.data && typeof p.data === "object")?.data ?? {};
   const text = parts.map((p) => p.text ?? "").join(" ");
+  if (typeof data.target === "string") return { skill: "check", arg: { target: data.target, method: data.method } };
   if (typeof data.agentId === "string") return { skill: "check_reputation", arg: { agentId: data.agentId } };
   if (typeof data.receiptId === "string" && (data.verify === true || typeof data.spec === "string" || typeof data.output === "string"))
     return { skill: "verify_receipt", arg: { receiptId: data.receiptId, spec: data.spec, output: data.output } };
@@ -91,6 +101,8 @@ export function route(message: A2AMessage): { skill: string; arg: Record<string,
   const receipt = text.match(RECEIPT_ID)?.[0];
   if (receipt && /\bverif/i.test(text)) return { skill: "verify_receipt", arg: { receiptId: receipt } };
   if (receipt) return { skill: "get_receipt", arg: { receiptId: receipt } };
+  const target = text.match(CHECK_TARGET)?.[0];
+  if (target) return { skill: "check", arg: { target } };
   // A single token like "code-review" is a capability; free-form prose is not guessed at.
   const word = text.trim();
   if (word && !/\s/.test(word)) return { skill: "search_agents", arg: { capability: word } };
@@ -98,7 +110,7 @@ export function route(message: A2AMessage): { skill: string; arg: Record<string,
 }
 
 const HELP =
-  'Send a did:key to check an agent\'s reputation, a "sha256:<64 hex>" receipt id to fetch a receipt ("verify sha256:..." to check it), or a single capability word (e.g. "code-review") to find agents. Structured: {"agentId"}, {"receiptId"} or {"capability", "minReputation"} in a data part.';
+  'Send a did:key to check an agent\'s reputation, a "sha256:<64 hex>" receipt id to fetch a receipt ("verify sha256:..." to check it), an x402 URL or 0x wallet to check it before paying, or a single capability word (e.g. "code-review") to find agents. Structured: {"agentId"}, {"receiptId"}, {"target", "method"} or {"capability", "minReputation"} in a data part.';
 
 export function a2aHandler(app: Hono<AppEnv>) {
   return async (c: Context<AppEnv>) => {
@@ -139,6 +151,10 @@ export function a2aHandler(app: Hono<AppEnv>) {
         }
       } else if (r.skill === "verify_receipt") {
         result = await get(`/v1/receipts/${encodeURIComponent(r.arg.receiptId as string)}/verify`, { spec: r.arg.spec, output: r.arg.output });
+      } else if (r.skill === "check") {
+        const q = new URLSearchParams({ target: String(r.arg.target) });
+        if (typeof r.arg.method === "string") q.set("method", r.arg.method);
+        result = await get(`/v1/check?${q}`);
       } else {
         const q = new URLSearchParams();
         if (r.arg.capability) q.set("capability", String(r.arg.capability));

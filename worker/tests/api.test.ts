@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
 import { env } from "cloudflare:workers";
 import { createExecutionContext, waitOnExecutionContext } from "cloudflare:test";
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../src/index.js";
+import { route as a2aRoute } from "../src/a2a.js";
 import { generateKeypair, sha256Hex, sign, toBase64, fromBase64, publicKeyToDid, verify, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { generateP256Keypair, p256Sign } from "../../sdk-js/src/crypto/p256.js";
 import { generateSecp256k1Keypair, secp256k1Sign, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
@@ -2561,7 +2562,7 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
   it("lists only the read tools -- no tool that would need the caller's private key", async () => {
     const res = await mcp("tools/list");
     const names = (res.json.result.tools as { name: string }[]).map((t) => t.name).sort();
-    expect(names).toEqual(["inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents", "inam_verify_receipt"]);
+    expect(names).toEqual(["inam_check", "inam_check_reputation", "inam_get_receipt", "inam_hash_content", "inam_search_agents", "inam_verify_receipt"]);
     for (const t of res.json.result.tools) expect(t.annotations).toMatchObject({ readOnlyHint: true, destructiveHint: false });
   });
 
@@ -2622,7 +2623,7 @@ describe("hosted A2A endpoint (POST /a2a)", () => {
     expect(status).toBe(200);
     const card = json as { supportedInterfaces: { url: string; protocolBinding: string }[]; skills: { id: string }[] };
     expect(card.supportedInterfaces[0]).toMatchObject({ url: "https://api.inamprotocol.org/a2a", protocolBinding: "JSONRPC" });
-    expect(card.skills.map((s) => s.id).sort()).toEqual(["check_reputation", "get_receipt", "search_agents", "verify_receipt"]);
+    expect(card.skills.map((s) => s.id).sort()).toEqual(["check", "check_reputation", "get_receipt", "search_agents", "verify_receipt"]);
   });
 
   it("answers a did:key in text with the same reputation as the REST route (v1.0)", async () => {
@@ -2934,5 +2935,72 @@ describe("Web Bot Auth key directory", () => {
     const sig = fromBase64(res.headers.get("signature")!.match(/^sig1=:(.+):$/)![1]);
     const base = `"@authority";req: api.inamprotocol.org\n"@signature-params": ${params}`;
     expect(verifyRawEd25519(sig, new TextEncoder().encode(base), kp.publicKey)).toBe(true);
+  });
+});
+
+describe("hosted pre-payment check (GET /v1/check)", () => {
+  const PAYTO = "0x1111111111111111111111111111111111111111";
+  const required = { x402Version: 2, resource: { url: "https://seller.example/api" }, accepts: [{ scheme: "exact", network: "eip155:8453", amount: "10000", asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", payTo: PAYTO, extra: { name: "USDC" } }] };
+  const seen: { url: string; headers: Record<string, string> }[] = [];
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    seen.length = 0;
+  });
+  function stubOutbound() {
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      seen.push({ url: String(input), headers: (init.headers ?? {}) as Record<string, string> });
+      if (String(input).startsWith("https://seller.example/api")) return new Response("{}", { status: 402, headers: { "payment-required": btoa(JSON.stringify(required)) } });
+      if (String(input).startsWith("https://api.8004scan.io/")) return Response.json({ items: [] });
+      if (String(input) === "https://mainnet.base.org") return Response.json({ jsonrpc: "2.0", id: 1, result: "0x" + "0".repeat(64) });
+      return new Response("not found", { status: 404 });
+    });
+  }
+  async function check(query: string, e: object = env) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(new Request(`http://worker.test/v1/check?${query}`, { headers: { "cf-connecting-ip": crypto.randomUUID() } }), e as typeof env, ctx);
+    await waitOnExecutionContext(ctx);
+    return { status: res.status, cors: res.headers.get("access-control-allow-origin"), json: (await res.json()) as any };
+  }
+
+  it("checks an x402 URL with no INAM data: caution, per-line checks, a next step, cached on repeat", async () => {
+    stubOutbound();
+    const target = `https://seller.example/api?n=${crypto.randomUUID()}`;
+    const first = await check(`target=${encodeURIComponent(target)}&rdap=0`);
+    expect(first.status).toBe(200);
+    expect(first.cors).toBe("*");
+    expect(first.json).toMatchObject({ target, kind: "url", verdict: "caution", payment: { accepts: [{ payTo: PAYTO, price: "0.01 USDC" }] } });
+    expect(first.json.checks.find((c: { id: string }) => c.id === "inam.link").status).toBe("warn");
+    expect(first.json.next).toMatch(/ERC-8004|INAM ID/);
+    expect(first.json.cachedAt).toBeTypeOf("string");
+    // The registry lookup ran in-process, not over the network.
+    expect(seen.some((s) => s.url.startsWith("http://worker.test"))).toBe(false);
+
+    const calls = seen.length;
+    const second = await check(`target=${encodeURIComponent(target)}&rdap=0`);
+    expect(second.json.cachedAt).toBe(first.json.cachedAt);
+    expect(seen.length).toBe(calls);
+  });
+
+  it("signs outbound requests with Web Bot Auth when WEB_BOT_AUTH_KEY is set", async () => {
+    stubOutbound();
+    await check(`target=${encodeURIComponent(`https://seller.example/api?n=${crypto.randomUUID()}`)}&rdap=0`, { ...env, WEB_BOT_AUTH_KEY: "04".repeat(32) });
+    const seller = seen.find((s) => s.url.startsWith("https://seller.example/api"))!;
+    expect(seller.headers["Signature-Agent"]).toBe('"https://worker.test"');
+    expect(seller.headers.Signature).toBeTruthy();
+  });
+
+  it("is reachable as the A2A check skill from a URL or wallet in text, or a target data part", () => {
+    expect(a2aRoute({ parts: [{ text: "check https://seller.example/api before I pay" }] })).toEqual({ skill: "check", arg: { target: "https://seller.example/api" } });
+    expect(a2aRoute({ parts: [{ text: `is ${PAYTO} safe?` }] })).toEqual({ skill: "check", arg: { target: PAYTO } });
+    expect(a2aRoute({ parts: [{ data: { target: PAYTO, method: "POST" } }] })).toEqual({ skill: "check", arg: { target: PAYTO, method: "POST" } });
+  });
+
+  it("tells the caller what input is expected", async () => {
+    const missing = await check("");
+    expect(missing.status).toBe(400);
+    expect(missing.json.error.message).toMatch(/http\(s\) URL.*0x EVM wallet.*did:key/);
+    const bad = await check("target=hello");
+    expect(bad.status).toBe(400);
+    expect(bad.json.error.message).toMatch(/unrecognized target/);
   });
 });

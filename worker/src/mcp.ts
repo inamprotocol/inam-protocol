@@ -38,11 +38,12 @@ export function mcpHandler(app: Hono<AppEnv>) {
       getReceipt: (id) => get(`/v1/receipts/${encodeURIComponent(id)}`),
       listReceiptVerifications: (id) => get(`/v1/receipts/${encodeURIComponent(id)}/verifications`),
       verifyReceipt: (id, given) => get(`/v1/receipts/${encodeURIComponent(id)}/verify`, given),
+      check: ({ target, method }) => get(`/v1/check?${new URLSearchParams({ target, ...(method ? { method } : {}) })}`),
     };
 
     // Stateless: a fresh server + transport per request, no session ids.
     const server = new McpServer({ name: "inam-mcp", version: "0.5.1" });
-    for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, { ...READ_ONLY, title: t.title }, t.handler);
+    for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, { ...READ_ONLY, ...t.annotations, title: t.title }, t.handler);
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     await server.connect(transport);
     return transport.handleRequest(c.req.raw);

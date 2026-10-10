@@ -861,6 +861,42 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 
+  /check:
+    get:
+      operationId: checkTarget
+      summary: Pre-payment check of an x402 URL, EVM wallet or did:key from public signals (same report as `npx inamprotocol check --json`)
+      security: []
+      parameters:
+        - { name: target, in: query, required: true, schema: { type: string }, description: "x402 endpoint http(s) URL, 0x EVM wallet (40 hex), or did:key" }
+        - { name: method, in: query, required: false, schema: { type: string, enum: [GET, POST, HEAD], default: GET }, description: HTTP method used to request a URL target }
+        - { name: rdap, in: query, required: false, schema: { type: string, enum: ["0"] }, description: "0 skips the domain-age (RDAP) lookup" }
+      responses:
+        "200":
+          description: "Check report; cached up to 10 minutes (see cachedAt)"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  target: { type: string }
+                  kind: { type: string, enum: [url, wallet, did] }
+                  verdict: { type: string, enum: [pass, caution, fail], description: Worst status among the checks }
+                  checkedAt: { type: string, format: date-time }
+                  cachedAt: { type: string, format: date-time }
+                  next: { type: string, description: One suggested next step }
+                  payment: { type: object, description: "Parsed 402 payment requirements (URL targets)" }
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        status: { type: string, enum: [pass, warn, fail, info] }
+                        label: { type: string }
+                        detail: { type: string }
+        "400": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+
   /x402/report/{id}:
     get:
       operationId: getPaidReputationReport
