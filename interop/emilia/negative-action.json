@@ -1,0 +1,7 @@
+{
+  "action_type": "payment.release.1",
+  "amount": "50.01",
+  "currency": "USD",
+  "payee": "acct:merchant-42",
+  "provider_operation": "payments.transfer.create"
+}

@@ -1,0 +1,40 @@
+{
+  "receiptVersion": "1.0",
+  "receiptId": "sha256:dcb5faf7f72185ae26f7d0f0c78102c18c80039afb87d312d9f62686551e5a38",
+  "jobId": "emilia:consequence-admission-lifecycle-v0.1:AUTHZEN-EXACT-ACTION-ADMITTED-ONCE",
+  "agentA": {
+    "id": "did:key:z6MkkU9REcbGwMw6cyPF7XQs8E9uJKPSqQ72KrtVAJ81yXLz",
+    "role": "requester"
+  },
+  "agentB": {
+    "id": "did:key:z6Mkh2E9MnQbM7Vg3YGZdKGLTpKRqZqje6kN8jAqiv5Cskp5",
+    "role": "worker"
+  },
+  "task": {
+    "capability": "payment.release.1",
+    "specHash": "sha256:bde15cf1602289ce7958f691061640b3c40d6926ce8b3c3bbb844bf170b10c1a",
+    "createdAt": "2026-09-24T18:00:00Z"
+  },
+  "result": {
+    "outputHash": "sha256:245a40cce9ee9c8f5fcecd33e236dbfa2cb68befc09238a8387542086c21a273",
+    "completedAt": "2026-09-24T18:00:01Z"
+  },
+  "settlement": {
+    "amount": "50.00",
+    "currency": "USD"
+  },
+  "verification": {
+    "method": "payer_confirmation",
+    "outcome": "success"
+  },
+  "dispute": {
+    "status": "none",
+    "windowClosesAt": "2026-09-27T18:00:01Z"
+  },
+  "signatures": {
+    "agentB": "hrw23xynCpiCh0jMXsisAhS+9rVE+fxnsjdUsas5ywZlSGptmeHiWon+ITliXpqUFehcBVHoRQFkUy7JCO8qCQ==",
+    "agentA": "lOgrIb7zduOuK7O0DgwEm1EmMm5kfkkJfzR+aZt9Oj/RZp34MySG7gODfeOwlrwSiLrh68dOImgBDOUsgjtlBA=="
+  },
+  "status": "finalized",
+  "visibility": "public"
+}

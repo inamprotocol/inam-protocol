@@ -112,6 +112,11 @@ bash scripts/run-interop-demo.sh
 
 Registers a TypeScript-side "requester" and a Python-side "worker" (see `sdk-python/`) against the same live server, has the Python worker submit two signed Execution Receipt drafts, has the TypeScript requester countersign them, and prints the worker's resulting reputation. This is the real end-to-end proof that the protocol — not just one SDK — works: the server verifies Python-produced Ed25519 signatures, and both SDKs agree byte-for-byte on canonical JSON. See `sdk-python/tests/test_interop.py` for the same guarantee as a fast, no-server-required unit test.
 
+### Interop fixtures with neighboring protocols
+
+- [`interop/emilia/`](./interop/emilia): an EMILIA Gate-admitted action, copied unchanged from EMILIA's repo, and an INAM receipt whose `task.specHash` is the SHA-256 of that action's canonical bytes, with a one-byte negative case. `node interop/emilia/verify.mjs` checks both signatures and the binding offline, using only Node built-ins.
+- [`examples/agent-receipts-adapter.ts`](./examples/agent-receipts-adapter.ts): an Agent Receipts local receipt becomes an INAM draft signed with the same Ed25519 key. It becomes reputation-eligible only after the requester countersigns.
+
 ## Live deployment
 
 `worker/` is a second, independent implementation of the same API surface — Hono + Cloudflare D1 (SQL) + KV (idempotency cache), deployed to Cloudflare Workers — kept behaviorally identical to the Node reference server (same routes, same signature scheme, same reputation math; verified by running the demo and smoke-test scripts against both and diffing the output). It reuses `sdk-js/src/crypto/` and `sdk-js/src/core/receiptContent.ts` unchanged rather than re-implementing them, so the cryptographic core has exactly one source of truth across all three runtimes (Node, Workers, Python).
