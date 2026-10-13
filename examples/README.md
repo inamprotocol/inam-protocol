@@ -75,6 +75,10 @@ SPEC.md §11.3 for a [Google ADK](https://google.github.io/adk-docs/) agent: `ch
 
 SPEC.md §11.1 end to end, no chain writes: a requester and a provider each link an EVM address, finish one job, and the requester builds ERC-8004 `giveFeedback` arguments and the feedback file from the countersigned receipt. A reader then checks it with `verifyErc8004Feedback`: valid from the requester's wallet, rejected when the same file is replayed from another wallet. Send the printed arguments from any wallet in real use. Local registry only (`npm run dev`).
 
+## `agent-receipts-adapter.ts`
+
+Turns an [Agent Receipts](https://github.com/webaesbyamin/agent-receipts) local receipt into an INAM receipt, offline. The Ed25519 key that signed the Agent Receipts receipt becomes the worker's `did:key`, and its `input_hash`/`output_hash` (already `sha256:<hex>`) become `task.specHash`/`result.outputHash`. The worker signs the INAM draft with that same key. The requester recomputes both hashes from what it sent and received, then countersigns. A single-party local receipt is provenance only: it counts toward reputation only after the counterparty countersigns (SPEC.md §4.3). `cost_usd` is not mapped, because it is what the agent spent, not a payment between the two agents. The sample in [`agent-receipts-sample.json`](./agent-receipts-sample.json) uses their receipt shape and signing algorithm at commit `8bbb057`, signed with a test key. `npx tsx examples/agent-receipts-adapter.ts`; test: `tests/agentReceiptsAdapter.test.ts`.
+
 ## `payment-rails/`
 
 INAM is a receipt layer that works on any payment rail. Every agent checkout touches it at two points: **before payment**, `checkTrust` on the merchant's INAM ID returns allow, escrow or deny; **after delivery**, the merchant drafts a receipt whose `settlement.paymentRef` is the rail's own id and the buyer countersigns it (`acceptWork` refuses a different amount or currency). INAM never sees card data, tokens or mandates and moves no money, so it is not a payment processor.
