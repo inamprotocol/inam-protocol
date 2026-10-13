@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 from .canonical import canonicalize
 from .keys import Keypair, sha256_hex, sign, to_base64
 from .receipt import build_signable_content
+from .succession import succession_signing_bytes
 from .verification import build_signable_verification_content
 
 try:
@@ -131,6 +132,31 @@ class InamClient:
             {"reason": reason},
             idempotency_key=f"revoke:{self.did}",
         )
+
+    def succeed(self, successor: Keypair) -> Dict[str, Any]:
+        """Requests handing this client's INAM ID to a new key (SPEC.md
+        Section 2.3). `successor` must be a fresh, unregistered keypair; both
+        keys sign the succession statement. The succession is pending for 72
+        hours (``pendingSuccession`` on the returned record); this ID keeps
+        working until then, after which it signs nothing and
+        InamClient(url, successor) carries its history. Links (wallets, A2A
+        endpoint) do not carry over: re-prove them from the successor."""
+        data = succession_signing_bytes(self.did, successor.did)
+        return self._request(
+            "POST",
+            f"/v1/agents/{urllib.parse.quote(self.did, safe='')}/succeed",
+            {
+                "successor": successor.did,
+                "predecessorSignature": to_base64(sign(data, self.keypair.private_key)),
+                "successorSignature": to_base64(sign(data, successor.private_key)),
+            },
+            idempotency_key=f"succeed:{self.did}:{successor.did}",
+        )
+
+    def cancel_succession(self, reason: str) -> Dict[str, Any]:
+        """Cancels a pending succession (SPEC.md Section 2.3) by revoking this
+        ID: the identity is burned, not restored. Same call as revoke()."""
+        return self.revoke(reason)
 
     def set_verifier_status(self, target_agent_id: str, authorized: bool) -> Dict[str, Any]:
         """Grants or revokes `target_agent_id`'s verifier status (SPEC.md

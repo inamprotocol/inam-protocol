@@ -27,12 +27,13 @@ export interface TrustDecision {
   reputation?: ReputationResult;
 }
 
-export const DEFAULT_ESCROW_FLAGS = ["in_dispute", "attestation_rejected", "nonperformance_reported", "concentrated_counterparty"];
+export const DEFAULT_ESCROW_FLAGS = ["in_dispute", "attestation_rejected", "nonperformance_reported", "concentrated_counterparty", "succession_pending"];
 
 /** Pure policy check, for callers that already fetched the agent and its reputation. */
 export function decideTrust(agent: AgentRecord, reputation: ReputationResult, policy: TrustPolicy = {}): TrustDecision {
   const base = { did: agent.id, reputation };
   if (agent.revokedAt) return { ...base, decision: "deny", reasons: ["INAM ID is revoked"] };
+  if (agent.succeededBy) return { ...base, decision: "deny", reasons: [`INAM ID was succeeded by ${agent.succeededBy}`] };
 
   const escrowMiss = policyFailure(reputation, { minEvidence: "none", ...policy.escrow });
   if (escrowMiss) return { ...base, decision: "deny", reasons: [escrowMiss] };

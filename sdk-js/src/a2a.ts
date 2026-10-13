@@ -58,6 +58,7 @@ export function cardEndpoints(card: A2AAgentCardLike): string[] {
 export function decideA2A(card: A2AAgentCardLike, agent: AgentRecord, reputation: ReputationResult, policy: A2APolicy = {}): A2ADecision {
   const base = { did: agent.id, reputation };
   if (agent.revokedAt) return { ...base, allow: false, reason: "INAM ID is revoked" };
+  if (agent.succeededBy) return { ...base, allow: false, reason: `INAM ID was succeeded by ${agent.succeededBy}` };
   const linked = agent.linked.a2a_endpoint && normalize(agent.linked.a2a_endpoint);
   if (!linked || !cardEndpoints(card).some((u) => normalize(u) === linked)) {
     return { ...base, allow: false, reason: "no endpoint on this card is the a2a_endpoint the INAM ID linked" };

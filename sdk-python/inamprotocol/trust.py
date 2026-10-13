@@ -12,7 +12,7 @@ from .canonical import _format_number
 from .client import InamApiError
 
 EVIDENCE_RANK = {"none": 0, "countersigned": 1, "independently_verified": 2}
-DEFAULT_ESCROW_FLAGS = ["in_dispute", "attestation_rejected", "nonperformance_reported", "concentrated_counterparty"]
+DEFAULT_ESCROW_FLAGS = ["in_dispute", "attestation_rejected", "nonperformance_reported", "concentrated_counterparty", "succession_pending"]
 
 
 def policy_failure(reputation: Dict[str, Any], min_evidence: str = "countersigned", min_trust_score: float = 0) -> Optional[str]:
@@ -38,6 +38,8 @@ def decide_trust(
     base = {"did": agent["id"], "reputation": reputation}
     if agent.get("revokedAt"):
         return {**base, "decision": "deny", "reasons": ["INAM ID is revoked"]}
+    if agent.get("succeededBy"):
+        return {**base, "decision": "deny", "reasons": [f"INAM ID was succeeded by {agent['succeededBy']}"]}
 
     escrow_miss = policy_failure(reputation, **{"min_evidence": "none", **(escrow or {})})
     if escrow_miss:

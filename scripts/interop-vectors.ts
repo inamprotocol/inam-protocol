@@ -3,6 +3,7 @@ import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 import { buildSignableVerificationContent } from "../sdk-js/src/core/verificationContent.js";
 import { buildSignableContent } from "../sdk-js/src/core/receiptContent.js";
 import { buildErc8004Feedback } from "../sdk-js/src/erc8004.js";
+import { successionSigningBytes } from "../sdk-js/src/core/succession.js";
 import type { AgentRecord, ExecutionReceipt } from "../sdk-js/src/types.js";
 
 // Fixed 32-byte private key (all 0x01) purely for cross-language test vectors —
@@ -63,6 +64,16 @@ const erc8004 = buildErc8004Feedback(
   "2026-10-03T00:00:00.000Z",
 );
 
+// Key succession (SPEC.md §2.3): predecessor key 0x01.., successor key 0x02...
+const successionBytes = successionSigningBytes(requesterKey.did, providerKey.did);
+const succession = {
+  predecessor: requesterKey.did,
+  successor: providerKey.did,
+  canonical: new TextDecoder().decode(successionBytes),
+  predecessorSignature: toBase64(sign(successionBytes, requesterKey.privateKey)),
+  successorSignature: toBase64(sign(successionBytes, providerKey.privateKey)),
+};
+
 console.log(
   JSON.stringify(
     {
@@ -78,6 +89,7 @@ console.log(
         signatureBase64: toBase64(verificationSignature),
       },
       erc8004: { receipt: erc8004Receipt, fileText: erc8004.fileText, feedbackHash: erc8004.feedbackHash },
+      succession,
     },
     null,
     2,

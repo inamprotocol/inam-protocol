@@ -3,7 +3,8 @@ import { getAgent } from "./agentService.js";
 import { listByAgent } from "./receiptService.js";
 import { listNonPerformanceAgainst } from "./jobService.js";
 import { attestationVerdict } from "./verificationService.js";
-import { transparencyLog } from "../storage/db.js";
+import { transparencyLog, successionMap } from "../storage/db.js";
+import { headOf, lineageOf, type SuccessionMap } from "../../sdk-js/src/core/succession.js";
 import { evidenceLevel } from "../../sdk-js/src/core/attestation.js";
 import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
 import { isDisputeActive, type DisputeCheckable } from "../../sdk-js/src/core/disputeLifecycle.js";
@@ -52,7 +53,21 @@ function clamp(n: number, lo: number, hi: number): number {
  * finalized receipt outside this cluster (or stake). Multi-hop rings with
  * one real outside receipt per member remain out of scope (SPEC.md §5.2).
  */
-function isAnchoredCounterparty(agentId: string, excludeIds: ReadonlySet<string>): boolean {
+/**
+ * SPEC.md §2.3 (v0.42): an ID's evidence is every receipt of its lineage
+ * (itself and its predecessors), and a counterparty is counted under the
+ * head of its own chain. Succession therefore neither adds nor removes
+ * evidence: one identity, one history, whichever key currently holds it.
+ */
+function lineageReceipts(ids: readonly string[]) {
+  const byId = new Map(ids.flatMap((id) => listByAgent(id)).map((r) => [r.receiptId, r]));
+  return [...byId.values()];
+}
+function otherParty(r: { agentA: { id: string }; agentB: { id: string } }, self: ReadonlySet<string>, succ: SuccessionMap): string {
+  return headOf(self.has(r.agentA.id) ? r.agentB.id : r.agentA.id, succ);
+}
+
+function isAnchoredCounterparty(agentId: string, excludeIds: ReadonlySet<string>, succ: SuccessionMap): boolean {
   const agent = (() => {
     try {
       return getAgent(agentId);
@@ -62,9 +77,11 @@ function isAnchoredCounterparty(agentId: string, excludeIds: ReadonlySet<string>
   })();
   if (!agent) return false;
   if (agent.stakeUsd > 0) return true;
-  return listByAgent(agentId)
+  const self = lineageOf(agentId, succ);
+  const selfSet = new Set(self);
+  return lineageReceipts(self)
     .filter(countsTowardReputation)
-    .some((r) => !excludeIds.has(r.agentA.id === agentId ? r.agentB.id : r.agentA.id));
+    .some((r) => !excludeIds.has(otherParty(r, selfSet, succ)));
 }
 
 /**
@@ -76,7 +93,7 @@ function isAnchoredCounterparty(agentId: string, excludeIds: ReadonlySet<string>
  * interaction graph is the natural next step once there's enough volume for
  * it to matter.
  */
-function baseTrust(agentId: string): number {
+function baseTrust(agentId: string, succ: SuccessionMap): number {
   const agent = (() => {
     try {
       return getAgent(agentId);
@@ -86,7 +103,7 @@ function baseTrust(agentId: string): number {
   })();
   if (!agent) return 0.05; // unregistered/unknown counterparty: minimal, not zero, trust
 
-  const finalized = listByAgent(agentId).filter(countsTowardReputation);
+  const finalized = lineageReceipts(lineageOf(agentId, succ)).filter(countsTowardReputation);
   const successCount = finalized.filter((r) => r.verification.outcome === "success").length;
   const successRatio = finalized.length > 0 ? successCount / finalized.length : 0.5; // neutral prior for a brand-new agent
 
@@ -98,7 +115,10 @@ function baseTrust(agentId: string): number {
 
 export function computeReputation(agentId: string): ReputationResult {
   const record = getAgent(agentId);
-  const all = listByAgent(agentId);
+  const succ = successionMap();
+  const lineage = lineageOf(agentId, succ);
+  const self = new Set(lineage);
+  const all = lineageReceipts(lineage);
   const finalized = all.filter(countsTowardReputation);
   const disputedCount = all.filter((r) => isDisputeActive(r)).length;
 
@@ -110,7 +130,7 @@ export function computeReputation(agentId: string): ReputationResult {
 
   const pairCounts = new Map<string, number>();
   for (const r of finalized) {
-    const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
+    const counterparty = otherParty(r, self, succ);
     pairCounts.set(counterparty, (pairCounts.get(counterparty) ?? 0) + 1);
   }
 
@@ -143,8 +163,8 @@ export function computeReputation(agentId: string): ReputationResult {
   // isAnchoredCounterparty.
   const unanchored = new Set<string>();
   if (finalized.length >= 3) {
-    const excludeIds = new Set<string>([agentId, ...pairCounts.keys()]);
-    for (const counterparty of pairCounts.keys()) if (!isAnchoredCounterparty(counterparty, excludeIds)) unanchored.add(counterparty);
+    const excludeIds = new Set<string>([...self, headOf(agentId, succ), ...pairCounts.keys()]);
+    for (const counterparty of pairCounts.keys()) if (!isAnchoredCounterparty(counterparty, excludeIds, succ)) unanchored.add(counterparty);
   }
 
   let weightedSuccessSum = 0;
@@ -184,7 +204,7 @@ export function computeReputation(agentId: string): ReputationResult {
   function cachedBaseTrust(counterparty: string): number {
     const cached = trustCache.get(counterparty);
     if (cached !== undefined) return cached;
-    const trust = baseTrust(counterparty);
+    const trust = baseTrust(counterparty, succ);
     trustCache.set(counterparty, trust);
     return trust;
   }
@@ -193,7 +213,7 @@ export function computeReputation(agentId: string): ReputationResult {
   let excludedAttestations = 0;
   let rejectedAttestationCount = 0;
   for (const r of finalized) {
-    const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
+    const counterparty = otherParty(r, self, succ);
     const pairCount = pairCounts.get(counterparty) ?? 1;
     // Sub-linear pair weight: total contribution from one counterparty grows
     // with log(pairCount), not linearly — repeated wash-trading-style
@@ -250,7 +270,7 @@ export function computeReputation(agentId: string): ReputationResult {
     weightSum += weight;
     accrueVolume(volumeByCurrency, r.settlement);
 
-    if (r.agentB.id === agentId) {
+    if (self.has(r.agentB.id)) {
       asProviderWeightedSuccessSum += weight * outcomeScore;
       asProviderWeightSum += weight;
       accrueVolume(asProviderVolumeByCurrency, r.settlement);
@@ -270,8 +290,9 @@ export function computeReputation(agentId: string): ReputationResult {
   // report barely moves the score. Deduped to one per poster so repeat
   // reports from a single requester don't compound, the same class of bug
   // the wash-trading cap (v0.20) closed on the positive side.
-  const nonPerformanceReports = listNonPerformanceAgainst(agentId);
-  const reportingPosters = new Set(nonPerformanceReports.map((j) => j.postedBy));
+  // Reports against any ID in the lineage follow it (§2.3), deduped per poster chain.
+  const nonPerformanceReports = lineage.flatMap((id) => listNonPerformanceAgainst(id));
+  const reportingPosters = new Set(nonPerformanceReports.map((j) => headOf(j.postedBy, succ)));
   for (const posterId of reportingPosters) {
     let weight = cachedBaseTrust(posterId);
     if (!Number.isFinite(weight)) weight = 0;
@@ -300,6 +321,9 @@ export function computeReputation(agentId: string): ReputationResult {
   }
   if (disputedCount > 0) flags.push("in_dispute");
   if (record.revokedAt) flags.push("revoked");
+  if (record.succeededBy) flags.push(`succeeded:${record.succeededBy}`);
+  if (record.pendingSuccession) flags.push(`succession_pending:${record.pendingSuccession.successor}`);
+  for (const id of lineage.slice(1)) flags.push(`inherited_from:${id}`);
   if (nonPerformanceReports.length > 0) flags.push("nonperformance_reported");
   if (rejectedAttestationCount > 0) flags.push("attestation_rejected");
 

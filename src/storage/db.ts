@@ -114,7 +114,8 @@ class AgentsRepo extends Repo<AgentRecord> {
     try {
       conn
         .prepare("INSERT INTO agents (id, data, revoked) VALUES (?, ?, ?) ON CONFLICT(id) DO UPDATE SET data = excluded.data, revoked = excluded.revoked")
-        .run(id, JSON.stringify(value), value.revokedAt ? 1 : 0);
+        // `revoked` means "retired from search": revoked or succeeded (SPEC.md §2.2, §2.3).
+        .run(id, JSON.stringify(value), value.revokedAt || value.succeededBy ? 1 : 0);
       conn.prepare("DELETE FROM agent_capabilities WHERE agent_id = ?").run(id);
       const insertCap = conn.prepare("INSERT INTO agent_capabilities (agent_id, capability) VALUES (?, ?)");
       for (const capability of value.capabilities) insertCap.run(id, capability);
@@ -144,6 +145,26 @@ class AgentsRepo extends Repo<AgentRecord> {
     const records = this.rowsToRecords(rows);
     return query.supports ? records.filter((a) => query.supports! in a.linked) : records;
   }
+}
+
+/** SPEC.md §2.3: predecessor -> successor for every succession. ponytail:
+ *  full scan of agents; add an indexed column if successions grow common. */
+export function successionMap(): Map<string, string> {
+  const rows = conn
+    .prepare("SELECT id, json_extract(data, '$.succeededBy') AS s FROM agents WHERE json_extract(data, '$.succeededBy') IS NOT NULL")
+    .all() as Array<{ id: string; s: string }>;
+  return new Map(rows.map((r) => [r.id, r.s]));
+}
+
+/** SPEC.md §2.3: is `did` the successor named in some pending succession? */
+export function isPendingSuccessor(did: string): boolean {
+  return conn.prepare("SELECT 1 FROM agents WHERE json_extract(data, '$.pendingSuccession.successor') = ?").get(did) !== undefined;
+}
+
+/** SPEC.md §2.3: predecessors whose succession window has closed by `nowIso`. */
+export function dueSuccessions(nowIso: string): AgentRecord[] {
+  const rows = conn.prepare("SELECT data FROM agents WHERE json_extract(data, '$.pendingSuccession.effectiveAt') <= ?").all(nowIso) as Array<{ data: string }>;
+  return rows.map((r) => JSON.parse(r.data) as AgentRecord);
 }
 
 class ReceiptsRepo extends Repo<ExecutionReceipt> {

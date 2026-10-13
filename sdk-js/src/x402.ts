@@ -49,6 +49,8 @@ export function inamX402Extension(did: string) {
 export function decideX402(agent: AgentRecord, reputation: ReputationResult, payTo: string[], policy: X402Policy = {}): X402Decision {
   const base = { did: agent.id, reputation };
   if (agent.revokedAt) return { ...base, allow: false, reason: "payee INAM ID is revoked" };
+  // SPEC.md §2.3: a succeeded ID is retired; the payee must name its successor, whose wallet link is its own proof.
+  if (agent.succeededBy) return { ...base, allow: false, reason: `payee INAM ID was succeeded by ${agent.succeededBy}` };
   const bound = agent.linked.erc8004_id?.toLowerCase();
   if (!bound || !payTo.some((a) => a.toLowerCase() === bound)) {
     return { ...base, allow: false, reason: "payTo is not an address this INAM ID proved control of" };
