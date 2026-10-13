@@ -30,8 +30,23 @@ CREATE TABLE IF NOT EXISTS agents (
   -- production `agents` table needs these added via
   -- migration-add-revocation.sql before deploying code that reads/writes them.
   revoked_at TEXT,
-  revocation_reason TEXT
+  revocation_reason TEXT,
+  -- Key succession (SPEC.md §2.3). pending_* hold a requested succession
+  -- during its window (pending_succession is the JSON statement); on
+  -- activation succeeded_by/succeeded_at are set on the predecessor and
+  -- succession (the statement both keys signed) on the new successor row.
+  -- Existing databases: migration-add-succession.sql.
+  succeeded_by TEXT,
+  succeeded_at TEXT,
+  succession TEXT,
+  pending_successor TEXT,
+  pending_effective_at TEXT,
+  pending_succession TEXT
 );
+
+-- Lazy activation looks up due successions on every request (SPEC.md §2.3).
+CREATE INDEX IF NOT EXISTS idx_agents_pending_effective_at ON agents(pending_effective_at) WHERE pending_effective_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_agents_pending_successor ON agents(pending_successor) WHERE pending_successor IS NOT NULL;
 
 -- One row per (agent, capability), so `capability` search (agentService.ts's
 -- searchAgents, audit #14) can use an index instead of pulling every agent

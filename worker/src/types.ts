@@ -1,4 +1,5 @@
 import type { EvidenceLevel, EvidenceDimensions } from "../../sdk-js/src/core/attestation.js";
+import type { PendingSuccession, SuccessionRecord } from "../../sdk-js/src/core/succession.js";
 export interface LinkedIdentities {
   agentpass_id?: string;
   aitp_id?: string;
@@ -69,6 +70,16 @@ export interface AgentRecord {
    * (SPEC.md §2.2). Absent for an active agent. */
   revokedAt?: string;
   revocationReason?: string;
+  /** SPEC.md §2.3 (v0.42): set on a predecessor that handed its identity to
+   * this successor ID. Like `revokedAt`, the ID can sign nothing further. */
+  succeededBy?: string;
+  succeededAt?: string;
+  /** SPEC.md §2.3: set on a successor -- the statement both keys signed,
+   * naming its predecessor. Verifiable offline with verifySuccession(). */
+  succession?: SuccessionRecord;
+  /** SPEC.md §2.3: a requested succession still inside its window. The ID
+   * works normally until `effectiveAt`; revoking before then cancels it. */
+  pendingSuccession?: PendingSuccession;
 }
 
 /** SPEC.md §4.1 — the receipt's own self-declared claim of how its parties

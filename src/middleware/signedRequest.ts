@@ -83,6 +83,10 @@ export function requireSignedRequest(req: Request, _res: Response, next: NextFun
   if (record?.revokedAt) {
     throw forbidden("AGENT_REVOKED", `This INAM ID was revoked at ${record.revokedAt} and can no longer perform signed operations`);
   }
+  // SPEC.md §2.3: a succeeded ID is retired the same way; its successor signs from now on.
+  if (record?.succeededBy) {
+    throw forbidden("AGENT_SUCCEEDED", `This INAM ID was succeeded by ${record.succeededBy} at ${record.succeededAt} and can no longer perform signed operations`);
+  }
 
   req.agentDid = agentDid;
   next();

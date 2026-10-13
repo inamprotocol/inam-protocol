@@ -24,6 +24,14 @@ export const revokeAgentSchema = z.object({
   reason: z.string().min(1).max(500),
 });
 
+// SPEC.md §2.3 (v0.42): both keys sign the succession statement
+// (core/succession.ts); the request itself is signed by the predecessor.
+export const succeedAgentSchema = z.object({
+  successor: z.string().startsWith("did:key:z"),
+  predecessorSignature: z.string().min(1),
+  successorSignature: z.string().min(1),
+});
+
 export const registerAgentSchema = z.object({
   capabilities: z.array(z.string().min(1)).min(1),
   metadata: z.record(z.unknown()).optional(),

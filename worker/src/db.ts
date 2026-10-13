@@ -1,3 +1,4 @@
+import type { PendingSuccession } from "../../sdk-js/src/core/succession.js";
 import type { AgentRecord, Env, ExecutionReceipt, JobOffer, JobRecord, LinkChallengeRecord, VerificationRecord } from "./types.js";
 
 const UNIQUE_VIOLATION = "UNIQUE constraint failed";
@@ -65,15 +66,96 @@ export async function updateAgentVerifierStatus(env: Env, id: string, authorized
 }
 
 /** Compare-and-swap: only sets the tombstone if the agent isn't already
- *  revoked, so a racing double revoke can't clobber the first reason/time.
- *  Returns false if the row was already revoked. */
+ *  revoked or succeeded, so a racing double revoke can't clobber the first
+ *  reason/time. A pending succession (SPEC.md §2.3) is cancelled in the same
+ *  write, but only while its window is still open at `at`, so a revoke can't
+ *  slip in after the deadline ahead of the lazy activation. Returns false if
+ *  nothing changed. */
 export async function revokeAgentIfActive(env: Env, id: string, reason: string, at: string): Promise<boolean> {
   const result = await env.DB.prepare(
-    "UPDATE agents SET revoked_at = ?, revocation_reason = ? WHERE id = ? AND revoked_at IS NULL",
+    `UPDATE agents SET revoked_at = ?, revocation_reason = ?, pending_successor = NULL, pending_effective_at = NULL, pending_succession = NULL
+     WHERE id = ? AND revoked_at IS NULL AND succeeded_by IS NULL AND (pending_effective_at IS NULL OR pending_effective_at > ?)`,
   )
-    .bind(at, reason, id)
+    .bind(at, reason, id, at)
     .run();
   return (result.meta.changes ?? 0) > 0;
+}
+
+/** SPEC.md §2.3 step 1: record a pending succession. CAS on "no pending,
+ *  not succeeded, not revoked", so a second request during the window fails. */
+export async function requestSuccessionIfIdle(env: Env, predecessorId: string, pending: PendingSuccession): Promise<boolean> {
+  const result = await env.DB.prepare(
+    `UPDATE agents SET pending_successor = ?, pending_effective_at = ?, pending_succession = ?
+     WHERE id = ? AND pending_successor IS NULL AND succeeded_by IS NULL AND revoked_at IS NULL`,
+  )
+    .bind(pending.successor, pending.effectiveAt, JSON.stringify(pending), predecessorId)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/** Is `did` named as the successor of some pending succession? Such a DID
+ *  may not register or be named again until the succession resolves. */
+export async function isPendingSuccessor(env: Env, did: string): Promise<boolean> {
+  return (await env.DB.prepare("SELECT 1 FROM agents WHERE pending_successor = ?").bind(did).first()) !== null;
+}
+
+/** Predecessors whose succession window has closed by `nowIso`. Indexed. */
+export async function dueSuccessions(env: Env, nowIso: string): Promise<AgentRecord[]> {
+  const { results } = await env.DB.prepare("SELECT * FROM agents WHERE pending_effective_at <= ?").bind(nowIso).all();
+  return results.map(rowToAgent);
+}
+
+/** SPEC.md §2.3 step 2: activate a due succession in one D1 transaction.
+ *  The CAS UPDATE goes first; the successor row is inserted only if the
+ *  predecessor now points at it, so two racing activations can't both
+ *  succeed. Returns "activated", "lost" (another request activated or the
+ *  ID was revoked first) or "successor_taken" (the successor DID got
+ *  registered meanwhile; the caller abandons the succession). */
+export async function activateSuccession(env: Env, predecessor: AgentRecord, successor: AgentRecord): Promise<"activated" | "lost" | "successor_taken"> {
+  const p = predecessor.pendingSuccession!;
+  const owned = "EXISTS (SELECT 1 FROM agents WHERE id = ? AND succeeded_by = ? AND succeeded_at = ?)";
+  try {
+    const [update] = await env.DB.batch([
+      env.DB.prepare(
+        `UPDATE agents SET succeeded_by = pending_successor, succeeded_at = pending_effective_at, pending_successor = NULL, pending_effective_at = NULL, pending_succession = NULL
+         WHERE id = ? AND pending_successor = ? AND pending_effective_at = ? AND revoked_at IS NULL`,
+      ).bind(predecessor.id, p.successor, p.effectiveAt),
+      env.DB.prepare(
+        `INSERT INTO agents (id, capabilities, metadata, linked, linked_proof, stake_usd, created_at, is_authorized_verifier, succession)
+         SELECT ?, ?, ?, '{}', '{}', 0, ?, 0, ? WHERE ${owned}`,
+      ).bind(successor.id, JSON.stringify(successor.capabilities), JSON.stringify(successor.metadata), successor.createdAt, JSON.stringify(successor.succession), predecessor.id, p.successor, p.effectiveAt),
+      ...successor.capabilities.map((capability) =>
+        env.DB.prepare(`INSERT INTO agent_capabilities (agent_id, capability) SELECT ?, ? WHERE ${owned}`).bind(successor.id, capability, predecessor.id, p.successor, p.effectiveAt),
+      ),
+    ]);
+    return (update.meta.changes ?? 0) > 0 ? "activated" : "lost";
+  } catch (err) {
+    if (!(err instanceof Error && err.message.includes(UNIQUE_VIOLATION))) throw err;
+    // Rolled back. Either a racing activation already committed (the
+    // predecessor now has succeeded_by) or the successor registered itself.
+    const now = await getAgent(env, predecessor.id);
+    if (now?.succeededBy || !now?.pendingSuccession) return "lost";
+    return "successor_taken";
+  }
+}
+
+/** Drop a pending succession that can no longer activate. CAS on the same pending entry. */
+export async function abandonSuccession(env: Env, predecessorId: string, successor: string): Promise<boolean> {
+  const result = await env.DB.prepare(
+    "UPDATE agents SET pending_successor = NULL, pending_effective_at = NULL, pending_succession = NULL WHERE id = ? AND pending_successor = ?",
+  )
+    .bind(predecessorId, successor)
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+/** Every succession in the registry, predecessor -> successor. Successions
+ *  are rare, so reputation loads them all once per computation instead of
+ *  one lookup per counterparty. ponytail: full list per call; cache it if
+ *  successions ever number in the thousands. */
+export async function successionMap(env: Env): Promise<Map<string, string>> {
+  const { results } = await env.DB.prepare("SELECT id, succeeded_by FROM agents WHERE succeeded_by IS NOT NULL").all<{ id: string; succeeded_by: string }>();
+  return new Map(results.map((r) => [r.id, r.succeeded_by]));
 }
 
 export async function allAgents(env: Env): Promise<AgentRecord[]> {
@@ -89,7 +171,7 @@ export async function allAgents(env: Env): Promise<AgentRecord[]> {
 export async function searchAgentsByCapability(env: Env, capability: string, includeRevoked: boolean): Promise<AgentRecord[]> {
   const { results } = await env.DB.prepare(
     `SELECT a.* FROM agents a JOIN agent_capabilities c ON c.agent_id = a.id
-     WHERE c.capability = ? ${includeRevoked ? "" : "AND a.revoked_at IS NULL"}`,
+     WHERE c.capability = ? ${includeRevoked ? "" : "AND a.revoked_at IS NULL AND a.succeeded_by IS NULL"}`,
   )
     .bind(capability)
     .all();
@@ -534,5 +616,8 @@ function rowToAgent(row: Record<string, unknown>): AgentRecord {
     createdAt: row.created_at as string,
     isAuthorizedVerifier: Boolean(row.is_authorized_verifier),
     ...(row.revoked_at ? { revokedAt: row.revoked_at as string, revocationReason: (row.revocation_reason as string) ?? undefined } : {}),
+    ...(row.succeeded_by ? { succeededBy: row.succeeded_by as string, succeededAt: row.succeeded_at as string } : {}),
+    ...(row.succession ? { succession: JSON.parse(row.succession as string) } : {}),
+    ...(row.pending_succession ? { pendingSuccession: JSON.parse(row.pending_succession as string) } : {}),
   };
 }

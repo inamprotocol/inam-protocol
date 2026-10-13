@@ -1,15 +1,21 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { agents, linkChallenges } from "../storage/db.js";
+import { agents, linkChallenges, isPendingSuccessor, dueSuccessions } from "../storage/db.js";
 import { config } from "../config.js";
 import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.js";
 import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
 import { secp256k1Verify, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
+import * as transparencyService from "./transparencyService.js";
+import { SUCCESSION_TYPE, SUCCESSION_WINDOW_MS, successionClock, verifySuccession, type PendingSuccession, type SuccessionRecord } from "../../sdk-js/src/core/succession.js";
 import type { AgentRecord, ExternalKeyType, LinkChallenge, LinkedIdentities, LinkedIdentityProofs, LinkProof } from "../types.js";
 
 export function registerAgent(callerDid: string, input: { capabilities: string[]; metadata?: Record<string, unknown> }): AgentRecord {
   if (agents.has(callerDid)) {
     throw conflict("AGENT_ALREADY_REGISTERED", `Agent ${callerDid} is already registered`);
+  }
+  // SPEC.md §2.3: a pending successor is created by activation, never registered directly.
+  if (isPendingSuccessor(callerDid)) {
+    throw conflict("SUCCESSION_PENDING", `${callerDid} is named as the successor in a pending succession and is created when it takes effect`);
   }
   const record: AgentRecord = {
     id: callerDid,
@@ -52,6 +58,7 @@ export function setVerifierStatus(callerDid: string, targetAgentId: string, auth
   }
   const record = getAgent(targetAgentId);
   if (record.revokedAt) throw conflict("AGENT_REVOKED", `Agent ${targetAgentId} was revoked at ${record.revokedAt}`);
+  if (record.succeededBy) throw conflict("AGENT_SUCCEEDED", `Agent ${targetAgentId} was succeeded by ${record.succeededBy}`);
   const updated: AgentRecord = { ...record, isAuthorizedVerifier: authorized };
   agents.set(targetAgentId, updated);
   return updated;
@@ -69,10 +76,74 @@ export function setVerifierStatus(callerDid: string, targetAgentId: string, auth
  */
 export function revokeAgent(callerDid: string, reason: string): AgentRecord {
   const record = getAgent(callerDid);
+  if (record.succeededBy) throw conflict("AGENT_SUCCEEDED", `This INAM ID was succeeded by ${record.succeededBy}`);
   if (record.revokedAt) throw conflict("AGENT_REVOKED", `This INAM ID was already revoked at ${record.revokedAt}`);
-  const updated: AgentRecord = { ...record, revokedAt: new Date().toISOString(), revocationReason: reason };
+  const at = new Date(successionClock.now()).toISOString();
+  const { pendingSuccession, ...rest } = record;
+  const updated: AgentRecord = { ...rest, revokedAt: at, revocationReason: reason };
   agents.set(callerDid, updated);
+  // SPEC.md §2.3: revoking during the window is how the old key cancels a succession.
+  if (pendingSuccession) transparencyService.appendEntry("agent_succession_cancelled", callerDid, { ...pendingSuccession, cancelledAt: at });
   return updated;
+}
+
+/**
+ * Key succession, step 1 (SPEC.md §2.3): the predecessor (the caller,
+ * already checked by requireSignedRequest to be neither revoked nor
+ * succeeded) requests a succession to a new, unregistered key. Both keys
+ * must have signed the statement. Nothing moves yet: the request is pending
+ * for SUCCESSION_WINDOW_MS, the predecessor keeps working, and revoking it
+ * in the meantime cancels the succession and burns the ID. Single-process
+ * and synchronous, so no CAS is needed (the Worker's db.ts has the
+ * concurrent version).
+ */
+export function requestSuccession(callerDid: string, input: { successor: string; predecessorSignature: string; successorSignature: string }): AgentRecord {
+  const predecessor = getAgent(callerDid);
+  const succession: SuccessionRecord = { type: SUCCESSION_TYPE, predecessor: callerDid, ...input };
+  if (!verifySuccession(succession)) {
+    throw badRequest("SUCCESSION_INVALID", "predecessorSignature and successorSignature must both verify over the succession statement, and successor must differ from predecessor");
+  }
+  if (agents.has(input.successor) || isPendingSuccessor(input.successor)) {
+    throw conflict("AGENT_ALREADY_REGISTERED", `Successor ${input.successor} is already registered or already named in a pending succession; a successor must be a new ID`);
+  }
+  if (predecessor.pendingSuccession) throw conflict("SUCCESSION_PENDING", "This INAM ID already has a pending succession");
+  const now = successionClock.now();
+  const pending: PendingSuccession = {
+    ...succession,
+    requestedAt: new Date(now).toISOString(),
+    effectiveAt: new Date(now + SUCCESSION_WINDOW_MS).toISOString(),
+  };
+  const updated: AgentRecord = { ...predecessor, pendingSuccession: pending };
+  agents.set(callerDid, updated);
+  transparencyService.appendEntry("agent_succession_pending", callerDid, pending);
+  return updated;
+}
+
+/**
+ * Key succession, step 2 (SPEC.md §2.3): activate every succession whose
+ * window has closed. Lazy: server.ts calls this before every /v1 request.
+ * The successor starts with the predecessor's capabilities and metadata but
+ * no links, stake or verifier grant: each of those was proven or granted to
+ * the old key, not the new one.
+ */
+export function activateDueSuccessions(): void {
+  for (const predecessor of dueSuccessions(new Date(successionClock.now()).toISOString())) {
+    const { pendingSuccession, ...rest } = predecessor;
+    const { requestedAt: _r, effectiveAt, ...succession } = pendingSuccession!;
+    agents.set(predecessor.id, { ...rest, succeededBy: succession.successor, succeededAt: effectiveAt });
+    agents.set(succession.successor, {
+      id: succession.successor,
+      capabilities: predecessor.capabilities,
+      metadata: predecessor.metadata,
+      linked: {},
+      linkedProof: {},
+      stakeUsd: 0,
+      createdAt: effectiveAt,
+      isAuthorizedVerifier: false,
+      succession,
+    });
+    transparencyService.appendEntry("agent_succeeded", predecessor.id, succession);
+  }
 }
 
 const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "erc8004_id", "a2a_endpoint"] as const;

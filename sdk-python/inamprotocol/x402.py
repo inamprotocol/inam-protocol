@@ -30,6 +30,8 @@ def decide_x402(
     base = {"did": agent["id"], "reputation": reputation}
     if agent.get("revokedAt"):
         return {**base, "allow": False, "reason": "payee INAM ID is revoked"}
+    if agent.get("succeededBy"):  # SPEC.md 2.3: retired; the payee must name its successor
+        return {**base, "allow": False, "reason": f"payee INAM ID was succeeded by {agent['succeededBy']}"}
     bound = (agent.get("linked") or {}).get("erc8004_id")
     if not bound or bound.lower() not in (a.lower() for a in pay_to):
         return {**base, "allow": False, "reason": "payTo is not an address this INAM ID proved control of"}

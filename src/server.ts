@@ -1,6 +1,7 @@
 import express from "express";
 import pkg from "../package.json" with { type: "json" };
 import { agentsRouter } from "./routes/agents.js";
+import { activateDueSuccessions } from "./services/agentService.js";
 import { receiptsRouter } from "./routes/receipts.js";
 import { jobsRouter } from "./routes/jobs.js";
 import { verificationsRouter } from "./routes/verifications.js";
@@ -31,6 +32,12 @@ export function createServer() {
       },
     }),
   );
+
+  // SPEC.md §2.3: successions take effect lazily, before any route sees the registry.
+  app.use("/v1", (_req, _res, next) => {
+    activateDueSuccessions();
+    next();
+  });
 
   app.get("/v1/health", (_req, res) => res.json({ status: "ok", version: pkg.version }));
   app.use("/v1/agents", agentsRouter);

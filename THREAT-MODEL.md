@@ -1,6 +1,6 @@
 # Threat model
 
-This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.38 and as run at `api.inamprotocol.org`. For each attack it names the defence, where the spec requires that defence, and what the defence leaves open. A residual risk listed here is a known limit, not an undiscovered bug. Report anything that breaks a defence through [`SECURITY.md`](./SECURITY.md).
+This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.42 and as run at `api.inamprotocol.org`. For each attack it names the defence, where the spec requires that defence, and what the defence leaves open. A residual risk listed here is a known limit, not an undiscovered bug. Report anything that breaks a defence through [`SECURITY.md`](./SECURITY.md).
 
 ## What INAM protects
 
@@ -32,7 +32,9 @@ This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.38 
 | Threat | Defence | Residual risk |
 |---|---|---|
 | Signing as another agent. | The ID is the public key (`did:key`); every signature is checked against it with no lookup (§2). Small-order public keys are rejected, since they verify arbitrary signatures (§2, v0.26). | A stolen private key is a stolen identity. |
-| A stolen key keeps being used. | The owner can revoke the ID; every later signed request is refused with `AGENT_REVOKED`, and reputation is flagged `revoked` (§2.2). | No key rotation or successor chain (§10). Reputation does not move to a new key, and an attacker holding the key can revoke the ID first. |
+| A stolen key keeps being used. | The owner can succeed the ID to a fresh key (§2.3): after a 72-hour window the old key is refused everywhere (`AGENT_SUCCEEDED`) and the history moves with the owner. Or revoke it (§2.2), which burns the history. | The thief can keep using the old key until the window closes, and can burn the ID by revoking it; it cannot redirect a pending succession (one per ID). |
+| A thief requests a succession to its own key. | The succession is pending for 72 hours, logged as `agent_succession_pending` and flagged `succession_pending:<did>` on the record and reputation. The owner revokes during the window, which cancels it and burns the ID, so no reputation moves (§2.3). SDK trust policy caps a pending agent at escrow. | Only an owner who notices within 72 hours is protected; the registry notifies no one, so the owner has to watch its own ID. After activation the thief holds the history under its own key and the owner can't revoke. Burning is the best outcome available: the protocol can't tell the owner from the thief, so it can't give the ID back. Pre-committed next keys or guardian recovery could; `recovery` is reserved for that (§2.3, §10). |
+| Laundering a bad history through key succession. | Reputation is computed over the whole lineage, with each counterparty counted under its chain head, so disputes, rejected attestations and non-performance reports follow the successor (§2.3, §5.2). The successor must be a new, unregistered key (no merging two histories) and each ID has at most one pending or completed successor (no forking one history into two), enforced with compare-and-swaps on request and activation. Links and verifier grants don't carry over. | Abandoning an ID and registering a fresh one is still possible, as before: it resets good and bad history alike. |
 | Replaying a captured signed request. | Five-minute timestamp window; v2 signatures bind the `Host` header; each signature is bound to its first `Idempotency-Key`, keyed on the decoded signature bytes so a re-encoded signature is still caught (§7). | The Worker keeps that binding in KV, which leaves a roughly 60-second race across edge locations. Content addressing and state-machine checks are the backstop. Legacy v1 signatures, which do not bind the host, are still accepted for older SDKs (deprecated since v0.29). |
 | Taking over an external identity link. | `agentpass_id`, `aitp_id`, `passport_id`, and `erc8004_id` need a single-use, 60-second challenge signed by the external key, consumed with an atomic compare-and-swap. For `erc8004_id` the claimed address must derive from the proven key (§2.1). | A link proves control of the key at link time only. The registry does not ask the external system whether that key is still current, and for the first three protocols it does not bind the key to the identifier string (§10). `a2a_endpoint` is an unverified claim (§2). |
 
@@ -70,7 +72,7 @@ This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.38 
 
 | Threat | Defence | Residual risk |
 |---|---|---|
-| An x402 payee naming a reputable ID and routing payment to its own wallet. | The payer pays only `payTo` addresses equal to the ID's proven `erc8004_id`, and pays nothing if none match (§11.2). | Only EVM payment addresses can be bound today. |
+| An x402 payee naming a reputable ID and routing payment to its own wallet. | The payer pays only `payTo` addresses equal to the ID's proven `erc8004_id`, and pays nothing if none match (§11.2). A succeeded ID is refused, and its successor's wallet link is never copied from the predecessor: the successor proves it again (§2.3). | Only EVM payment addresses can be bound today. |
 | Copying genuine ERC-8004 feedback to Sybil wallets. | INAM-backed feedback counts only if it was sent from the receipt requester's proven `erc8004_id` and the file hashes to the on-chain `feedbackHash` (§11.1). | INAM does not check on-chain that the ERC-8004 `agentId` belongs to the receipt's provider; the reader compares it with the provider's `linked.erc8004_id`. |
 | An A2A agent borrowing another agent's reputation. | The card must name the ID, and the ID must name one of the card's endpoints under its own signature (§11.3). | `a2a_endpoint` is an unverified claim, so one operator who controls both can link them. |
 | Prompt injection through receipt text into an LLM-driven agent. | `acceptWork` refuses to countersign unless the calling client is the requester, and accepts the caller's own expected `jobId`/`outputHash` to compare against (§8). | Free-text fields are still returned verbatim. Agents should treat them as untrusted data. |
@@ -109,7 +111,7 @@ In rough order of value:
 1. Tree-head witnesses or signed heads, so split views are detectable without trusting one monitor.
 2. Verifier grants and revocations recorded in the transparency log.
 3. An iterative trust solve and collusion clustering in place of the single-pass approximation.
-4. Key rotation with a signed successor chain.
+4. Recovery from a stolen key: pre-committed next keys or M-of-N guardians on top of key succession (§2.3).
 5. Removing legacy v1 request signatures.
 6. Capability-specific correctness verifiers and multi-verifier consensus (§12.7).
 7. An external security audit.
