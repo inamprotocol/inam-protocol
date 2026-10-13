@@ -63,3 +63,22 @@ def test_payer_and_trust_checks_refuse_a_succeeded_id():
     rep = {"evidenceLevel": "independently_verified", "trustScore": 90, "flags": []}
     assert decide_x402(agent, rep, ["0xabc"])["allow"] is False
     assert decide_trust(agent, rep)["decision"] == "deny"
+
+
+def test_cancel_succession_is_a_revoke_and_pending_caps_trust_at_escrow():
+    from inamprotocol.trust import decide_trust
+
+    client = InamClient("http://example.invalid", old)
+    captured = {}
+
+    def fake_request(method, path, body=None, idempotency_key=None):
+        captured.update(path=path, body=body)
+        return {}
+
+    client._request = fake_request
+    client.cancel_succession("not mine")
+    assert captured["path"].endswith("/revoke") and captured["body"] == {"reason": "not mine"}
+
+    agent = {"id": PREDECESSOR, "linked": {}}
+    rep = {"evidenceLevel": "independently_verified", "trustScore": 90, "flags": [f"succession_pending:{SUCCESSOR}"]}
+    assert decide_trust(agent, rep)["decision"] == "escrow"

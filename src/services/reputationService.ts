@@ -322,6 +322,7 @@ export function computeReputation(agentId: string): ReputationResult {
   if (disputedCount > 0) flags.push("in_dispute");
   if (record.revokedAt) flags.push("revoked");
   if (record.succeededBy) flags.push(`succeeded:${record.succeededBy}`);
+  if (record.pendingSuccession) flags.push(`succession_pending:${record.pendingSuccession.successor}`);
   for (const id of lineage.slice(1)) flags.push(`inherited_from:${id}`);
   if (nonPerformanceReports.length > 0) flags.push("nonperformance_reported");
   if (rejectedAttestationCount > 0) flags.push("attestation_rejected");

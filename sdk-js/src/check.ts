@@ -343,7 +343,7 @@ export async function checkDid(did: string, opts: CheckOptions = {}): Promise<Ch
   const ar = await agentAndReputation(opts.registryUrl ?? "https://api.inamprotocol.org", did, opts.fetch);
   if (!ar) return finish(did, "did", [{ id: "inam.agent", status: "fail", label: "INAM ID not found in the registry" }]);
   const [agent, rep] = ar;
-  const checks: CheckItem[] = [agent.revokedAt ? { id: "inam.agent", status: "fail", label: `INAM ID revoked at ${agent.revokedAt}` } : agent.succeededBy ? { id: "inam.agent", status: "fail", label: `INAM ID succeeded by ${agent.succeededBy}; check that ID instead` } : { id: "inam.agent", status: "pass", label: `INAM ID registered ${agent.createdAt ?? ""}`.trim() }, reputationItem(agent, rep)];
+  const checks: CheckItem[] = [agent.revokedAt ? { id: "inam.agent", status: "fail", label: `INAM ID revoked at ${agent.revokedAt}` } : agent.succeededBy ? { id: "inam.agent", status: "fail", label: `INAM ID succeeded by ${agent.succeededBy}; check that ID instead` } : agent.pendingSuccession ? { id: "inam.agent", status: "warn", label: `Succession to ${agent.pendingSuccession.successor} pending until ${agent.pendingSuccession.effectiveAt}; this key may be compromised` } : { id: "inam.agent", status: "pass", label: `INAM ID registered ${agent.createdAt ?? ""}`.trim() }, reputationItem(agent, rep)];
   const wallet = agent.linked?.erc8004_id;
   if (wallet) {
     checks.push({ id: "inam.link", status: "pass", label: `Proven EVM wallet ${wallet}` });

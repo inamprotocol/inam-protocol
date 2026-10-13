@@ -5,7 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer } from "../src/server.js";
 import { InamClient } from "../sdk-js/src/client.js";
 import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
-import { successionSigningBytes, verifySuccession } from "../sdk-js/src/core/succession.js";
+import { SUCCESSION_WINDOW_MS, successionClock, successionSigningBytes, verifySuccession } from "../sdk-js/src/core/succession.js";
 import type { ReputationResult, SuccessionRecord } from "../sdk-js/src/index.js";
 
 // SPEC.md §2.3 (v0.42): key succession against the Node reference server.
@@ -38,8 +38,43 @@ async function finalizedReceipt(worker: InamClient, requester: InamClient) {
   return requester.acceptWork(draft);
 }
 
+// Injected clock: step past the 72h window without waiting.
+let clockOffset = 0;
+function skipWindow() {
+  clockOffset += SUCCESSION_WINDOW_MS + 1000;
+  successionClock.now = () => Date.now() + clockOffset;
+}
+afterAll(() => {
+  successionClock.now = () => Date.now();
+});
+
+async function logEntry(entryType: string, refId: string) {
+  const { entries } = (await (await fetch(`${baseUrl}/v1/transparency/entries?limit=200`)).json()) as {
+    entries: Array<{ entryType: string; refId: string; payload: string | null }>;
+  };
+  return entries.find((e) => e.entryType === entryType && e.refId === refId);
+}
+
 describe("key succession (SPEC.md §2.3)", () => {
-  it("hands the identity and its receipts to a fresh key, retires the old one, and logs it", async () => {
+  it("is pending for the window: the old key keeps working, nothing moves, a second request is refused", async () => {
+    const old = client();
+    await old.registerAgent(["translation.tr-en"]);
+    const nextKeys = generateKeypair();
+    const rec = await old.succeed(nextKeys);
+    expect(rec.pendingSuccession?.successor).toBe(nextKeys.did);
+    expect(Date.parse(rec.pendingSuccession!.effectiveAt) - Date.parse(rec.pendingSuccession!.requestedAt)).toBe(SUCCESSION_WINDOW_MS);
+    expect(rec.succeededBy).toBeUndefined();
+
+    // the owner isn't locked out early; a second succession is refused
+    expect((await old.linkIdentity("a2a_endpoint", "https://old.example/a2a")).linked.a2a_endpoint).toBe("https://old.example/a2a");
+    expect(await errCode(old.succeed(generateKeypair()))).toMatch(/SUCCESSION_PENDING/);
+    // the successor key can't act yet, not even register itself
+    expect(await errCode(new InamClient(baseUrl, nextKeys).registerAgent(["x"]))).toMatch(/SUCCESSION_PENDING/);
+    expect((await old.getReputation(old.did)).flags).toContain(`succession_pending:${nextKeys.did}`);
+    expect(await logEntry("agent_succession_pending", old.did)).toBeTruthy();
+  });
+
+  it("takes effect after the window: history moves, the old key is retired, and it is logged", async () => {
     const old = client();
     const peer = client();
     await old.registerAgent(["translation.tr-en"], { name: "worker" });
@@ -48,20 +83,25 @@ describe("key succession (SPEC.md §2.3)", () => {
     const before = await old.getReputation(old.did);
 
     const nextKeys = generateKeypair();
-    const res = await old.succeed(nextKeys);
-    expect(res.predecessor.succeededBy).toBe(nextKeys.did);
-    expect(res.successor.succession?.predecessor).toBe(old.did);
-    expect(verifySuccession(res.successor.succession!)).toBe(true);
-    expect(res.successor.capabilities).toEqual(["translation.tr-en"]);
-    expect(res.successor.linked).toEqual({});
-    expect(res.successor.isAuthorizedVerifier).toBe(false);
+    await old.succeed(nextKeys);
+    skipWindow();
 
-    // the old key signs nothing further, including a second succession
+    // lazy activation: the next request applies it
+    const oldRec = await old.getAgent(old.did);
+    expect(oldRec.succeededBy).toBe(nextKeys.did);
+    expect(oldRec.pendingSuccession).toBeUndefined();
+    const next = new InamClient(baseUrl, nextKeys);
+    const succ = await next.getAgent(nextKeys.did);
+    expect(succ.succession?.predecessor).toBe(old.did);
+    expect(verifySuccession(succ.succession!)).toBe(true);
+    expect(succ.capabilities).toEqual(["translation.tr-en"]);
+    expect(succ.linked).toEqual({});
+    expect(succ.isAuthorizedVerifier).toBe(false);
+
+    // the old key signs nothing further; revoking is now too late to cancel
     expect(await errCode(old.succeed(generateKeypair()))).toMatch(/AGENT_SUCCEEDED/);
     expect(await errCode(old.revoke("too late"))).toMatch(/AGENT_SUCCEEDED/);
 
-    // the successor carries the history; the predecessor is marked
-    const next = new InamClient(baseUrl, nextKeys);
     const rep = (await next.getReputation(nextKeys.did)) as ReputationResult;
     expect(rep.components.finalizedReceipts).toBe(1);
     expect(rep.trustScore).toBe(before.trustScore);
@@ -72,14 +112,9 @@ describe("key succession (SPEC.md §2.3)", () => {
     await peer.disputeReceipt(receipt.receiptId, "output was wrong");
     expect((await next.getReputation(nextKeys.did)).flags).toContain("in_dispute");
 
-    // append-only log entry with the signed statement as payload
-    const { entries } = (await (await fetch(`${baseUrl}/v1/transparency/entries?limit=200`)).json()) as {
-      entries: Array<{ entryType: string; refId: string; payload: string | null }>;
-    };
-    const entry = entries.find((e) => e.entryType === "agent_succeeded" && e.refId === old.did)!;
-    expect(verifySuccession(JSON.parse(entry.payload!) as SuccessionRecord)).toBe(true);
+    const entry = await logEntry("agent_succeeded", old.did);
+    expect(verifySuccession(JSON.parse(entry!.payload!) as SuccessionRecord)).toBe(true);
 
-    // out of search by default
     const search = (await (await fetch(`${baseUrl}/v1/agents/search?capability=translation.tr-en`)).json()) as { agents: { id: string }[] };
     expect(search.agents.map((a) => a.id)).toContain(nextKeys.did);
     expect(search.agents.map((a) => a.id)).not.toContain(old.did);
@@ -87,9 +122,26 @@ describe("key succession (SPEC.md §2.3)", () => {
     // the successor is an ordinary agent and can itself be succeeded
     const third = generateKeypair();
     await next.succeed(third);
+    skipWindow();
     const rep3 = await new InamClient(baseUrl, third).getReputation(third.did);
     expect(rep3.components.rawReceipts).toBe(1);
     expect(rep3.flags).toEqual(expect.arrayContaining([`inherited_from:${old.did}`, `inherited_from:${nextKeys.did}`]));
+  });
+
+  it("cancelling during the window burns the ID: nothing ever moves", async () => {
+    const old = client();
+    await old.registerAgent(["x"]);
+    const thiefKeys = generateKeypair();
+    await old.succeed(thiefKeys); // as if a thief holding the old key had asked
+    const burned = await old.cancelSuccession("succession I did not request");
+    expect(burned.revokedAt).toBeTruthy();
+    expect(burned.pendingSuccession).toBeUndefined();
+    expect(await logEntry("agent_succession_cancelled", old.did)).toBeTruthy();
+
+    skipWindow();
+    expect((await old.getAgent(old.did)).succeededBy).toBeUndefined();
+    expect((await fetch(`${baseUrl}/v1/agents/${encodeURIComponent(thiefKeys.did)}`)).status).toBe(404);
+    expect(await logEntry("agent_succeeded", old.did)).toBeUndefined();
   });
 
   it("refuses an already-registered successor (no merging two histories)", async () => {
@@ -127,5 +179,8 @@ describe("consumers treat a succeeded ID as retired", () => {
     const rep = { trustScore: 90, evidenceLevel: "independently_verified", flags: [] } as never;
     expect(decideX402(agent, rep, ["0xabc"]).reason).toMatch(/succeeded by did:key:zNew/);
     expect(decideTrust(agent, rep).decision).toBe("deny");
+    // a pending succession may mean a stolen key: escrow by default, not allow
+    const pending = { trustScore: 90, evidenceLevel: "independently_verified", flags: ["succession_pending:did:key:zNew"] } as never;
+    expect(decideTrust({ id: "did:key:zOld", linked: {} } as never, pending).decision).toBe("escrow");
   });
 });

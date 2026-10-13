@@ -156,6 +156,17 @@ export function successionMap(): Map<string, string> {
   return new Map(rows.map((r) => [r.id, r.s]));
 }
 
+/** SPEC.md §2.3: is `did` the successor named in some pending succession? */
+export function isPendingSuccessor(did: string): boolean {
+  return conn.prepare("SELECT 1 FROM agents WHERE json_extract(data, '$.pendingSuccession.successor') = ?").get(did) !== undefined;
+}
+
+/** SPEC.md §2.3: predecessors whose succession window has closed by `nowIso`. */
+export function dueSuccessions(nowIso: string): AgentRecord[] {
+  const rows = conn.prepare("SELECT data FROM agents WHERE json_extract(data, '$.pendingSuccession.effectiveAt') <= ?").all(nowIso) as Array<{ data: string }>;
+  return rows.map((r) => JSON.parse(r.data) as AgentRecord);
+}
+
 class ReceiptsRepo extends Repo<ExecutionReceipt> {
   constructor() {
     super("receipts", "receipt_id");

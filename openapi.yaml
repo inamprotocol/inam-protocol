@@ -300,16 +300,22 @@ paths:
   /agents/{id}/succeed:
     post:
       operationId: succeedAgent
-      summary: Hand this INAM ID to a new key (SPEC.md §2.3)
+      summary: Request handing this INAM ID to a new key (SPEC.md §2.3)
       description: >-
         Signed by the predecessor, self only. Both keys sign the succession
         statement canonical({ type: "inam.succession.v1", predecessor, successor }).
-        The successor must not be registered; it is created with the
-        predecessor's capabilities and metadata but no links, stake or
-        verifier grant. The predecessor gets `succeededBy`/`succeededAt`,
-        performs no further signed operations (403 AGENT_SUCCEEDED) and drops
-        out of search. Reputation for the successor is computed over the
-        whole lineage. Logged as an `agent_succeeded` transparency entry.
+        The successor must be neither registered nor named in another pending
+        succession. The request is pending for 72 hours (`pendingSuccession`
+        on the record, `agent_succession_pending` log entry, reputation flag
+        `succession_pending:<did>`); the ID works normally meanwhile, a second
+        request is refused (409 SUCCESSION_PENDING), and revoking the ID
+        cancels the succession and burns the ID. After the window the
+        successor is created with the predecessor's capabilities and metadata
+        but no links, stake or verifier grant; the predecessor gets
+        `succeededBy`/`succeededAt`, performs no further signed operations
+        (403 AGENT_SUCCEEDED) and drops out of search. Reputation for the
+        successor is computed over the whole lineage. Logged as
+        `agent_succeeded`.
       tags: [agents]
       security: [{ inamSignature: [] }]
       parameters:
@@ -327,15 +333,11 @@ paths:
                 predecessorSignature: { type: string, description: "base64 Ed25519 by the predecessor over the statement bytes" }
                 successorSignature: { type: string, description: "base64 Ed25519 by the successor over the statement bytes" }
       responses:
-        "201":
-          description: Both updated records
+        "202":
+          description: The predecessor's record, now carrying `pendingSuccession`
           content:
             application/json:
-              schema:
-                type: object
-                properties:
-                  predecessor: { $ref: "#/components/schemas/Agent" }
-                  successor: { $ref: "#/components/schemas/Agent" }
+              schema: { $ref: "#/components/schemas/Agent" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
@@ -1094,7 +1096,7 @@ paths:
                       type: object
                       properties:
                         leafIndex: { type: integer }
-                        entryType: { type: string, enum: [receipt_finalized, dispute_opened, dispute_resolved, nonperformance_reported, agent_succeeded] }
+                        entryType: { type: string, enum: [receipt_finalized, dispute_opened, dispute_resolved, nonperformance_reported, agent_succession_pending, agent_succeeded, agent_succession_cancelled] }
                         refId: { type: string }
                         createdAt: { type: string, format: date-time }
                         data: { type: string, description: "Canonical JSON entry the leafHash covers. Since v0.34 it holds dataHash, not the payload" }
@@ -1288,6 +1290,17 @@ components:
             successor: { type: string }
             predecessorSignature: { type: string }
             successorSignature: { type: string }
+        pendingSuccession:
+          type: object
+          description: "SPEC.md §2.3 — a requested succession inside its 72h window; revoking the ID cancels it"
+          properties:
+            type: { type: string, enum: [inam.succession.v1] }
+            predecessor: { type: string }
+            successor: { type: string }
+            predecessorSignature: { type: string }
+            successorSignature: { type: string }
+            requestedAt: { type: string, format: date-time }
+            effectiveAt: { type: string, format: date-time }
         createdAt: { type: string, format: date-time }
 
     Reputation:
@@ -1337,7 +1350,7 @@ components:
             nonPerformanceReports: { type: integer, description: "Jobs where this agent was the accepted worker and the poster later reported non-performance (SPEC.md §3.3)" }
             asProvider: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
             asRequester: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
-        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>, nonperformance_reported, attestation_rejected, unanchored_counterparty_volume, revoked, succeeded:<did>, inherited_from:<did>" }
+        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>, nonperformance_reported, attestation_rejected, unanchored_counterparty_volume, revoked, succession_pending:<did>, succeeded:<did>, inherited_from:<did>" }
 
     ReputationRoleBreakdown:
       type: object

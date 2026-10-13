@@ -10,6 +10,14 @@ import { fromBase64, verify } from "../crypto/keys.js";
  */
 export const SUCCESSION_TYPE = "inam.succession.v1";
 
+/** SPEC.md §2.3: a succession takes effect this long after it is requested.
+ *  Until then the old key can cancel it by revoking, which burns the ID. */
+export const SUCCESSION_WINDOW_MS = 72 * 60 * 60 * 1000;
+
+/** Registry clock for succession deadlines. Tests replace `now` to step past
+ *  the window; nothing else should. */
+export const successionClock = { now: (): number => Date.now() };
+
 export interface SuccessionStatement {
   type: typeof SUCCESSION_TYPE;
   predecessor: string;
@@ -20,6 +28,12 @@ export interface SuccessionStatement {
 export interface SuccessionRecord extends SuccessionStatement {
   predecessorSignature: string; // base64 Ed25519 by the predecessor's key
   successorSignature: string; // base64 Ed25519 by the successor's key
+}
+
+/** A requested succession during its window (SPEC.md §2.3), on the predecessor's record. */
+export interface PendingSuccession extends SuccessionRecord {
+  requestedAt: string;
+  effectiveAt: string;
 }
 
 /** The exact bytes both keys sign: canonical JSON of the statement, UTF-8. */

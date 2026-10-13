@@ -27,7 +27,7 @@ export interface TrustDecision {
   reputation?: ReputationResult;
 }
 
-export const DEFAULT_ESCROW_FLAGS = ["in_dispute", "attestation_rejected", "nonperformance_reported", "concentrated_counterparty"];
+export const DEFAULT_ESCROW_FLAGS = ["in_dispute", "attestation_rejected", "nonperformance_reported", "concentrated_counterparty", "succession_pending"];
 
 /** Pure policy check, for callers that already fetched the agent and its reputation. */
 export function decideTrust(agent: AgentRecord, reputation: ReputationResult, policy: TrustPolicy = {}): TrustDecision {

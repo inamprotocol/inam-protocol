@@ -18,7 +18,7 @@ import { leafHash } from "./merkleLog.js";
  * beside it and can be withheld (a participants_only receipt) or erased (a
  * data-protection request) without breaking any proof.
  */
-export type TransparencyEntryType = "receipt_finalized" | "dispute_opened" | "dispute_resolved" | "nonperformance_reported" | "agent_succeeded";
+export type TransparencyEntryType = "receipt_finalized" | "dispute_opened" | "dispute_resolved" | "nonperformance_reported" | "agent_succession_pending" | "agent_succeeded" | "agent_succession_cancelled";
 
 export interface TransparencyEntryInput {
   entryType: TransparencyEntryType;

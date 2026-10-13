@@ -93,6 +93,15 @@ const PUBLIC_READ_PATHS = [
 // inline to just the GET handler below instead.
 for (const path of PUBLIC_READ_PATHS) app.use(path, cors({ origin: "*" }));
 
+// SPEC.md §2.3: successions take effect lazily, before anything that reads
+// or writes agents sees the registry. One indexed query when none are due.
+for (const path of ["/v1/*", "/mcp", "/a2a"]) {
+  app.use(path, async (c, next) => {
+    await agentService.activateDueSuccessions(c.env);
+    await next();
+  });
+}
+
 app.onError((err, c) => {
   if (err instanceof ApiError) {
     return c.json({ error: { code: err.code, message: err.message } }, err.status as never);
@@ -271,11 +280,12 @@ app.post("/v1/agents/:id/revoke", requireSignedRequest, rateLimitWriteByAgent, r
 });
 
 // Key succession (SPEC.md §2.3): signed by the predecessor, self only; the
-// body carries both keys' signatures over the succession statement.
+// body carries both keys' signatures over the succession statement. 202:
+// the succession is pending until its window closes.
 app.post("/v1/agents/:id/succeed", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
   agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
   const body = parseBody(succeedAgentSchema, c.get("parsedBody"));
-  return c.json(await agentService.succeedAgent(c.env, c.get("agentDid")!, body), 201);
+  return c.json(await agentService.requestSuccession(c.env, c.get("agentDid")!, body), 202);
 });
 
 // ---- Jobs ----

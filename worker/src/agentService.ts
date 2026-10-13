@@ -4,7 +4,7 @@ import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/c
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
 import { secp256k1Verify, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
 import * as transparencyService from "./transparencyService.js";
-import { SUCCESSION_TYPE, verifySuccession, type SuccessionRecord } from "../../sdk-js/src/core/succession.js";
+import { SUCCESSION_TYPE, SUCCESSION_WINDOW_MS, successionClock, verifySuccession, type PendingSuccession, type SuccessionRecord } from "../../sdk-js/src/core/succession.js";
 import type { AgentRecord, Env, ExternalKeyType, LinkChallenge, LinkedIdentities, LinkedIdentityProofs, LinkProof } from "./types.js";
 
 export async function registerAgent(
@@ -25,6 +25,10 @@ export async function registerAgent(
     // below, callable solely by env.OPERATOR_DID, can flip this.
     isAuthorizedVerifier: false,
   };
+  // SPEC.md §2.3: a pending successor is created by activation, never registered directly.
+  if (await db.isPendingSuccessor(env, callerDid)) {
+    throw conflict("SUCCESSION_PENDING", `${callerDid} is named as the successor in a pending succession and is created when it takes effect`);
+  }
   try {
     await db.insertAgent(env, record);
   } catch (err) {
@@ -71,58 +75,85 @@ export async function setVerifierStatus(env: Env, callerDid: string, targetAgent
  * left intact but the reputation response flags the agent `revoked`.
  */
 export async function revokeAgent(env: Env, callerDid: string, reason: string): Promise<AgentRecord> {
-  await getAgent(env, callerDid); // AGENT_NOT_FOUND if it doesn't exist
-  const at = new Date().toISOString();
+  const before = await getAgent(env, callerDid); // AGENT_NOT_FOUND if it doesn't exist
+  const at = new Date(successionClock.now()).toISOString();
   const ok = await db.revokeAgentIfActive(env, callerDid, reason, at);
   if (!ok) {
     const current = await getAgent(env, callerDid);
+    if (current.succeededBy) throw conflict("AGENT_SUCCEEDED", `This INAM ID was succeeded by ${current.succeededBy}`);
     throw conflict("AGENT_REVOKED", `This INAM ID was already revoked at ${current.revokedAt}`);
+  }
+  // SPEC.md §2.3: revoking during the window is how the old key cancels a succession.
+  if (before.pendingSuccession) {
+    await transparencyService.appendEntry(env, "agent_succession_cancelled", callerDid, { ...before.pendingSuccession, cancelledAt: at });
   }
   return getAgent(env, callerDid);
 }
 
 /**
- * Key succession (SPEC.md §2.3). The predecessor (the caller, already
- * checked by requireSignedRequest to be neither revoked nor succeeded) hands
- * its identity to a new, unregistered successor ID. Both keys must have
- * signed the succession statement. The successor starts with the
- * predecessor's capabilities and metadata but no links, stake or verifier
- * grant: each of those was proven or granted to the old key, not the new one.
+ * Key succession, step 1 (SPEC.md §2.3): the predecessor (the caller,
+ * already checked by requireSignedRequest to be neither revoked nor
+ * succeeded) requests a succession to a new, unregistered key. Both keys
+ * must have signed the statement. Nothing moves yet: the request is pending
+ * for SUCCESSION_WINDOW_MS, the predecessor keeps working, and revoking it
+ * in the meantime cancels the succession and burns the ID.
  */
-export async function succeedAgent(
+export async function requestSuccession(
   env: Env,
   callerDid: string,
   input: { successor: string; predecessorSignature: string; successorSignature: string },
-): Promise<{ predecessor: AgentRecord; successor: AgentRecord }> {
-  const predecessor = await getAgent(env, callerDid);
+): Promise<AgentRecord> {
+  await getAgent(env, callerDid);
   const succession: SuccessionRecord = { type: SUCCESSION_TYPE, predecessor: callerDid, ...input };
   if (!verifySuccession(succession)) {
     throw badRequest("SUCCESSION_INVALID", "predecessorSignature and successorSignature must both verify over the succession statement, and successor must differ from predecessor");
   }
-  const at = new Date().toISOString();
-  const record: AgentRecord = {
-    id: input.successor,
-    capabilities: predecessor.capabilities,
-    metadata: predecessor.metadata,
-    linked: {},
-    linkedProof: {},
-    stakeUsd: 0,
-    createdAt: at,
-    isAuthorizedVerifier: false,
-    succession,
-  };
-  let ok: boolean;
-  try {
-    ok = await db.succeedAgentIfActive(env, callerDid, record, at);
-  } catch (err) {
-    if (err instanceof db.AgentAlreadyExistsError) {
-      throw conflict("AGENT_ALREADY_REGISTERED", `Successor ${input.successor} is already registered; a successor must be a new ID`);
-    }
-    throw err;
+  if ((await db.getAgent(env, input.successor)) || (await db.isPendingSuccessor(env, input.successor))) {
+    throw conflict("AGENT_ALREADY_REGISTERED", `Successor ${input.successor} is already registered or already named in a pending succession; a successor must be a new ID`);
   }
-  if (!ok) throw conflict("AGENT_SUCCEEDED", `This INAM ID was already succeeded or revoked`);
-  await transparencyService.appendEntry(env, "agent_succeeded", callerDid, succession);
-  return { predecessor: await getAgent(env, callerDid), successor: await getAgent(env, input.successor) };
+  const now = successionClock.now();
+  const pending: PendingSuccession = {
+    ...succession,
+    requestedAt: new Date(now).toISOString(),
+    effectiveAt: new Date(now + SUCCESSION_WINDOW_MS).toISOString(),
+  };
+  if (!(await db.requestSuccessionIfIdle(env, callerDid, pending))) {
+    throw conflict("SUCCESSION_PENDING", "This INAM ID already has a pending succession (or was succeeded or revoked)");
+  }
+  await transparencyService.appendEntry(env, "agent_succession_pending", callerDid, pending);
+  return getAgent(env, callerDid);
+}
+
+/**
+ * Key succession, step 2 (SPEC.md §2.3): activate every succession whose
+ * window has closed. Lazy: called at the start of every /v1 request, so no
+ * read or write ever sees a due succession unapplied. One indexed query when
+ * nothing is due. The successor starts with the predecessor's capabilities
+ * and metadata but no links, stake or verifier grant: each of those was
+ * proven or granted to the old key, not the new one.
+ */
+export async function activateDueSuccessions(env: Env): Promise<void> {
+  const due = await db.dueSuccessions(env, new Date(successionClock.now()).toISOString());
+  for (const predecessor of due) {
+    const p = predecessor.pendingSuccession!;
+    const { requestedAt: _r, effectiveAt, ...succession } = p;
+    const successor: AgentRecord = {
+      id: p.successor,
+      capabilities: predecessor.capabilities,
+      metadata: predecessor.metadata,
+      linked: {},
+      linkedProof: {},
+      stakeUsd: 0,
+      createdAt: effectiveAt,
+      isAuthorizedVerifier: false,
+      succession,
+    };
+    const outcome = await db.activateSuccession(env, predecessor, successor);
+    if (outcome === "activated") await transparencyService.appendEntry(env, "agent_succeeded", predecessor.id, succession);
+    else if (outcome === "successor_taken" && (await db.abandonSuccession(env, predecessor.id, p.successor))) {
+      await transparencyService.appendEntry(env, "agent_succession_cancelled", predecessor.id, { ...p, cancelledAt: new Date(successionClock.now()).toISOString() });
+    }
+  }
 }
 
 const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "erc8004_id", "a2a_endpoint"] as const;
