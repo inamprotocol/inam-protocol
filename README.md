@@ -23,6 +23,8 @@ It reads the 402 (payTo, network, price), looks the payTo up in ERC-8004 (identi
 
 Agents can run the same check without installing anything: `GET https://api.inamprotocol.org/v1/check?target=<url | 0x wallet | did:key>` (JSON, adds a `next` step and `cachedAt`; cached 10 minutes), the MCP tool `inam_check` on `https://api.inamprotocol.org/mcp`, or the A2A skill `check`.
 
+`/v1/check` stays free. `GET https://api.inamprotocol.org/v1/x402/check` is its paid twin over x402 (0.001 USDC on Base, listed in x402 Bazaars) for agents that shop there: same parameters, same answer. Payment never changes a verdict or a score ([GOVERNANCE](./GOVERNANCE.md): scores are not for sale). Send `INAM-Requester: <your did:key>` and the response carries an `INAM-Receipt` you can countersign (SPEC [§15](./SPEC.md#15-receipts-over-http-v041); `inamFetch` does it for you).
+
 Try it (one command, local, no real money, no signup):
 
 ```
