@@ -2970,6 +2970,123 @@ describe("paid x402 report (x402Report.ts)", () => {
   });
 });
 
+describe("paid x402 check (GET /v1/x402/check)", () => {
+  const PAY_TO = "0x209693Bc6afc0C5328bA36FaF03C514EF312287C";
+  const WALLET = "0x2222222222222222222222222222222222222222";
+  const enabled = { ...env, X402_PAY_TO: PAY_TO } as typeof env;
+  const decode = (h: string | null) => JSON.parse(atob(h!));
+  const calls: string[] = [];
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    calls.length = 0;
+  });
+  // Facilitator plus the wallet check's upstreams (8004scan, Base RPC).
+  function stub(valid = true) {
+    vi.stubGlobal("fetch", async (input: string) => {
+      const url = String(input);
+      calls.push(url);
+      if (url.endsWith("/verify")) return Response.json(valid ? { isValid: true, payer: "0xabc" } : { isValid: false, invalidReason: "invalid_exact_evm_payload_signature" });
+      if (url.endsWith("/settle")) return Response.json({ success: true, transaction: "0x1234", network: "eip155:8453", payer: "0xabc" });
+      if (url.startsWith("https://api.8004scan.io/")) return Response.json({ items: [] });
+      if (url === "https://mainnet.base.org") return Response.json({ jsonrpc: "2.0", id: 1, result: "0x" + "0".repeat(64) });
+      return new Response("not found", { status: 404 });
+    });
+  }
+  async function get(path: string, e: typeof env, headers: Record<string, string> = {}) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(new Request(`http://worker.test${path}`, { headers: { "cf-connecting-ip": crypto.randomUUID(), ...headers } }), e, ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+  const pay = () => ({ "payment-signature": btoa(JSON.stringify({ x402Version: 2, accepted: {}, payload: {} })) });
+  const freshWallet = () => `0x${crypto.randomUUID().replace(/-/g, "")}${"0".repeat(8)}`;
+
+  it("is inert until a payout wallet is configured", async () => {
+    const res = await get(`/v1/x402/check?target=${WALLET}`, env);
+    expect(res.status).toBe(503);
+    expect(((await res.json()) as any).error.code).toBe("X402_DISABLED");
+  });
+
+  it("answers 402 with x402 v2 requirements at 0.001 USDC and a Bazaar listing with the query input", async () => {
+    const res = await get(`/v1/x402/check?target=${WALLET}`, enabled);
+    expect(res.status).toBe(402);
+    const required = decode(res.headers.get("payment-required"));
+    expect(required.x402Version).toBe(2);
+    expect(required.resource.url).toBe(`http://worker.test/v1/x402/check?target=${WALLET}`);
+    expect(required.accepts[0]).toMatchObject({ scheme: "exact", network: "eip155:8453", amount: "1000", payTo: PAY_TO, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" });
+    expect(required.extensions.bazaar.info.input).toMatchObject({ type: "http", method: "GET", queryParams: { target: expect.any(String) } });
+    expect(required.extensions.bazaar.schema.properties.input.properties.queryParams.required).toEqual(["target"]);
+    // Missing target: the usage error, never a charge.
+    expect((await get("/v1/x402/check", enabled)).status).toBe(400);
+  });
+
+  it("rejects a bad payment without serving or settling", async () => {
+    stub(false);
+    const res = await get(`/v1/x402/check?target=${freshWallet()}`, enabled, pay());
+    expect(res.status).toBe(402);
+    expect(decode(res.headers.get("payment-required")).error).toBe("invalid_exact_evm_payload_signature");
+    expect(calls).toEqual(["https://facilitator.payai.network/verify"]);
+  });
+
+  it("serves the same body as the free /v1/check once paid, with PAYMENT-RESPONSE and no shared caching", async () => {
+    stub();
+    const target = freshWallet();
+    const free = await get(`/v1/check?target=${target}&rdap=0`, env);
+    expect(free.status).toBe(200);
+    const paid = await get(`/v1/x402/check?target=${target}&rdap=0`, enabled, pay());
+    expect(paid.status).toBe(200);
+    expect(await paid.json()).toEqual(await free.json());
+    expect(decode(paid.headers.get("payment-response"))).toMatchObject({ success: true, transaction: "0x1234" });
+    expect(paid.headers.get("cache-control")).toBe("no-store");
+    expect(calls.filter((u) => u.includes("facilitator"))).toEqual(["https://facilitator.payai.network/verify", "https://facilitator.payai.network/settle"]);
+  });
+
+  it("drafts a SPEC §15 receipt for an INAM-Requester that the requester can check and countersign", async () => {
+    stub();
+    const requester = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `x402check:${requester.did}`, body: { capabilities: ["x"] } });
+    const path = `/v1/x402/check?target=${freshWallet()}&rdap=0`;
+    const paid = await get(path, enabled, { ...pay(), "INAM-Requester": requester.did });
+    expect(paid.status).toBe(200);
+    const bytes = new Uint8Array(await paid.arrayBuffer());
+    const receiptId = paid.headers.get("inam-receipt")!;
+    expect(receiptId).toMatch(/^sha256:/);
+
+    const { httpSpecHash, httpOutputHash } = await import("../../sdk-js/src/http.js");
+    const draft = (await call("GET", `/v1/receipts/${encodeURIComponent(receiptId)}`, { keypair: requester })).json as any;
+    expect(draft).toMatchObject({ status: "draft", agentA: { id: requester.did }, task: { capability: "demo.x402-check" }, settlement: { paymentRef: "0x1234", amount: "0.001", currency: "USDC" } });
+    expect(draft.task.specHash).toBe(httpSpecHash("GET", `http://worker.test${path}`, new Uint8Array()));
+    expect(draft.result.outputHash).toBe(httpOutputHash(bytes));
+
+    const content = { ...draft, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined };
+    const sig = toBase64(sign(new TextEncoder().encode(canonicalize(content)), requester.privateKey));
+    const done = await call("POST", `/v1/receipts/${encodeURIComponent(receiptId)}/countersign`, { keypair: requester, idempotencyKey: `countersign:${receiptId}`, body: { signature: sig } });
+    expect(done.status).toBe(200);
+    expect((done.json as any).status).toBe("finalized");
+
+    // No requester header, or an unregistered one: the answer without a receipt.
+    expect((await get(path, enabled, pay())).headers.get("inam-receipt")).toBeNull();
+    expect((await get(path, enabled, { ...pay(), "INAM-Requester": generateKeypair().did })).headers.get("inam-receipt")).toBeNull();
+  });
+
+  it("uses the CDP facilitator with a CDP JWT when CDP keys are set", async () => {
+    const key = generateKeypair();
+    const secret = Buffer.concat([Buffer.from(key.privateKey), Buffer.from(key.publicKey)]).toString("base64");
+    const seen: { url: string; auth: string | null }[] = [];
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      seen.push({ url: String(input), auth: new Headers(init.headers).get("authorization") });
+      return Response.json({ isValid: false, invalidReason: "x" });
+    });
+    await get(`/v1/x402/check?target=${WALLET}`, { ...enabled, CDP_API_KEY_ID: "key-1", CDP_API_KEY_SECRET: secret } as typeof env, pay());
+    expect(seen[0].url).toBe("https://api.cdp.coinbase.com/platform/v2/x402/verify");
+    const [h, p, s] = seen[0].auth!.replace(/^Bearer /, "").split(".");
+    const unb = (x: string) => JSON.parse(Buffer.from(x, "base64url").toString());
+    expect(unb(h)).toMatchObject({ alg: "EdDSA", kid: "key-1", typ: "JWT" });
+    expect(unb(p)).toMatchObject({ sub: "key-1", iss: "cdp", uris: ["POST api.cdp.coinbase.com/platform/v2/x402/verify"] });
+    expect(verify(Buffer.from(s, "base64url"), new TextEncoder().encode(`${h}.${p}`), key.did)).toBe(true);
+  });
+});
+
 describe("OpenAI apps domain challenge", () => {
   const fetchChallenge = async (e: typeof env) => {
     const ctx = createExecutionContext();
