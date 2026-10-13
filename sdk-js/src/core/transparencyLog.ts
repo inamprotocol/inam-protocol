@@ -18,11 +18,11 @@ import { leafHash } from "./merkleLog.js";
  * beside it and can be withheld (a participants_only receipt) or erased (a
  * data-protection request) without breaking any proof.
  */
-export type TransparencyEntryType = "receipt_finalized" | "dispute_opened" | "dispute_resolved" | "nonperformance_reported";
+export type TransparencyEntryType = "receipt_finalized" | "dispute_opened" | "dispute_resolved" | "nonperformance_reported" | "agent_succeeded";
 
 export interface TransparencyEntryInput {
   entryType: TransparencyEntryType;
-  refId: string; // receiptId for receipt/dispute events, jobId for a non-performance report
+  refId: string; // receiptId for receipt/dispute events, jobId for a non-performance report, predecessor DID for a succession
   timestamp: string; // ISO -- when the event was logged, not necessarily the underlying record's own timestamp
   data: unknown; // the relevant record snapshot at event time (e.g. the finalized receipt, or the dispute sub-object)
 }

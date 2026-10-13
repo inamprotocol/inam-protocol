@@ -5,6 +5,8 @@ import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.
 import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
 import { secp256k1Verify, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
+import * as transparencyService from "./transparencyService.js";
+import { SUCCESSION_TYPE, verifySuccession, type SuccessionRecord } from "../../sdk-js/src/core/succession.js";
 import type { AgentRecord, ExternalKeyType, LinkChallenge, LinkedIdentities, LinkedIdentityProofs, LinkProof } from "../types.js";
 
 export function registerAgent(callerDid: string, input: { capabilities: string[]; metadata?: Record<string, unknown> }): AgentRecord {
@@ -52,6 +54,7 @@ export function setVerifierStatus(callerDid: string, targetAgentId: string, auth
   }
   const record = getAgent(targetAgentId);
   if (record.revokedAt) throw conflict("AGENT_REVOKED", `Agent ${targetAgentId} was revoked at ${record.revokedAt}`);
+  if (record.succeededBy) throw conflict("AGENT_SUCCEEDED", `Agent ${targetAgentId} was succeeded by ${record.succeededBy}`);
   const updated: AgentRecord = { ...record, isAuthorizedVerifier: authorized };
   agents.set(targetAgentId, updated);
   return updated;
@@ -73,6 +76,47 @@ export function revokeAgent(callerDid: string, reason: string): AgentRecord {
   const updated: AgentRecord = { ...record, revokedAt: new Date().toISOString(), revocationReason: reason };
   agents.set(callerDid, updated);
   return updated;
+}
+
+/**
+ * Key succession (SPEC.md §2.3). The predecessor (the caller, already
+ * checked by requireSignedRequest to be neither revoked nor succeeded) hands
+ * its identity to a new, unregistered successor ID. Both keys must have
+ * signed the succession statement. The successor starts with the
+ * predecessor's capabilities and metadata but no links, stake or verifier
+ * grant: each of those was proven or granted to the old key, not the new one.
+ * Single-process and synchronous, so no CAS is needed here (the Worker's
+ * succeedAgentIfActive is the concurrent version).
+ */
+export function succeedAgent(
+  callerDid: string,
+  input: { successor: string; predecessorSignature: string; successorSignature: string },
+): { predecessor: AgentRecord; successor: AgentRecord } {
+  const predecessor = getAgent(callerDid);
+  const succession: SuccessionRecord = { type: SUCCESSION_TYPE, predecessor: callerDid, ...input };
+  if (!verifySuccession(succession)) {
+    throw badRequest("SUCCESSION_INVALID", "predecessorSignature and successorSignature must both verify over the succession statement, and successor must differ from predecessor");
+  }
+  if (agents.has(input.successor)) {
+    throw conflict("AGENT_ALREADY_REGISTERED", `Successor ${input.successor} is already registered; a successor must be a new ID`);
+  }
+  const at = new Date().toISOString();
+  const successor: AgentRecord = {
+    id: input.successor,
+    capabilities: predecessor.capabilities,
+    metadata: predecessor.metadata,
+    linked: {},
+    linkedProof: {},
+    stakeUsd: 0,
+    createdAt: at,
+    isAuthorizedVerifier: false,
+    succession,
+  };
+  const updated: AgentRecord = { ...predecessor, succeededBy: input.successor, succeededAt: at };
+  agents.set(input.successor, successor);
+  agents.set(callerDid, updated);
+  transparencyService.appendEntry("agent_succeeded", callerDid, succession);
+  return { predecessor: updated, successor };
 }
 
 const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "erc8004_id", "a2a_endpoint"] as const;

@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: INAM Protocol Registry API
-  version: "0.41.0"
+  version: "0.42.0"
   description: >
     The open reputation, verification, and economic-history layer for the agent
     economy. See SPEC.md in this repository for the full protocol specification
@@ -102,7 +102,7 @@ paths:
           schema: { type: string }
         - name: include_revoked
           in: query
-          description: "Set to `true` to include revoked agents (SPEC.md §2.2); excluded by default."
+          description: "Set to `true` to include revoked and succeeded agents (SPEC.md §2.2, §2.3); excluded by default."
           schema: { type: boolean }
         - name: include_demo
           in: query
@@ -296,6 +296,50 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "403": { $ref: "#/components/responses/Error" }
+
+  /agents/{id}/succeed:
+    post:
+      operationId: succeedAgent
+      summary: Hand this INAM ID to a new key (SPEC.md §2.3)
+      description: >-
+        Signed by the predecessor, self only. Both keys sign the succession
+        statement canonical({ type: "inam.succession.v1", predecessor, successor }).
+        The successor must not be registered; it is created with the
+        predecessor's capabilities and metadata but no links, stake or
+        verifier grant. The predecessor gets `succeededBy`/`succeededAt`,
+        performs no further signed operations (403 AGENT_SUCCEEDED) and drops
+        out of search. Reputation for the successor is computed over the
+        whole lineage. Logged as an `agent_succeeded` transparency entry.
+      tags: [agents]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - { $ref: "#/components/parameters/AgentId" }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [successor, predecessorSignature, successorSignature]
+              properties:
+                successor: { type: string, description: "did:key of a new, unregistered Ed25519 key" }
+                predecessorSignature: { type: string, description: "base64 Ed25519 by the predecessor over the statement bytes" }
+                successorSignature: { type: string, description: "base64 Ed25519 by the successor over the statement bytes" }
+      responses:
+        "201":
+          description: Both updated records
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  predecessor: { $ref: "#/components/schemas/Agent" }
+                  successor: { $ref: "#/components/schemas/Agent" }
+        "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
+        "403": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
 
   /agents/{id}/link/challenge:
     post:
@@ -1027,7 +1071,7 @@ paths:
                       type: object
                       properties:
                         leafIndex: { type: integer }
-                        entryType: { type: string, enum: [receipt_finalized, dispute_opened, dispute_resolved, nonperformance_reported] }
+                        entryType: { type: string, enum: [receipt_finalized, dispute_opened, dispute_resolved, nonperformance_reported, agent_succeeded] }
                         refId: { type: string }
                         createdAt: { type: string, format: date-time }
                         data: { type: string, description: "Canonical JSON entry the leafHash covers. Since v0.34 it holds dataHash, not the payload" }
@@ -1210,6 +1254,17 @@ components:
         isAuthorizedVerifier: { type: boolean, description: "SPEC.md §12.3 — operator-granted; false at registration" }
         revokedAt: { type: string, format: date-time, description: "SPEC.md §2.2 — set when the agent retired this ID; absent for an active agent" }
         revocationReason: { type: string }
+        succeededBy: { type: string, description: "SPEC.md §2.3 — set on a predecessor: the ID that now holds its history" }
+        succeededAt: { type: string, format: date-time }
+        succession:
+          type: object
+          description: "SPEC.md §2.3 — set on a successor: the statement both keys signed"
+          properties:
+            type: { type: string, enum: [inam.succession.v1] }
+            predecessor: { type: string }
+            successor: { type: string }
+            predecessorSignature: { type: string }
+            successorSignature: { type: string }
         createdAt: { type: string, format: date-time }
 
     Reputation:
@@ -1259,7 +1314,7 @@ components:
             nonPerformanceReports: { type: integer, description: "Jobs where this agent was the accepted worker and the poster later reported non-performance (SPEC.md §3.3)" }
             asProvider: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
             asRequester: { $ref: "#/components/schemas/ReputationRoleBreakdown" }
-        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>, nonperformance_reported, attestation_rejected, unanchored_counterparty_volume, revoked" }
+        flags: { type: array, items: { type: string }, description: "e.g. in_dispute, concentrated_counterparty:<did>, nonperformance_reported, attestation_rejected, unanchored_counterparty_volume, revoked, succeeded:<did>, inherited_from:<did>" }
 
     ReputationRoleBreakdown:
       type: object

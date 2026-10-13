@@ -18,6 +18,7 @@ from .merkle_log import verify_inclusion, verify_consistency
 from .receipt import dispute_window_closes_at, is_dispute_window_open
 from .trust import DEFAULT_ESCROW_FLAGS, check_trust, decide_trust
 from .erc8004 import INAM_FEEDBACK_TAG, build_erc8004_feedback, verify_erc8004_feedback
+from .succession import SUCCESSION_TYPE, succession_signing_bytes, verify_succession
 from .x402 import X402_POLICY_VERSION, counterparty_context, decide_x402, x402_policy_input
 
 __all__ = [
@@ -37,6 +38,9 @@ __all__ = [
     "p256_sign",
     "p256_verify",
     "canonicalize",
+    "SUCCESSION_TYPE",
+    "succession_signing_bytes",
+    "verify_succession",
     "InamClient",
     "verify_inclusion",
     "verify_consistency",

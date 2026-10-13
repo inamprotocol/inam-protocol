@@ -76,6 +76,45 @@ export async function revokeAgentIfActive(env: Env, id: string, reason: string, 
   return (result.meta.changes ?? 0) > 0;
 }
 
+/** SPEC.md §2.3: hand the predecessor's identity to a new, unregistered
+ *  successor in one D1 transaction. The CAS UPDATE goes first; the successor
+ *  row is inserted only if that UPDATE is what pointed the predecessor at
+ *  it, so two racing successions can't both register a successor. Returns
+ *  false if the predecessor was already succeeded or revoked. Throws
+ *  AgentAlreadyExistsError if the successor ID is already registered. */
+export async function succeedAgentIfActive(env: Env, predecessorId: string, successor: AgentRecord, at: string): Promise<boolean> {
+  const owned = "EXISTS (SELECT 1 FROM agents WHERE id = ? AND succeeded_by = ? AND succeeded_at = ?)";
+  try {
+    const [update] = await env.DB.batch([
+      env.DB.prepare("UPDATE agents SET succeeded_by = ?, succeeded_at = ? WHERE id = ? AND succeeded_by IS NULL AND revoked_at IS NULL").bind(
+        successor.id,
+        at,
+        predecessorId,
+      ),
+      env.DB.prepare(
+        `INSERT INTO agents (id, capabilities, metadata, linked, linked_proof, stake_usd, created_at, is_authorized_verifier, succession)
+         SELECT ?, ?, ?, '{}', '{}', 0, ?, 0, ? WHERE ${owned}`,
+      ).bind(successor.id, JSON.stringify(successor.capabilities), JSON.stringify(successor.metadata), successor.createdAt, JSON.stringify(successor.succession), predecessorId, successor.id, at),
+      ...successor.capabilities.map((capability) =>
+        env.DB.prepare(`INSERT INTO agent_capabilities (agent_id, capability) SELECT ?, ? WHERE ${owned}`).bind(successor.id, capability, predecessorId, successor.id, at),
+      ),
+    ]);
+    return (update.meta.changes ?? 0) > 0;
+  } catch (err) {
+    if (err instanceof Error && err.message.includes(UNIQUE_VIOLATION)) throw new AgentAlreadyExistsError(successor.id);
+    throw err;
+  }
+}
+
+/** Every succession in the registry, predecessor -> successor. Successions
+ *  are rare, so reputation loads them all once per computation instead of
+ *  one lookup per counterparty. ponytail: full list per call; cache it if
+ *  successions ever number in the thousands. */
+export async function successionMap(env: Env): Promise<Map<string, string>> {
+  const { results } = await env.DB.prepare("SELECT id, succeeded_by FROM agents WHERE succeeded_by IS NOT NULL").all<{ id: string; succeeded_by: string }>();
+  return new Map(results.map((r) => [r.id, r.succeeded_by]));
+}
+
 export async function allAgents(env: Env): Promise<AgentRecord[]> {
   const { results } = await env.DB.prepare("SELECT * FROM agents").all();
   return results.map(rowToAgent);
@@ -89,7 +128,7 @@ export async function allAgents(env: Env): Promise<AgentRecord[]> {
 export async function searchAgentsByCapability(env: Env, capability: string, includeRevoked: boolean): Promise<AgentRecord[]> {
   const { results } = await env.DB.prepare(
     `SELECT a.* FROM agents a JOIN agent_capabilities c ON c.agent_id = a.id
-     WHERE c.capability = ? ${includeRevoked ? "" : "AND a.revoked_at IS NULL"}`,
+     WHERE c.capability = ? ${includeRevoked ? "" : "AND a.revoked_at IS NULL AND a.succeeded_by IS NULL"}`,
   )
     .bind(capability)
     .all();
@@ -534,5 +573,7 @@ function rowToAgent(row: Record<string, unknown>): AgentRecord {
     createdAt: row.created_at as string,
     isAuthorizedVerifier: Boolean(row.is_authorized_verifier),
     ...(row.revoked_at ? { revokedAt: row.revoked_at as string, revocationReason: (row.revocation_reason as string) ?? undefined } : {}),
+    ...(row.succeeded_by ? { succeededBy: row.succeeded_by as string, succeededAt: row.succeeded_at as string } : {}),
+    ...(row.succession ? { succession: JSON.parse(row.succession as string) } : {}),
   };
 }

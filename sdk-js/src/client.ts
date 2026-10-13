@@ -3,6 +3,7 @@ import { sha256Hex, sign, toBase64, type Keypair } from "./crypto/keys.js";
 import { buildSigningStringV2, SIG_VERSION_HEADER, CURRENT_SIG_VERSION } from "./core/signingString.js";
 import { buildSignableContent, type ReceiptContentInput } from "./core/receiptContent.js";
 import { buildSignableVerificationContent, type VerificationContentInput } from "./core/verificationContent.js";
+import { successionSigningBytes } from "./core/succession.js";
 import { directoryResponseHeaders, httpMessageSignaturesDirectory, webBotAuthHeaders, type SignatureOptions } from "./webBotAuth.js";
 import type {
   AgentRecord,
@@ -118,6 +119,21 @@ export class InamClient {
     return this.request("POST", `/v1/agents/${encodeURIComponent(this.keypair.did)}/revoke`, { reason }, {
       idempotencyKey: `revoke:${this.keypair.did}`,
     });
+  }
+
+  /** Hands this client's INAM ID to a new key (SPEC.md §2.3). `successor`
+   * must be a fresh, unregistered keypair; both keys sign the succession
+   * statement. Afterwards this client's ID signs nothing, and
+   * `new InamClient(url, successor)` carries its history. Links (wallets,
+   * A2A endpoint) do not carry over: re-prove them from the successor. */
+  succeed(successor: Keypair): Promise<{ predecessor: AgentRecord; successor: AgentRecord }> {
+    const bytes = successionSigningBytes(this.keypair.did, successor.did);
+    return this.request(
+      "POST",
+      `/v1/agents/${encodeURIComponent(this.keypair.did)}/succeed`,
+      { successor: successor.did, predecessorSignature: toBase64(sign(bytes, this.keypair.privateKey)), successorSignature: toBase64(sign(bytes, successor.privateKey)) },
+      { idempotencyKey: `succeed:${this.keypair.did}` },
+    );
   }
 
   /** Grants or revokes `targetAgentId`'s verifier status (SPEC.md §12.3).

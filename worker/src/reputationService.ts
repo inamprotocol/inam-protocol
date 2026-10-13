@@ -7,6 +7,7 @@ import { evidenceLevel } from "../../sdk-js/src/core/attestation.js";
 import { accrueVolume, roundVolumes } from "../../sdk-js/src/core/settlementVolume.js";
 import { isDisputeActive, type DisputeCheckable } from "../../sdk-js/src/core/disputeLifecycle.js";
 import { DEMO_CAPABILITY_PREFIX } from "../../sdk-js/src/core/demo.js";
+import { headOf, lineageOf, type SuccessionMap } from "../../sdk-js/src/core/succession.js";
 import type { Env, ReputationResult } from "./types.js";
 
 const CONFIDENCE_SATURATION = 5;
@@ -48,23 +49,37 @@ function countsTowardReputation(r: DisputeCheckable & { task: { capability: stri
  * implementation) — an async predicate inside `.filter()`/`.some()`
  * silently never filters, so this walks the list with a plain loop.
  */
-async function isAnchoredCounterparty(env: Env, agentId: string, excludeIds: ReadonlySet<string>): Promise<boolean> {
+/**
+ * SPEC.md §2.3 (v0.42): an ID's evidence is every receipt of its lineage
+ * (itself and its predecessors), and a counterparty is counted under the
+ * head of its own chain — same rule as src/services/reputationService.ts.
+ */
+async function lineageReceipts(env: Env, ids: readonly string[]) {
+  const lists = await Promise.all(ids.map((id) => listByAgent(env, id)));
+  return [...new Map(lists.flat().map((r) => [r.receiptId, r])).values()];
+}
+function otherParty(r: { agentA: { id: string }; agentB: { id: string } }, self: ReadonlySet<string>, succ: SuccessionMap): string {
+  return headOf(self.has(r.agentA.id) ? r.agentB.id : r.agentA.id, succ);
+}
+
+async function isAnchoredCounterparty(env: Env, agentId: string, excludeIds: ReadonlySet<string>, succ: SuccessionMap): Promise<boolean> {
   const agent = await db.getAgent(env, agentId);
   if (!agent) return false;
   if (agent.stakeUsd > 0) return true;
-  const receipts = (await listByAgent(env, agentId)).filter(countsTowardReputation);
+  const self = lineageOf(agentId, succ);
+  const selfSet = new Set(self);
+  const receipts = (await lineageReceipts(env, self)).filter(countsTowardReputation);
   for (const r of receipts) {
-    const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
-    if (!excludeIds.has(counterparty)) return true;
+    if (!excludeIds.has(otherParty(r, selfSet, succ))) return true;
   }
   return false;
 }
 
-async function baseTrust(env: Env, agentId: string): Promise<number> {
+async function baseTrust(env: Env, agentId: string, succ: SuccessionMap): Promise<number> {
   const agent = await db.getAgent(env, agentId);
   if (!agent) return 0.05;
 
-  const finalized = (await listByAgent(env, agentId)).filter(countsTowardReputation);
+  const finalized = (await lineageReceipts(env, lineageOf(agentId, succ))).filter(countsTowardReputation);
   const successCount = finalized.filter((r) => r.verification.outcome === "success").length;
   const successRatio = finalized.length > 0 ? successCount / finalized.length : 0.5;
 
@@ -76,7 +91,10 @@ async function baseTrust(env: Env, agentId: string): Promise<number> {
 
 export async function computeReputation(env: Env, agentId: string): Promise<ReputationResult> {
   const record = await getAgent(env, agentId);
-  const all = await listByAgent(env, agentId);
+  const succ = await db.successionMap(env);
+  const lineage = lineageOf(agentId, succ);
+  const self = new Set(lineage);
+  const all = await lineageReceipts(env, lineage);
   const finalized = all.filter(countsTowardReputation);
   const disputedCount = all.filter((r) => isDisputeActive(r)).length;
 
@@ -88,7 +106,7 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
 
   const pairCounts = new Map<string, number>();
   for (const r of finalized) {
-    const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
+    const counterparty = otherParty(r, self, succ);
     pairCounts.set(counterparty, (pairCounts.get(counterparty) ?? 0) + 1);
   }
 
@@ -120,9 +138,9 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   // cluster lend no weight once the agent is past cold start.
   const unanchored = new Set<string>();
   if (finalized.length >= 3) {
-    const excludeIds = new Set<string>([agentId, ...pairCounts.keys()]);
+    const excludeIds = new Set<string>([...self, headOf(agentId, succ), ...pairCounts.keys()]);
     for (const counterparty of pairCounts.keys()) {
-      if (!(await isAnchoredCounterparty(env, counterparty, excludeIds))) unanchored.add(counterparty);
+      if (!(await isAnchoredCounterparty(env, counterparty, excludeIds, succ))) unanchored.add(counterparty);
     }
   }
 
@@ -164,7 +182,7 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   async function cachedBaseTrust(counterparty: string): Promise<number> {
     const cached = trustCache.get(counterparty);
     if (cached !== undefined) return cached;
-    const trust = await baseTrust(env, counterparty);
+    const trust = await baseTrust(env, counterparty, succ);
     trustCache.set(counterparty, trust);
     return trust;
   }
@@ -173,7 +191,7 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   let excludedAttestations = 0;
   let rejectedAttestationCount = 0;
   for (const r of finalized) {
-    const counterparty = r.agentA.id === agentId ? r.agentB.id : r.agentA.id;
+    const counterparty = otherParty(r, self, succ);
     const pairCount = pairCounts.get(counterparty) ?? 1;
     const pairWeight = Math.log(1 + pairCount) / pairCount;
 
@@ -227,7 +245,7 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
     weightSum += weight;
     accrueVolume(volumeByCurrency, r.settlement);
 
-    if (r.agentB.id === agentId) {
+    if (self.has(r.agentB.id)) {
       asProviderWeightedSuccessSum += weight * outcomeScore;
       asProviderWeightSum += weight;
       accrueVolume(asProviderVolumeByCurrency, r.settlement);
@@ -246,8 +264,9 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   // report barely moves the score. Deduped to one per poster so repeat
   // reports from a single requester don't compound, the same class of bug
   // the wash-trading cap (v0.20) closed on the positive side.
-  const nonPerformanceReports = await listNonPerformanceAgainst(env, agentId);
-  const reportingPosters = new Set(nonPerformanceReports.map((j) => j.postedBy));
+  // Reports against any ID in the lineage follow it (§2.3), deduped per poster chain.
+  const nonPerformanceReports = (await Promise.all(lineage.map((id) => listNonPerformanceAgainst(env, id)))).flat();
+  const reportingPosters = new Set(nonPerformanceReports.map((j) => headOf(j.postedBy, succ)));
   for (const posterId of reportingPosters) {
     let weight = await cachedBaseTrust(posterId);
     if (!Number.isFinite(weight)) weight = 0;
@@ -273,6 +292,8 @@ export async function computeReputation(env: Env, agentId: string): Promise<Repu
   }
   if (disputedCount > 0) flags.push("in_dispute");
   if (record.revokedAt) flags.push("revoked");
+  if (record.succeededBy) flags.push(`succeeded:${record.succeededBy}`);
+  for (const id of lineage.slice(1)) flags.push(`inherited_from:${id}`);
   if (nonPerformanceReports.length > 0) flags.push("nonperformance_reported");
   if (rejectedAttestationCount > 0) flags.push("attestation_rejected");
 

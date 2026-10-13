@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { registerAgentSchema, linkChallengeSchema, linkSchema, setVerifierStatusSchema, revokeAgentSchema } from "../../sdk-js/src/core/schemas.js";
+import { registerAgentSchema, linkChallengeSchema, linkSchema, setVerifierStatusSchema, revokeAgentSchema, succeedAgentSchema } from "../../sdk-js/src/core/schemas.js";
 import { parsePageParams, paginate } from "../../sdk-js/src/core/pagination.js";
 import { requireSignedRequest, optionalSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
@@ -125,6 +125,15 @@ agentsRouter.post("/:id/revoke", requireSignedRequest, rateLimitWriteByAgent, re
   const parsed = revokeAgentSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   res.json(agentService.revokeAgent(req.agentDid!, parsed.data.reason));
+});
+
+// Key succession (SPEC.md §2.3): signed by the predecessor, self only; the
+// body carries both keys' signatures over the succession statement.
+agentsRouter.post("/:id/succeed", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
+  agentService.requireSelf(req.agentDid, req.params.id);
+  const parsed = succeedAgentSchema.safeParse(req.body);
+  if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
+  res.status(201).json(agentService.succeedAgent(req.agentDid!, parsed.data));
 });
 
 // SPEC.md §4.4 (v0.19): a `participants_only` receipt is silently omitted

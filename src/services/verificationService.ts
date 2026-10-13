@@ -167,7 +167,8 @@ export function attestationVerdict(receiptId: string): { verdict: AttestationVer
       // Checking revokedAt here closes that: revocation always removes a
       // verifier's standing, whether the operator or the agent itself
       // initiated it.
-      return agent.isAuthorizedVerifier && !agent.revokedAt;
+      // SPEC.md §2.3: a succeeded key is retired too; the grant doesn't follow it.
+      return agent.isAuthorizedVerifier && !agent.revokedAt && !agent.succeededBy;
     } catch {
       return false; // verifier truly doesn't exist (AGENT_NOT_FOUND)
     }

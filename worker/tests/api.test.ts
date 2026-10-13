@@ -21,7 +21,7 @@ import DRAFT_WINDOW_MIGRATION from "../migration-draft-window-null.sql?raw";
 // One statement per array entry (not exec() with a multi-line blob) — D1's
 // exec() splits on newlines and chokes on a CREATE TABLE spanning several.
 const SCHEMA_STATEMENTS = [
-  "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, linked_proof TEXT NOT NULL DEFAULT '{}', stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, is_authorized_verifier INTEGER NOT NULL DEFAULT 0, revoked_at TEXT, revocation_reason TEXT)",
+  "CREATE TABLE IF NOT EXISTS agents (id TEXT PRIMARY KEY, capabilities TEXT NOT NULL, metadata TEXT NOT NULL, linked TEXT NOT NULL, linked_proof TEXT NOT NULL DEFAULT '{}', stake_usd REAL NOT NULL DEFAULT 0, created_at TEXT NOT NULL, is_authorized_verifier INTEGER NOT NULL DEFAULT 0, revoked_at TEXT, revocation_reason TEXT, succeeded_by TEXT, succeeded_at TEXT, succession TEXT)",
   "CREATE TABLE IF NOT EXISTS agent_capabilities (agent_id TEXT NOT NULL REFERENCES agents(id), capability TEXT NOT NULL, PRIMARY KEY (agent_id, capability))",
   "CREATE INDEX IF NOT EXISTS idx_agent_capabilities_capability ON agent_capabilities(capability)",
   "CREATE TABLE IF NOT EXISTS receipts (receipt_id TEXT PRIMARY KEY, agent_a_id TEXT NOT NULL REFERENCES agents(id), agent_b_id TEXT NOT NULL REFERENCES agents(id), status TEXT NOT NULL, completed_at TEXT NOT NULL, amount_usd REAL NOT NULL DEFAULT 0, data TEXT NOT NULL)",
@@ -3098,5 +3098,102 @@ describe("hosted pre-payment check (GET /v1/check)", () => {
     const bad = await check("target=hello");
     expect(bad.status).toBe(400);
     expect(bad.json.error.message).toMatch(/unrecognized target/);
+  });
+});
+
+describe("key succession (SPEC.md §2.3, v0.42)", () => {
+  async function succeed(old: Keypair, next: Keypair, key = `succeed:${old.did}:${next.did}`) {
+    const { successionSigningBytes } = await import("../../sdk-js/src/core/succession.js");
+    const bytes = successionSigningBytes(old.did, next.did);
+    return call("POST", `/v1/agents/${encodeURIComponent(old.did)}/succeed`, {
+      keypair: old,
+      idempotencyKey: key,
+      body: { successor: next.did, predecessorSignature: toBase64(sign(bytes, old.privateKey)), successorSignature: toBase64(sign(bytes, next.privateKey)) },
+    });
+  }
+  async function finalize(requester: Keypair, worker_: Keypair) {
+    const input = job();
+    const content = buildSignableContent(requester.did, worker_.did, input as never);
+    const draftSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), worker_.privateKey));
+    const draft = (await call("POST", "/v1/receipts", { keypair: worker_, idempotencyKey: `receipt:${input.jobId}`, body: { ...input, agentAId: requester.did, signature: draftSig } })).json as { receiptId: string };
+    const counterSig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId: draft.receiptId })), requester.privateKey));
+    await call("POST", `/v1/receipts/${encodeURIComponent(draft.receiptId)}/countersign`, { keypair: requester, idempotencyKey: `countersign:${draft.receiptId}`, body: { signature: counterSig } });
+    return draft.receiptId;
+  }
+
+  it("moves receipts and disputes to the successor, retires the old ID, logs the statement", async () => {
+    const old = generateKeypair();
+    const peer = generateKeypair();
+    const next = generateKeypair();
+    const cap = `cap-${Math.random().toString(36).slice(2)}`;
+    await call("POST", "/v1/agents", { keypair: old, idempotencyKey: `reg:${old.did}`, body: { capabilities: [cap] } });
+    await call("POST", "/v1/agents", { keypair: peer, idempotencyKey: `reg:${peer.did}`, body: { capabilities: ["job.posting"] } });
+    const receiptId = await finalize(peer, old);
+
+    const res = await succeed(old, next);
+    expect(res.status).toBe(201);
+    const body = res.json as { predecessor: { succeededBy: string }; successor: { succession: { predecessor: string }; linked: object; capabilities: string[] } };
+    expect(body.predecessor.succeededBy).toBe(next.did);
+    expect(body.successor.succession.predecessor).toBe(old.did);
+    expect(body.successor.linked).toEqual({});
+    expect(body.successor.capabilities).toEqual([cap]);
+
+    const again = await succeed(old, generateKeypair());
+    expect(again.status).toBe(403);
+    expect((again.json as { error: { code: string } }).error.code).toBe("AGENT_SUCCEEDED");
+
+    const rep = (await call("GET", `/v1/agents/${next.did}/reputation`)).json as { components: { finalizedReceipts: number }; flags: string[] };
+    expect(rep.components.finalizedReceipts).toBe(1);
+    expect(rep.flags).toContain(`inherited_from:${old.did}`);
+    const oldRep = (await call("GET", `/v1/agents/${old.did}/reputation`)).json as { flags: string[] };
+    expect(oldRep.flags).toContain(`succeeded:${next.did}`);
+
+    await call("POST", `/v1/receipts/${encodeURIComponent(receiptId)}/dispute`, { keypair: peer, idempotencyKey: `dispute:${receiptId}`, body: { reason: "wrong" } });
+    expect(((await call("GET", `/v1/agents/${next.did}/reputation`)).json as { flags: string[] }).flags).toContain("in_dispute");
+
+    const search = (await call("GET", `/v1/agents/search?capability=${cap}`)).json as { agents: { id: string }[] };
+    expect(search.agents.map((a) => a.id)).toEqual([next.did]);
+
+    const { entries } = (await call("GET", "/v1/transparency/entries?limit=200")).json as { entries: Array<{ entryType: string; refId: string; payload: string }> };
+    const { verifySuccession } = await import("../../sdk-js/src/core/succession.js");
+    const entry = entries.find((e) => e.entryType === "agent_succeeded" && e.refId === old.did)!;
+    expect(verifySuccession(JSON.parse(entry.payload))).toBe(true);
+  });
+
+  it("lets only one of two racing successions win", async () => {
+    const old = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: old, idempotencyKey: `reg:${old.did}`, body: { capabilities: ["x"] } });
+    const [a, b] = [generateKeypair(), generateKeypair()];
+    const results = await Promise.all([succeed(old, a), succeed(old, b)]);
+
+    expect(results.filter((r) => r.status === 201)).toHaveLength(1);
+    const winner = results[0].status === 201 ? a : b;
+    const loser = winner === a ? b : a;
+    expect((await call("GET", `/v1/agents/${loser.did}`)).status).toBe(404);
+    expect(((await call("GET", `/v1/agents/${old.did}`)).json as { succeededBy: string }).succeededBy).toBe(winner.did);
+  });
+
+  it("refuses a registered successor, a forged successor signature, and a revoked predecessor", async () => {
+    const a = generateKeypair();
+    const b = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: a, idempotencyKey: `reg:${a.did}`, body: { capabilities: ["x"] } });
+    await call("POST", "/v1/agents", { keypair: b, idempotencyKey: `reg:${b.did}`, body: { capabilities: ["x"] } });
+    const merged = await succeed(a, b);
+    expect(merged.status).toBe(409);
+    expect((merged.json as { error: { code: string } }).error.code).toBe("AGENT_ALREADY_REGISTERED");
+
+    const { successionSigningBytes } = await import("../../sdk-js/src/core/succession.js");
+    const target = generateKeypair();
+    const bytes = successionSigningBytes(a.did, target.did);
+    const forged = await call("POST", `/v1/agents/${encodeURIComponent(a.did)}/succeed`, {
+      keypair: a,
+      idempotencyKey: `forged:${a.did}`,
+      body: { successor: target.did, predecessorSignature: toBase64(sign(bytes, a.privateKey)), successorSignature: toBase64(sign(bytes, generateKeypair().privateKey)) },
+    });
+    expect((forged.json as { error: { code: string } }).error.code).toBe("SUCCESSION_INVALID");
+
+    await call("POST", `/v1/agents/${a.did}/revoke`, { keypair: a, idempotencyKey: `rev:${a.did}`, body: { reason: "lost" } });
+    const revoked = await succeed(a, generateKeypair());
+    expect((revoked.json as { error: { code: string } }).error.code).toBe("AGENT_REVOKED");
   });
 });

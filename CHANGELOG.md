@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.42 (Draft) — 2026-10-13
+- **Key succession (new §2.3).** `POST /agents/:id/succeed` hands an INAM ID's history to a new, unregistered key. Both keys sign `canonical({ type: "inam.succession.v1", predecessor, successor })`; the predecessor gets `succeededBy` and signs nothing further (`AGENT_SUCCEEDED`), the successor records the statement as `succession`, and an `agent_succeeded` leaf goes into the transparency log. Reputation is computed over the lineage with counterparties counted under their chain head, so succession conserves evidence: disputes, rejections and non-performance reports follow the successor, nothing is merged or forked. Linked identities, verifier grants and stake do not carry over. A thief holding the old key can succeed it first; §2.3 says so and reserves `recovery` for pre-rotation or guardian recovery. Raised by two outside reviews. New error codes `AGENT_SUCCEEDED`, `SUCCESSION_INVALID`; flags `succeeded:<did>`, `inherited_from:<did>`.
+
 ### v0.41 (Draft) — 2026-10-09
 - **Receipts over HTTP (new §15).** `INAM-Requester` / `INAM-Receipt` headers bind a receipt to an ordinary HTTP call between two agents: the worker drafts over hashes of the exact request and response, the requester countersigns only when both match what it sent and received. No server, wire or storage change.
 
@@ -215,6 +218,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
 ### Unreleased
+- Key succession (SPEC §2.3): `client.succeed(successorKeypair)`; `successionSigningBytes`, `verifySuccession`, `headOf`, `lineageOf` exported. `decideX402`, `decideA2A`, `decideTrust` and `check` refuse a succeeded ID and name its successor. `AgentRecord` gains `succeededBy`, `succeededAt`, `succession`.
 - `CheckOptions.fetch`: inject the `fetch` every outbound check request uses (the hosted `/v1/check` signs with Web Bot Auth through it). Registry lookups in the check now go through the same fetch instead of `InamClient`. `nextStep(report)` returns one suggested step from the worst line. CLI output unchanged.
 
 ### 0.21.0 — 2026-10-10
@@ -353,6 +357,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## Node reference server & Cloudflare Worker
 
 ### Unreleased (Worker)
+- Key succession (SPEC v0.42 §2.3), both runtimes: `POST /v1/agents/:id/succeed`, lineage-aware reputation, `agent_succeeded` log entries, succeeded IDs refused at the signed-request check and dropped from search, succeeded verifiers' attestations no longer counted. The Worker's predecessor update and successor insert are one D1 batch with a compare-and-swap. **Worker: run `worker/migration-add-succession.sql` before deploying.** Tests in `tests/succession.test.ts` and `worker/tests/api.test.ts`.
 - Hosted receipt check: `POST /v1/receipts/:id/verify` (optional body `{ spec, output }`) returns a pass/fail verdict with per-check reasons (both signatures, content-addressed id, transparency-log inclusion, parties not revoked, no active dispute, spec/output hashes), the inclusion proof, the §12 net verdict, and an Ed25519 attestation by the hosted agent key (`DEMO_PRIVATE_KEY`; `null` if unset). Not a Verification record, not logged, no reputation effect: the registry checks integrity, it does not re-execute work. Also the hosted MCP tool `inam_verify_receipt` and the A2A skill `verify_receipt`. Per-IP read rate limit, open CORS. Worker only. Tests in `worker/tests/api.test.ts`.
 - Hosted pre-payment check: `GET /v1/check?target=<url | 0x wallet | did:key>` (optional `method`, `rdap=0`) runs the `npx inamprotocol check` engine (`sdk-js/src/check.ts`, reused, not forked) and returns its `--json` report plus `next` (one suggested step) and `cachedAt`. Results are cached 10 minutes in the Cache API (no new binding) so the shared egress stays under the ERC-8004 indexer's limits. Registry lookups run in-process; other outbound requests carry Web Bot Auth headers when `WEB_BOT_AUTH_KEY` is set. Per-IP read rate limit, open CORS. Also the hosted MCP tool `inam_check` and the A2A skill `check` (a URL or 0x wallet in text, or `{"target"}`). Tests in `worker/tests/api.test.ts`.
 - Web Bot Auth key directory at `GET /.well-known/http-message-signatures-directory` (RFC 9421, for Cloudflare signed agents): JWKS for the key in the `WEB_BOT_AUTH_KEY` secret, signed per response over the request's `@authority` with `Cache-Control: no-store`. 404 while unset. Reuses `sdk-js/src/webBotAuth.ts`. Tests in `worker/tests/api.test.ts`.
@@ -548,6 +553,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## Python SDK (`sdk-python`)
 
 ### Unreleased
+- Key succession (SPEC §2.3): `InamClient.succeed(successor_keypair)`, `succession_signing_bytes`, `verify_succession`; `decide_x402`/`decide_trust` refuse a succeeded ID. Statement bytes and signatures checked against the TypeScript vectors (`tests/test_succession.py`).
 - `InamClient(url)` without a keypair now works for reads (GETs go unsigned). Signing calls raise a `ValueError` saying the client has no keypair, instead of a `TypeError` at construction.
 
 ### 0.13.0 — 2026-10-09

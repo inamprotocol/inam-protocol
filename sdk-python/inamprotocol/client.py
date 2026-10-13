@@ -18,6 +18,7 @@ from urllib.parse import urlparse
 from .canonical import canonicalize
 from .keys import Keypair, sha256_hex, sign, to_base64
 from .receipt import build_signable_content
+from .succession import succession_signing_bytes
 from .verification import build_signable_verification_content
 
 try:
@@ -130,6 +131,25 @@ class InamClient:
             f"/v1/agents/{urllib.parse.quote(self.did, safe='')}/revoke",
             {"reason": reason},
             idempotency_key=f"revoke:{self.did}",
+        )
+
+    def succeed(self, successor: Keypair) -> Dict[str, Any]:
+        """Hands this client's INAM ID to a new key (SPEC.md Section 2.3).
+        `successor` must be a fresh, unregistered keypair; both keys sign the
+        succession statement. Afterwards this ID signs nothing, and
+        InamClient(url, successor) carries its history. Links (wallets, A2A
+        endpoint) do not carry over: re-prove them from the successor.
+        Returns {"predecessor": ..., "successor": ...}."""
+        data = succession_signing_bytes(self.did, successor.did)
+        return self._request(
+            "POST",
+            f"/v1/agents/{urllib.parse.quote(self.did, safe='')}/succeed",
+            {
+                "successor": successor.did,
+                "predecessorSignature": to_base64(sign(data, self.keypair.private_key)),
+                "successorSignature": to_base64(sign(data, successor.private_key)),
+            },
+            idempotency_key=f"succeed:{self.did}",
         )
 
     def set_verifier_status(self, target_agent_id: str, authorized: bool) -> Dict[str, Any]:

@@ -44,7 +44,7 @@ export async function computeStats(env: Env, now = Date.now()) {
   const verifiedBy = new Map<string, string[]>();
   for (const v of verificationRows.results) {
     const verifier = byId.get(v.verifier);
-    if (v.result !== "verified" || !verifier?.isAuthorizedVerifier || verifier.revokedAt) continue;
+    if (v.result !== "verified" || !verifier?.isAuthorizedVerifier || verifier.revokedAt || verifier.succeededBy) continue;
     verifiedBy.set(v.receipt_id, [...(verifiedBy.get(v.receipt_id) ?? []), v.verifier]);
   }
 

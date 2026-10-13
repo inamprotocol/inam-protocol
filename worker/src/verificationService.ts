@@ -171,7 +171,8 @@ export async function attestationVerdict(env: Env, receiptId: string): Promise<{
       // can no longer clear it. Checking revokedAt here closes that:
       // revocation always removes a verifier's standing, whether the
       // operator or the agent itself initiated it.
-      if (agent.isAuthorizedVerifier && !agent.revokedAt) authorizedRecords.push(v);
+      // SPEC.md §2.3: a succeeded key is retired too; the grant doesn't follow it.
+      if (agent.isAuthorizedVerifier && !agent.revokedAt && !agent.succeededBy) authorizedRecords.push(v);
     } catch {
       // verifier truly doesn't exist (AGENT_NOT_FOUND) — shouldn't happen
       // (agents are only ever revoked, not deleted), but don't let a lookup

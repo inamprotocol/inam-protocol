@@ -3,6 +3,8 @@ import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import { fromBase64, fromHex, toHex, verifyRawEd25519 } from "../../sdk-js/src/crypto/keys.js";
 import { p256Verify } from "../../sdk-js/src/crypto/p256.js";
 import { secp256k1Verify, ethAddressFromUncompressedPublicKey } from "../../sdk-js/src/crypto/secp256k1.js";
+import * as transparencyService from "./transparencyService.js";
+import { SUCCESSION_TYPE, verifySuccession, type SuccessionRecord } from "../../sdk-js/src/core/succession.js";
 import type { AgentRecord, Env, ExternalKeyType, LinkChallenge, LinkedIdentities, LinkedIdentityProofs, LinkProof } from "./types.js";
 
 export async function registerAgent(
@@ -56,6 +58,7 @@ export async function setVerifierStatus(env: Env, callerDid: string, targetAgent
   }
   const target = await getAgent(env, targetAgentId); // AGENT_NOT_FOUND if it doesn't exist
   if (target.revokedAt) throw conflict("AGENT_REVOKED", `Agent ${targetAgentId} was revoked at ${target.revokedAt}`);
+  if (target.succeededBy) throw conflict("AGENT_SUCCEEDED", `Agent ${targetAgentId} was succeeded by ${target.succeededBy}`);
   await db.updateAgentVerifierStatus(env, targetAgentId, authorized);
   return getAgent(env, targetAgentId);
 }
@@ -76,6 +79,50 @@ export async function revokeAgent(env: Env, callerDid: string, reason: string): 
     throw conflict("AGENT_REVOKED", `This INAM ID was already revoked at ${current.revokedAt}`);
   }
   return getAgent(env, callerDid);
+}
+
+/**
+ * Key succession (SPEC.md §2.3). The predecessor (the caller, already
+ * checked by requireSignedRequest to be neither revoked nor succeeded) hands
+ * its identity to a new, unregistered successor ID. Both keys must have
+ * signed the succession statement. The successor starts with the
+ * predecessor's capabilities and metadata but no links, stake or verifier
+ * grant: each of those was proven or granted to the old key, not the new one.
+ */
+export async function succeedAgent(
+  env: Env,
+  callerDid: string,
+  input: { successor: string; predecessorSignature: string; successorSignature: string },
+): Promise<{ predecessor: AgentRecord; successor: AgentRecord }> {
+  const predecessor = await getAgent(env, callerDid);
+  const succession: SuccessionRecord = { type: SUCCESSION_TYPE, predecessor: callerDid, ...input };
+  if (!verifySuccession(succession)) {
+    throw badRequest("SUCCESSION_INVALID", "predecessorSignature and successorSignature must both verify over the succession statement, and successor must differ from predecessor");
+  }
+  const at = new Date().toISOString();
+  const record: AgentRecord = {
+    id: input.successor,
+    capabilities: predecessor.capabilities,
+    metadata: predecessor.metadata,
+    linked: {},
+    linkedProof: {},
+    stakeUsd: 0,
+    createdAt: at,
+    isAuthorizedVerifier: false,
+    succession,
+  };
+  let ok: boolean;
+  try {
+    ok = await db.succeedAgentIfActive(env, callerDid, record, at);
+  } catch (err) {
+    if (err instanceof db.AgentAlreadyExistsError) {
+      throw conflict("AGENT_ALREADY_REGISTERED", `Successor ${input.successor} is already registered; a successor must be a new ID`);
+    }
+    throw err;
+  }
+  if (!ok) throw conflict("AGENT_SUCCEEDED", `This INAM ID was already succeeded or revoked`);
+  await transparencyService.appendEntry(env, "agent_succeeded", callerDid, succession);
+  return { predecessor: await getAgent(env, callerDid), successor: await getAgent(env, input.successor) };
 }
 
 const LINKABLE_PROTOCOLS = ["agentpass_id", "aitp_id", "passport_id", "erc8004_id", "a2a_endpoint"] as const;
@@ -231,6 +278,6 @@ export interface SearchQuery {
 export async function searchAgents(env: Env, query: SearchQuery): Promise<AgentRecord[]> {
   const all = query.capability
     ? await db.searchAgentsByCapability(env, query.capability, query.includeRevoked ?? false)
-    : (await db.allAgents(env)).filter((a) => query.includeRevoked || !a.revokedAt);
+    : (await db.allAgents(env)).filter((a) => query.includeRevoked || (!a.revokedAt && !a.succeededBy));
   return query.supports ? all.filter((a) => query.supports! in a.linked) : all;
 }

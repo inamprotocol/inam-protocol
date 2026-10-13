@@ -19,6 +19,7 @@ import {
   registerAgentSchema,
   setVerifierStatusSchema,
   revokeAgentSchema,
+  succeedAgentSchema,
   linkChallengeSchema,
   linkSchema,
   postJobSchema,
@@ -104,7 +105,7 @@ app.notFound((c) => c.json({ error: { code: "ROUTE_NOT_FOUND", message: `No rout
 
 // SPEC.md and pyproject.toml aren't JSON-importable; scripts/check-versions.mjs
 // fails CI if these two literals drift from them.
-const SPEC_VERSION = "0.41";
+const SPEC_VERSION = "0.42";
 const SDK_PYTHON_VERSION = "0.13.0";
 app.get("/v1/health", (c) =>
   c.json({
@@ -265,6 +266,14 @@ app.post("/v1/agents/:id/revoke", requireSignedRequest, rateLimitWriteByAgent, r
   agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
   const body = parseBody(revokeAgentSchema, c.get("parsedBody"));
   return c.json(await agentService.revokeAgent(c.env, c.get("agentDid")!, body.reason));
+});
+
+// Key succession (SPEC.md §2.3): signed by the predecessor, self only; the
+// body carries both keys' signatures over the succession statement.
+app.post("/v1/agents/:id/succeed", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) => {
+  agentService.requireSelf(c.get("agentDid"), c.req.param("id")!);
+  const body = parseBody(succeedAgentSchema, c.get("parsedBody"));
+  return c.json(await agentService.succeedAgent(c.env, c.get("agentDid")!, body), 201);
 });
 
 // ---- Jobs ----

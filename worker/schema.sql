@@ -30,7 +30,13 @@ CREATE TABLE IF NOT EXISTS agents (
   -- production `agents` table needs these added via
   -- migration-add-revocation.sql before deploying code that reads/writes them.
   revoked_at TEXT,
-  revocation_reason TEXT
+  revocation_reason TEXT,
+  -- Key succession (SPEC.md §2.3). succeeded_by/succeeded_at are set on a
+  -- predecessor; succession (JSON: the statement both keys signed) on its
+  -- successor. Existing databases: migration-add-succession.sql.
+  succeeded_by TEXT,
+  succeeded_at TEXT,
+  succession TEXT
 );
 
 -- One row per (agent, capability), so `capability` search (agentService.ts's

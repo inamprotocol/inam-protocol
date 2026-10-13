@@ -38,6 +38,8 @@ def decide_trust(
     base = {"did": agent["id"], "reputation": reputation}
     if agent.get("revokedAt"):
         return {**base, "decision": "deny", "reasons": ["INAM ID is revoked"]}
+    if agent.get("succeededBy"):
+        return {**base, "decision": "deny", "reasons": [f"INAM ID was succeeded by {agent['succeededBy']}"]}
 
     escrow_miss = policy_failure(reputation, **{"min_evidence": "none", **(escrow or {})})
     if escrow_miss:
