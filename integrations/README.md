@@ -4,6 +4,8 @@ Each package connects the same hosted, read-only MCP server (`https://api.inampr
 (source: `openai-plugin/skills/inam-protocol/SKILL.md`). Versions mirror the Claude Code plugin's (`inam-protocol-plugin/.claude-plugin/plugin.json`);
 `npm run check:versions` fails if a version or a skill copy drifts.
 
+INAM is also sold in x402 Bazaars as `GET https://api.inamprotocol.org/v1/x402/check` (0.001 USDC on Base), the paid twin of the free `/v1/check`: same answer, and payment never changes a verdict or a score. It is listed once the registry's payout wallet is set and the first payment settles through the CDP facilitator (see `worker/src/check.ts`).
+
 | Platform | Folder | Install | Submission | Status |
 |---|---|---|---|---|
 | Claude Code | [`../inam-protocol-plugin`](../inam-protocol-plugin) | `/plugin marketplace add inamprotocol/inam-protocol` then `/plugin install inam-protocol@inam-protocol-plugins` | — (repo marketplace) | Live |

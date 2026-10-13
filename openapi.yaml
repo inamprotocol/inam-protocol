@@ -952,6 +952,29 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
 
+  /x402/check:
+    get:
+      operationId: checkTargetPaid
+      summary: "Paid twin of /check over x402 v2: same parameters, same JSON body, 0.001 USDC on Base (optional; off unless the registry configures a payout wallet)"
+      description: >-
+        Buys exactly the answer GET /check gives for free. Payment never changes a verdict or a score
+        (GOVERNANCE.md, "Scores are not for sale"). A paying request that sends `INAM-Requester: <did:key>`
+        gets an `INAM-Receipt` header for this call (SPEC.md §15), drafted by the registry's hosted agent with
+        capability `demo.x402-check` (never counts toward reputation, §5.2), for the requester to countersign.
+      security: []
+      parameters:
+        - { name: target, in: query, required: true, schema: { type: string }, description: "x402 endpoint http(s) URL, 0x EVM wallet (40 hex), or did:key" }
+        - { name: method, in: query, required: false, schema: { type: string, enum: [GET, POST, HEAD], default: GET }, description: HTTP method used to request a URL target }
+        - { name: rdap, in: query, required: false, schema: { type: string, enum: ["0"] }, description: "0 skips the domain-age (RDAP) lookup" }
+        - { name: PAYMENT-SIGNATURE, in: header, required: false, schema: { type: string }, description: Base64 x402 v2 PaymentPayload }
+        - { name: INAM-Requester, in: header, required: false, schema: { type: string }, description: "Caller's registered did:key; asks for a SPEC §15 receipt" }
+      responses:
+        "200": { description: "Same body as GET /check; PAYMENT-RESPONSE header carries the settlement, INAM-Receipt the draft receipt id when requested" }
+        "400": { $ref: "#/components/responses/Error" }
+        "402": { description: "Payment required; PAYMENT-REQUIRED header carries the base64 PaymentRequired object (with a bazaar discovery extension)" }
+        "429": { $ref: "#/components/responses/Error" }
+        "503": { $ref: "#/components/responses/Error" }
+
   /x402/report/{id}:
     get:
       operationId: getPaidReputationReport

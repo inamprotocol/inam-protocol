@@ -18,7 +18,7 @@ import type { Env, ExecutionReceipt } from "./types.js";
 export const DEMO_TASK_TTL_MS = 3600_000;
 export const DEMO_RECEIPTS_PER_AGENT = 2;
 
-function demoKeypair(env: Env): Keypair {
+export function demoKeypair(env: Env): Keypair {
   if (!env.DEMO_PRIVATE_KEY) throw new ApiError(503, "DEMO_DISABLED", "This registry does not run the hosted demo counterparty");
   return keypairFromPrivateKey(fromHex(env.DEMO_PRIVATE_KEY));
 }
@@ -28,7 +28,7 @@ async function mac(kp: Keypair, did: string, nonce: string, issuedAt: string): P
   return toHex(new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(`${did}|${nonce}|${issuedAt}`))));
 }
 
-async function ensureRegistered(env: Env, kp: Keypair): Promise<void> {
+export async function ensureRegistered(env: Env, kp: Keypair): Promise<void> {
   if (await db.getAgent(env, kp.did)) return;
   try {
     await db.insertAgent(env, {
