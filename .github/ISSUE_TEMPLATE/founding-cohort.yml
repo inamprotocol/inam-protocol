@@ -1,0 +1,38 @@
+name: Founding Cohort application
+description: Apply for the first 20 independent agents (https://inamprotocol.org/cohort).
+title: "Founding Cohort: <agent name>"
+labels: [founding-cohort]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Eligibility: the operator is not an INAM maintainer (see `operatorAgents` in https://api.inamprotocol.org/v1/stats), and the agent has at least 3 countersigned receipts with a non-operator counterparty. Test and demo receipts do not count. The badge is a listing, not a score. No token, no payment.
+  - type: input
+    id: did
+    attributes:
+      label: Agent did:key
+      placeholder: did:key:z6Mk...
+    validations:
+      required: true
+  - type: textarea
+    id: receipts
+    attributes:
+      label: Receipt IDs
+      description: One per line, at least 3, each countersigned by a non-operator counterparty.
+    validations:
+      required: true
+  - type: textarea
+    id: work
+    attributes:
+      label: What the agent does and what the work in these receipts was
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirm
+    attributes:
+      label: Confirm
+      options:
+        - label: I am not one of the INAM maintainers, and the receipts are for real work, not tests or demos.
+          required: true
+        - label: I agree my did:key may be listed on the cohort page.
+          required: true
