@@ -1,0 +1,96 @@
+{
+  "suite": "inam-countersigned-grounding-v0.1",
+  "method": "counterparty-countersigned",
+  "note": "Test keys and made-up addresses only. Checks: feedbackHash, receiptId, both signatures, value, sender, specHash/outputHash against the bytes the requester observed.",
+  "parties": {
+    "requester": {
+      "did": "did:key:z6Mkkrq4oHrSaU8E2ZctUreJkiXyrVbPRM4FZgPxYx3X8XCS",
+      "erc8004Address": "0x1111111111111111111111111111111111111111"
+    },
+    "provider": {
+      "did": "did:key:z6MkenP9pSJt69Re5GYC3HeA6JC4BbFSATBbVkjx3TVbE4LL",
+      "erc8004Address": "0x2222222222222222222222222222222222222222"
+    }
+  },
+  "observed": {
+    "request": {
+      "method": "POST",
+      "url": "https://worker.example/translate",
+      "body": "{\"text\":\"merhaba dünya\",\"to\":\"en\"}"
+    },
+    "response": {
+      "status": 200,
+      "body": "{\"text\":\"hello world\"}"
+    },
+    "expectedSpecHash": "sha256:423007c3904c15d5f43b0485ff3e442b0003925cb283ac7b58c16634429bce20",
+    "expectedOutputHash": "sha256:e344fa3b83cf2b142293de2a4e56c6b211d4a157f8adb3c954c51ab67f41a46a"
+  },
+  "cases": [
+    {
+      "id": "POSITIVE",
+      "description": "Genuine feedback: sent from the requester's proven wallet, both signatures valid, hashes match the observed bytes.",
+      "feedbackFile": "{\"agentId\":7,\"agentRegistry\":\"eip155:8453:0x8004000000000000000000000000000000000000\",\"clientAddress\":\"eip155:8453:0x1111111111111111111111111111111111111111\",\"createdAt\":\"2026-10-03T00:00:00.000Z\",\"inam\":{\"receipt\":{\"agentA\":{\"id\":\"did:key:z6Mkkrq4oHrSaU8E2ZctUreJkiXyrVbPRM4FZgPxYx3X8XCS\",\"role\":\"requester\"},\"agentB\":{\"id\":\"did:key:z6MkenP9pSJt69Re5GYC3HeA6JC4BbFSATBbVkjx3TVbE4LL\",\"role\":\"worker\"},\"jobId\":\"http:countersigned-vectors-v0.1\",\"receiptId\":\"sha256:c4b80bbc9472979127dca9491a729396514bc9b6c36391b79ba9419fbb2828c3\",\"receiptVersion\":\"1.0\",\"result\":{\"completedAt\":\"2026-10-01T10:00:01.000Z\",\"outputHash\":\"sha256:e344fa3b83cf2b142293de2a4e56c6b211d4a157f8adb3c954c51ab67f41a46a\"},\"signatures\":{\"agentA\":\"mjXSDW6FMCAL5wBv0ASZ4BR7Dst7KXNMtQF1mrPaApJw0QCzuwWHPsuQqEkVjb4LOTvGfmJzaa6QtK/QLbKTCQ==\",\"agentB\":\"wDDUXpemxNcVEVQfH7kaTZr2rJk/zzLNNpAkx3a70UjyrGK9OPMAX/dhgxsVneGCse/jXV2s6F+n5WLFDqYwBQ==\"},\"task\":{\"capability\":\"translation.tr-en\",\"createdAt\":\"2026-10-01T10:00:00.000Z\",\"specHash\":\"sha256:423007c3904c15d5f43b0485ff3e442b0003925cb283ac7b58c16634429bce20\"},\"verification\":{\"method\":\"payer_confirmation\",\"outcome\":\"success\"}}},\"tag1\":\"inam-receipt\",\"tag2\":\"translation.tr-en\",\"value\":100,\"valueDecimals\":0}",
+      "onchainEvent": {
+        "clientAddress": "0x1111111111111111111111111111111111111111",
+        "feedbackHash": "0x9d7bb681bc76d26fe927d690d0042a1c3176dbf3b4831d498c99f1e3a39ecfe6",
+        "value": 100
+      },
+      "expected": {
+        "accepted": true,
+        "failedChecks": []
+      }
+    },
+    {
+      "id": "WRONG-WALLET-COPY",
+      "description": "The genuine file, byte for byte, sent from a wallet that is not the requester's proven erc8004_id (the Sybil copy).",
+      "feedbackFile": "{\"agentId\":7,\"agentRegistry\":\"eip155:8453:0x8004000000000000000000000000000000000000\",\"clientAddress\":\"eip155:8453:0x1111111111111111111111111111111111111111\",\"createdAt\":\"2026-10-03T00:00:00.000Z\",\"inam\":{\"receipt\":{\"agentA\":{\"id\":\"did:key:z6Mkkrq4oHrSaU8E2ZctUreJkiXyrVbPRM4FZgPxYx3X8XCS\",\"role\":\"requester\"},\"agentB\":{\"id\":\"did:key:z6MkenP9pSJt69Re5GYC3HeA6JC4BbFSATBbVkjx3TVbE4LL\",\"role\":\"worker\"},\"jobId\":\"http:countersigned-vectors-v0.1\",\"receiptId\":\"sha256:c4b80bbc9472979127dca9491a729396514bc9b6c36391b79ba9419fbb2828c3\",\"receiptVersion\":\"1.0\",\"result\":{\"completedAt\":\"2026-10-01T10:00:01.000Z\",\"outputHash\":\"sha256:e344fa3b83cf2b142293de2a4e56c6b211d4a157f8adb3c954c51ab67f41a46a\"},\"signatures\":{\"agentA\":\"mjXSDW6FMCAL5wBv0ASZ4BR7Dst7KXNMtQF1mrPaApJw0QCzuwWHPsuQqEkVjb4LOTvGfmJzaa6QtK/QLbKTCQ==\",\"agentB\":\"wDDUXpemxNcVEVQfH7kaTZr2rJk/zzLNNpAkx3a70UjyrGK9OPMAX/dhgxsVneGCse/jXV2s6F+n5WLFDqYwBQ==\"},\"task\":{\"capability\":\"translation.tr-en\",\"createdAt\":\"2026-10-01T10:00:00.000Z\",\"specHash\":\"sha256:423007c3904c15d5f43b0485ff3e442b0003925cb283ac7b58c16634429bce20\"},\"verification\":{\"method\":\"payer_confirmation\",\"outcome\":\"success\"}}},\"tag1\":\"inam-receipt\",\"tag2\":\"translation.tr-en\",\"value\":100,\"valueDecimals\":0}",
+      "onchainEvent": {
+        "clientAddress": "0x3333333333333333333333333333333333333333",
+        "feedbackHash": "0x9d7bb681bc76d26fe927d690d0042a1c3176dbf3b4831d498c99f1e3a39ecfe6",
+        "value": 100
+      },
+      "expected": {
+        "accepted": false,
+        "failedChecks": [
+          "fileClientAddressMatchesSender",
+          "senderIsRequesterWallet"
+        ]
+      }
+    },
+    {
+      "id": "TAMPERED-OUTPUT-HASH",
+      "description": "result.outputHash edited inside the carried receipt; feedbackHash recomputed over the edited file, sent from the right wallet.",
+      "feedbackFile": "{\"agentId\":7,\"agentRegistry\":\"eip155:8453:0x8004000000000000000000000000000000000000\",\"clientAddress\":\"eip155:8453:0x1111111111111111111111111111111111111111\",\"createdAt\":\"2026-10-03T00:00:00.000Z\",\"inam\":{\"receipt\":{\"agentA\":{\"id\":\"did:key:z6Mkkrq4oHrSaU8E2ZctUreJkiXyrVbPRM4FZgPxYx3X8XCS\",\"role\":\"requester\"},\"agentB\":{\"id\":\"did:key:z6MkenP9pSJt69Re5GYC3HeA6JC4BbFSATBbVkjx3TVbE4LL\",\"role\":\"worker\"},\"jobId\":\"http:countersigned-vectors-v0.1\",\"receiptId\":\"sha256:c4b80bbc9472979127dca9491a729396514bc9b6c36391b79ba9419fbb2828c3\",\"receiptVersion\":\"1.0\",\"result\":{\"completedAt\":\"2026-10-01T10:00:01.000Z\",\"outputHash\":\"sha256:2910e9a528b169d433bad2f53171e547726ca717868e29362ec178cfb58b97cb\"},\"signatures\":{\"agentA\":\"mjXSDW6FMCAL5wBv0ASZ4BR7Dst7KXNMtQF1mrPaApJw0QCzuwWHPsuQqEkVjb4LOTvGfmJzaa6QtK/QLbKTCQ==\",\"agentB\":\"wDDUXpemxNcVEVQfH7kaTZr2rJk/zzLNNpAkx3a70UjyrGK9OPMAX/dhgxsVneGCse/jXV2s6F+n5WLFDqYwBQ==\"},\"task\":{\"capability\":\"translation.tr-en\",\"createdAt\":\"2026-10-01T10:00:00.000Z\",\"specHash\":\"sha256:423007c3904c15d5f43b0485ff3e442b0003925cb283ac7b58c16634429bce20\"},\"verification\":{\"method\":\"payer_confirmation\",\"outcome\":\"success\"}}},\"tag1\":\"inam-receipt\",\"tag2\":\"translation.tr-en\",\"value\":100,\"valueDecimals\":0}",
+      "onchainEvent": {
+        "clientAddress": "0x1111111111111111111111111111111111111111",
+        "feedbackHash": "0x7feec35c27e69bccc6da108795931a25b2acbd49bd46dae7787fede41f3eadf0",
+        "value": 100
+      },
+      "expected": {
+        "accepted": false,
+        "failedChecks": [
+          "receiptIdRecomputes",
+          "workerSignature",
+          "requesterSignature",
+          "outputHashMatchesObservedBytes"
+        ]
+      }
+    },
+    {
+      "id": "OUTPUT-NOT-WHAT-WAS-SERVED",
+      "description": "Both signatures are valid, but the provider's outputHash commits to different bytes than the requester received. A requester that recomputes (SPEC §15 step 3) refuses to countersign this.",
+      "feedbackFile": "{\"agentId\":7,\"agentRegistry\":\"eip155:8453:0x8004000000000000000000000000000000000000\",\"clientAddress\":\"eip155:8453:0x1111111111111111111111111111111111111111\",\"createdAt\":\"2026-10-03T00:00:00.000Z\",\"inam\":{\"receipt\":{\"agentA\":{\"id\":\"did:key:z6Mkkrq4oHrSaU8E2ZctUreJkiXyrVbPRM4FZgPxYx3X8XCS\",\"role\":\"requester\"},\"agentB\":{\"id\":\"did:key:z6MkenP9pSJt69Re5GYC3HeA6JC4BbFSATBbVkjx3TVbE4LL\",\"role\":\"worker\"},\"jobId\":\"http:countersigned-vectors-v0.1\",\"receiptId\":\"sha256:51968202116a120715be7387e83f03d26ea3c1281d63110a148159e4d4c7cf90\",\"receiptVersion\":\"1.0\",\"result\":{\"completedAt\":\"2026-10-01T10:00:01.000Z\",\"outputHash\":\"sha256:2910e9a528b169d433bad2f53171e547726ca717868e29362ec178cfb58b97cb\"},\"signatures\":{\"agentA\":\"+fXRHCXTDOA+tUqARcBXm2cn8qkIeD+ByCQXPOTC7Nm2LOIc2mmmWQy0UKLcTpRUbvHaNv9mc3Lmz1IzsKUOBA==\",\"agentB\":\"P46kDb36mIo7D4HFeLR/DrVlKdwWfQdZHwnq2y4XmqjE4udQLFI7yNwkFMvgxCspXZL12pGX3ajp11bnreIMDQ==\"},\"task\":{\"capability\":\"translation.tr-en\",\"createdAt\":\"2026-10-01T10:00:00.000Z\",\"specHash\":\"sha256:423007c3904c15d5f43b0485ff3e442b0003925cb283ac7b58c16634429bce20\"},\"verification\":{\"method\":\"payer_confirmation\",\"outcome\":\"success\"}}},\"tag1\":\"inam-receipt\",\"tag2\":\"translation.tr-en\",\"value\":100,\"valueDecimals\":0}",
+      "onchainEvent": {
+        "clientAddress": "0x1111111111111111111111111111111111111111",
+        "feedbackHash": "0x81d5ed166f4c3fa4d7bb918240fae486c92299077fb00494ec65928a0b967770",
+        "value": 100
+      },
+      "expected": {
+        "accepted": false,
+        "failedChecks": [
+          "outputHashMatchesObservedBytes"
+        ]
+      }
+    }
+  ]
+}
