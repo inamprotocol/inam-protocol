@@ -1,0 +1,33 @@
+{
+  "name": "@inamprotocol/agentkit",
+  "version": "0.1.0",
+  "description": "INAM pre-payment check as a Coinbase AgentKit action provider, plus a fetch guard for x402 payments",
+  "type": "module",
+  "license": "Apache-2.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/inamprotocol/inam-protocol.git",
+    "directory": "integrations/agentkit"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "peerDependencies": {
+    "@coinbase/agentkit": ">=0.10.0",
+    "zod": ">=3.23.0 <5"
+  },
+  "devDependencies": {
+    "@coinbase/agentkit": "^0.10.4",
+    "@types/node": "^22.5.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.1.9",
+    "zod": "^3.25.76"
+  }
+}

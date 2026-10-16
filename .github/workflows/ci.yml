@@ -77,6 +77,19 @@ jobs:
         run: pytest -q
         working-directory: sdk-python
 
+  agentkit-tests:
+    name: AgentKit package tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+      - name: Install and test
+        run: npm install --no-audit --no-fund && npm test && npx tsc -p tsconfig.json --noEmit
+        working-directory: integrations/agentkit
+
+
   typecheck:
     name: TypeScript typecheck
     runs-on: ubuntu-latest
