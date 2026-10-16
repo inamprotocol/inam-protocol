@@ -1,0 +1,194 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pricing — INAM Protocol</title>
+<link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
+<meta name="description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.001 USDC.">
+<link rel="canonical" href="https://inamprotocol.org/pricing">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="INAM Protocol">
+<meta property="og:title" content="Pricing — INAM Protocol">
+<meta property="og:description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.001 USDC.">
+<meta property="og:url" content="https://inamprotocol.org/pricing">
+<meta property="og:image" content="https://inamprotocol.org/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://inamprotocol.org/og.png">
+<meta name="twitter:title" content="Pricing — INAM Protocol">
+<meta name="twitter:description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.001 USDC.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+:root {
+  --bg: #ffffff;
+  --bg-2: #f4f5f7;
+  --bg-3: #ebedf1;
+  --ink: #14161b;
+  --ink-dim: #4a505c;
+  --ink-faint: #7b8290;
+  --line: #dde1e7;
+  --accent: #7a2e2e;
+  --accent-ink: #632424;
+  --accent-soft: #f5e8e8;
+  --code-bg: #f4f5f7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0e11;
+    --bg-2: #16181d;
+    --bg-3: #1d2027;
+    --ink: #e6e8ec;
+    --ink-dim: #a2a8b5;
+    --ink-faint: #6b7280;
+    --line: #262a32;
+    --accent: #d98686;
+    --accent-ink: #e6a3a3;
+    --accent-soft: #241616;
+    --code-bg: #16181d;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Public Sans", -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+code, pre, kbd, .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace; }
+a { color: var(--accent-ink); }
+a:hover { text-decoration-thickness: 2px; }
+h1, h2, h3, h4 { text-wrap: balance; font-weight: 600; }
+p { max-width: 72ch; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 28px; }
+
+.topbar { border-bottom: 1px solid var(--line); background: var(--bg); }
+.topbar-inner {
+  max-width: 880px; margin: 0 auto; padding: 14px 28px;
+  display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap;
+}
+.wordmark {
+  font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 14px;
+  letter-spacing: 0.02em; color: var(--ink); text-decoration: none; white-space: nowrap;
+}
+.wordmark:hover { color: var(--ink); }
+.topnav { display: flex; gap: 20px; flex-wrap: wrap; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.topnav a { color: var(--ink-dim); text-decoration: none; }
+.topnav a:hover { color: var(--accent-ink); }
+.topnav a.current { color: var(--accent-ink); }
+
+.masthead { padding: 44px 0 8px; }
+.status-line {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--accent-ink);
+  display: flex; align-items: center; gap: 9px; margin-bottom: 14px;
+}
+.status-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
+h1.title { font-size: 2.1rem; margin: 0 0 14px; letter-spacing: -0.01em; }
+p.lead { color: var(--ink-dim); font-size: 1.02rem; max-width: 66ch; }
+
+section { padding: 30px 0; border-top: 1px solid var(--line); }
+section:first-of-type { border-top: none; }
+h2.h {
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint); margin: 0 0 6px; font-weight: 600;
+}
+h3.case-title { font-size: 1.15rem; margin: 0 0 8px; }
+p.case-desc { color: var(--ink-dim); margin: 0 0 14px; }
+.case-meta {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint);
+  margin-bottom: 14px;
+}
+.case-meta a { color: var(--ink-faint); }
+.case-meta a:hover { color: var(--accent-ink); }
+
+pre {
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 3px;
+  padding: 13px 15px; overflow-x: auto; margin: 0; font-size: 13.5px; line-height: 1.55;
+}
+code { font-size: 0.92em; }
+.pre-label {
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; display: block;
+}
+.case { margin-bottom: 34px; }
+.case:last-child { margin-bottom: 0; }
+
+footer.site { border-top: 1px solid var(--line); margin-top: 10px; padding: 26px 0 60px; }
+.footer-grid {
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint);
+}
+.footer-grid a { color: var(--ink-faint); }
+.footer-grid a:hover { color: var(--accent-ink); }
+.legal h2 { font-size: 1.1rem; margin: 30px 0 8px; }
+.legal ul { max-width: 72ch; padding-left: 1.2em; }
+.legal li { margin-bottom: 6px; }
+.stat { border: 1px solid var(--line); background: var(--bg-2); border-radius: 3px; padding: 14px 16px; max-width: 72ch; font-family: "IBM Plex Mono", monospace; font-size: 13.5px; }
+.stat .n { font-size: 1.4rem; font-weight: 600; color: var(--accent-ink); }
+.stat .note { color: var(--ink-faint); font-size: 12px; margin-top: 6px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="wordmark" href="/">INAM PROTOCOL</a>
+    <nav class="topnav">
+      <a href="/use-cases">Use Cases</a>
+      <a href="/cohort">Cohort</a>
+      <a class="current" href="/pricing">Pricing</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://docs.inamprotocol.org/spec/">Specification</a>
+      <a href="https://docs.inamprotocol.org/api/">API Reference</a>
+      <a href="https://explorer.inamprotocol.org" target="_blank" rel="noopener">Explorer</a>
+      <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">Source</a>
+    </nav>
+  </div>
+</div>
+
+<div class="wrap legal">
+  <div class="masthead">
+    <div class="status-line"><span class="dot"></span>Updated 16 Oct 2026</div>
+    <h1 class="title">Pricing</h1>
+  </div>
+  <p class="lead">INAM Protocol is free and open source. There are no subscriptions and no paid plans today. This page lists everything that costs money, which is one thing.</p>
+  <h2>Free, always</h2>
+  <ul>
+    <li>The protocol, specification and reference implementation (Apache-2.0). Run your own registry for nothing: <a href="https://docs.inamprotocol.org/">docs</a>.</li>
+    <li>The SDKs (<code>inamprotocol</code> on npm and PyPI), the CLI (<code>npx inamprotocol check &lt;url&gt;</code>), the MCP server (<code>inam-mcp</code>) and the GitHub Action.</li>
+    <li>The hosted pre-payment check: <code>GET https://api.inamprotocol.org/v1/check?target=&lt;url&gt;</code>. Rate limits apply; see the <a href="https://docs.inamprotocol.org/api/">API reference</a>.</li>
+    <li>The hosted registry, explorer and MCP endpoint, under the <a href="/terms">Terms</a>.</li>
+  </ul>
+
+  <h2>The one paid item</h2>
+  <p><code>GET https://api.inamprotocol.org/v1/x402/check</code> returns the same answer as the free check, paid per call over <a href="https://x402.org">x402</a>: <strong>0.001 USDC on Base</strong> per check, no account, no minimum. It exists so that autonomous agents, which pay over x402 and do not have API keys, can use the check without a signup. Paying does not change a verdict, a score or what we publish.</p>
+  <pre>curl -i "https://api.inamprotocol.org/v1/x402/check?target=https://example.com/api"
+# HTTP 402 with the payment requirements; pay and retry with the payment header</pre>
+  <p>Payment is in USDC on Base and settles on-chain. Refund terms are on the <a href="/refund">refund page</a>.</p>
+
+  <h2>Not available yet</h2>
+  <p>There are no monthly plans, volume tiers, SLAs or support contracts. If you need higher volume, an uptime commitment or a private registry set up for you, <a href="/contact">write to us</a>. We will say honestly whether we can do it. Nothing is sold until it is listed here.</p>
+
+  <h2>What you are not paying for</h2>
+  <p>A check reads public signals and says where each came from. It is not a guarantee about any seller's future behaviour, and INAM's registry is run by its maintainers, not a trustless oracle. See the <a href="/terms">Terms</a>.</p>
+  <footer class="site">
+    <div class="footer-grid">
+      <div><a href="/">&larr; Back home</a> &middot; <a href="/pricing">Pricing</a> &middot; <a href="/refund">Refunds</a> &middot; <a href="/contact">Contact</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a></div>
+      <div>
+        <a href="https://github.com/inamprotocol/inam-protocol/blob/main/LICENSE" target="_blank" rel="noopener">Apache-2.0</a>
+        &middot;
+        <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">github.com/inamprotocol/inam-protocol</a>
+      </div>
+    </div>
+  </footer>
+</div>
+</body>
+</html>
