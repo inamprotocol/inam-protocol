@@ -275,7 +275,8 @@ async function walletInam(wallet: string, opts: CheckOptions): Promise<CheckItem
   try {
     linked = opts.linkedWallets ?? (await inamLinkedWallets(registry, opts.timeoutMs, opts.fetch));
   } catch (e) {
-    return [{ id: "inam.link", status: "info", label: "INAM wallet link: registry unreachable", detail: (e as Error).message }];
+    // An outage is not "nothing to see": warn, so a pre-payment check never passes on it.
+    return [{ id: "inam.link", status: "warn", label: "INAM wallet link: registry unreachable", detail: (e as Error).message }];
   }
   const did = linked.get(wallet.toLowerCase());
   if (!did) return [{ id: "inam.link", status: "warn", label: `${short(wallet)} is not linked to any INAM ID`, detail: "No INAM ID proved control of this wallet, so there are no receipts to read." }];

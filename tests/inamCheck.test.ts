@@ -19,6 +19,7 @@ interface World {
   feedback?: { clients: string[]; total: number; receiptBacked: number };
   status?: number;
   directory?: boolean;
+  registryDown?: boolean;
 }
 
 function stub(w: World) {
@@ -38,6 +39,7 @@ function stub(w: World) {
       return new Response(JSON.stringify(httpMessageSignaturesDirectory([key.publicKey])), { headers: directoryResponseHeaders("seller.example", key.privateKey) });
     }
     if (url.startsWith("https://rdap.org/domain/seller.example")) return json({ events: [{ eventAction: "registration", eventDate: "1995-08-14T04:00:00Z" }] });
+    if (w.registryDown && url.startsWith(REG)) return new Response("unavailable", { status: 503 });
     if (url.startsWith(`${REG}/v1/agents/search`)) return json({ agents: w.linked ? [agent] : [], hasMore: false });
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}`) return json(agent);
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}/reputation`) return json(reputation);
@@ -106,6 +108,14 @@ describe("inam check", () => {
     expect(status(r, "inam.extension")).toEqual(["pass"]);
     expect(r.checks.find((c) => c.id === "inam.reputation")?.label).toMatch(/countersigned, 3 countersigned receipts/);
     expect(status(r, "webbotauth.directory")).toEqual(["pass"]);
+  });
+
+  it("an unreachable registry is a warn, never a pass (wallet and URL targets)", async () => {
+    stub({ erc8004Owned: 1, feedback: { clients: ["0x2222222222222222222222222222222222222222"], total: 5, receiptBacked: 2 }, registryDown: true });
+    const r = await run(PAYTO);
+    expect(r.checks.find((c) => c.id === "inam.link")).toMatchObject({ status: "warn", label: expect.stringMatching(/registry unreachable/) });
+    expect(r.verdict).toBe("caution");
+    expect((await run("https://seller.example/api")).verdict).not.toBe("pass");
   });
 
   it("fails on a non-402 answer and on plain http", async () => {
