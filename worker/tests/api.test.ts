@@ -2904,6 +2904,53 @@ describe("hosted demo counterparty (SPEC.md §14)", () => {
     expect(after.operatorAgents).toContain(demoAgentId);
     expect(after.operatorAgents).not.toContain(kp.did);
   });
+
+  it("GET /v1/stats counts only a finalized receipt between two independent non-operator agents, and splits linked wallets", async () => {
+    type S = { nonOperatorAgents: number; linkedWallets: { total: number; operator: number; nonOperator: number }; countersignedReceiptsBetweenIndependentParties: number; definitions: Record<string, string> };
+    const stats = async () => (await call("GET", "/v1/stats", { ip: crypto.randomUUID() })).json as S;
+    const reg = async (metadata?: Record<string, unknown>) => {
+      const kp = generateKeypair();
+      await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: ["x"], ...(metadata ? { metadata } : {}) } });
+      return kp;
+    };
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
+    const finalize = async (a: Keypair, b: Keypair, capability = "job.posting", countersign = true) => {
+      const input = { ...job(), task: { ...job().task, capability } } as ReturnType<typeof job>;
+      const content = buildSignableContent(a.did, b.did, input);
+      const sig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), b.privateKey));
+      const d = await call("POST", "/v1/receipts", { keypair: b, idempotencyKey: `receipt:${input.jobId}`, body: { ...input, agentAId: a.did, signature: sig } });
+      expect(d.status).toBe(201);
+      const receiptId = (d.json as { receiptId: string }).receiptId;
+      if (!countersign) return;
+      const csig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId })), a.privateKey));
+      const f = await call("POST", `/v1/receipts/${encodeURIComponent(receiptId)}/countersign`, { keypair: a, idempotencyKey: `countersign:${receiptId}`, body: { signature: csig } });
+      expect(f.status).toBe(200);
+    };
+    const link = (kp: Keypair) => env.DB.prepare("UPDATE agents SET linked = ? WHERE id = ?").bind(JSON.stringify({ erc8004_id: "0x8BCd93d094BB0B995f5E8D81568431875252E01e" }), kp.did).run();
+
+    const t0 = await stats();
+    const [real1, real2, real3, demoFlag, reference] = [await reg(), await reg(), await reg(), await reg({ demo: true }), await reg({ reference: true })];
+    expect((await stats()).nonOperatorAgents - t0.nonOperatorAgents).toBe(3); // demo-flagged and reference agents excluded
+
+    await finalize(real1, real2, "job.posting", false); // draft only: not counted
+    await finalize(real1, demoFlag); // demo-flagged party
+    await finalize(real1, reference); // reference (operator) party
+    await finalize(real1, real3, "demo.echo"); // demo capability
+    expect((await stats()).countersignedReceiptsBetweenIndependentParties).toBe(t0.countersignedReceiptsBetweenIndependentParties);
+
+    await finalize(real1, real3); // real independent pair
+    const t1 = await stats();
+    expect(t1.countersignedReceiptsBetweenIndependentParties - t0.countersignedReceiptsBetweenIndependentParties).toBe(1);
+
+    await link(real1);
+    await link(reference);
+    const t2 = await stats();
+    expect(t2.linkedWallets.nonOperator - t1.linkedWallets.nonOperator).toBe(1);
+    expect(t2.linkedWallets.operator - t1.linkedWallets.operator).toBe(1);
+    expect(t2.linkedWallets.total - t1.linkedWallets.total).toBe(2);
+    expect(Object.keys(t2.definitions).sort()).toEqual(["independentReceipt", "linkedWallet", "nonOperatorAgent"]);
+  });
 });
 
 describe("paid x402 report (x402Report.ts)", () => {

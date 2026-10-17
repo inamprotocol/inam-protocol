@@ -16,6 +16,7 @@ export const MAINTAINER_AGENT_IDS: readonly string[] = [
   "did:key:z6MkoERaG7ttjBvSbEsEFx7mdd7BKvntqrESqosxPSHLxe5F", // INAM Integrity Verifier (GOVERNANCE.md)
   "did:key:z6MkjE6iZEFoKkBoxR3QygfWaFUkLUUkj1ry527tUWQB8Gpk", // Reference Reviewer (README.md)
   "did:key:z6MkpSvw1Yuc3ReWhCmt5RwY5LVZqMRY9p8NvpA2TSQCPPyK", // Reference Extractor (sdk-js/README.md)
+  "did:key:z6MkrdaWFKVAgrJAB4fM8o5NPgwkM7uWXHnx3bg87Xos8HXy", // INAM service ID (linked wallet 0x8BCd93d094BB0B995f5E8D81568431875252E01e is the maintainers')
 ];
 
 const DAY_MS = 86_400_000;
@@ -54,6 +55,10 @@ export async function computeStats(env: Env, now = Date.now()) {
   const isDemo = (r: ExecutionReceipt) => r.task.capability.startsWith(DEMO_CAPABILITY_PREFIX) || r.agentA.id === demoDid || r.agentB.id === demoDid;
   const isLabelled = (r: ExecutionReceipt) => isDemo(r) || r.task.capability.startsWith("test.") || flagged(r.agentA.id) || flagged(r.agentB.id);
   const operatorOnly = (r: ExecutionReceipt) => operator.has(r.agentA.id) && operator.has(r.agentB.id);
+  const isIndependent = (id: string) => !operator.has(id) && !flagged(id);
+  const independentReceipt = (r: ExecutionReceipt) =>
+    r.status === "finalized" && !isLabelled(r) && r.agentA.id !== r.agentB.id && isIndependent(r.agentA.id) && isIndependent(r.agentB.id);
+  const linkedAgents = agents.filter((a) => !!a.linked?.erc8004_id);
   const count = (pred: (r: ExecutionReceipt) => boolean) => signed.filter(pred).length;
 
   const logged = logRows.results.filter((e) => e.entry_type === "receipt_finalized");
@@ -77,6 +82,18 @@ export async function computeStats(env: Env, now = Date.now()) {
     agents: {
       registered: agents.length,
       inCountersignedReceipts: new Set(signed.flatMap((r) => [r.agentA.id, r.agentB.id])).size,
+    },
+    nonOperatorAgents: agents.filter((a) => isIndependent(a.id)).length,
+    linkedWallets: {
+      total: linkedAgents.length,
+      operator: linkedAgents.filter((a) => !isIndependent(a.id)).length,
+      nonOperator: linkedAgents.filter((a) => isIndependent(a.id)).length,
+    },
+    countersignedReceiptsBetweenIndependentParties: count(independentReceipt),
+    definitions: {
+      nonOperatorAgent: "registered agent that is not an operator agent (operatorAgents) and does not self-declare metadata.demo or metadata.test. Self-declared flags can only exclude an agent, never include one.",
+      linkedWallet: "agent whose linked.erc8004_id is set; that field is only written after a challenge signed by the wallet's secp256k1 key (SPEC.md §2.1). Split by the same operator test as nonOperatorAgent.",
+      independentReceipt: "status finalized (both signatures verified; disputed excluded), not demo/test labelled (demo.* or test.* capability, demo agent, metadata.demo/test), and both parties are different nonOperatorAgents. Independence is by registry identity only: one person running two did:keys still counts, and is not detectable here.",
     },
     counterpartyPairs: new Set(signed.map((r) => [r.agentA.id, r.agentB.id].sort().join(" "))).size,
     operatorAgents: [...operator].sort(),
