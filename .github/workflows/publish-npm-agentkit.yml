@@ -1,0 +1,55 @@
+# Publish npm package (@inamprotocol/agentkit)
+#
+# Publishes integrations/agentkit/ as the "@inamprotocol/agentkit" npm package using npm Trusted Publishing
+# (GitHub Actions OIDC) plus provenance attestation, same pattern as
+# publish-npm.yml (sdk-js/"inamprotocol") -- no NPM_TOKEN secret referenced.
+# Separate workflow because it's a separate npm package with its own
+# version, published from a different directory.
+#
+# Manual dispatch only (this repo cuts no GitHub Releases yet, and even if
+# it did, one release wouldn't necessarily mean integrations/agentkit/package.json's version
+# changed) -- run by hand after bumping integrations/agentkit/package.json.
+
+name: Publish npm package (@inamprotocol/agentkit)
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish @inamprotocol/agentkit to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for npm Trusted Publishing (OIDC) + provenance
+    defaults:
+      run:
+        working-directory: integrations/agentkit
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
+          cache: npm
+          cache-dependency-path: integrations/agentkit/package-lock.json
+
+      # npm Trusted Publishing (OIDC) requires npm CLI >=11.5.1.
+      - name: Ensure npm CLI supports Trusted Publishing
+        run: npm install -g npm@latest
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm test
+
+      - name: Publish to npm with provenance
+        run: npm publish --provenance --access public
