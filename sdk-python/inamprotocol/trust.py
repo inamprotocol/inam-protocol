@@ -65,6 +65,10 @@ def check_trust(did: str, client: Any, **policy: Any) -> Dict[str, Any]:
     try:
         agent = client.get_agent(did)
         reputation = client.get_reputation(did)
-    except InamApiError:
-        return {"did": did, "decision": "deny", "reasons": ["INAM ID not found in the registry"]}
+    except InamApiError as e:
+        # 404 = unknown ID; any other status is an outage. Both deny, but say which.
+        reason = "INAM ID not found in the registry" if e.status == 404 else f"INAM registry unavailable (HTTP {e.status})"
+        return {"did": did, "decision": "deny", "reasons": [reason]}
+    except OSError as e:  # URLError, timeouts, connection resets
+        return {"did": did, "decision": "deny", "reasons": [f"INAM registry unavailable ({type(e).__name__})"]}
     return decide_trust(agent, reputation, **policy)

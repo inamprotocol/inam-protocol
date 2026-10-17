@@ -253,12 +253,13 @@ export async function inamLinkedWallets(registryUrl = "https://api.inamprotocol.
   }
 }
 
-async function agentAndReputation(registryUrl: string, did: string, f?: Fetch): Promise<[AgentRecord, ReputationResult] | null> {
+/** null = the registry answered 404 (unknown ID); "down" = 5xx, timeout or network error (an outage is not "unknown", and never a pass). */
+async function agentAndReputation(registryUrl: string, did: string, f?: Fetch): Promise<[AgentRecord, ReputationResult] | null | "down"> {
   const base = `${registryUrl}/v1/agents/${encodeURIComponent(did)}`;
   try {
     return await Promise.all([getJson(base, undefined, 0, f), getJson(`${base}/reputation`, undefined, 0, f)]);
-  } catch {
-    return null;
+  } catch (e) {
+    return /-> 404$/.test((e as Error).message) ? null : "down";
   }
 }
 
@@ -282,7 +283,8 @@ async function walletInam(wallet: string, opts: CheckOptions): Promise<CheckItem
   if (!did) return [{ id: "inam.link", status: "warn", label: `${short(wallet)} is not linked to any INAM ID`, detail: "No INAM ID proved control of this wallet, so there are no receipts to read." }];
   const items: CheckItem[] = [{ id: "inam.link", status: "pass", label: `${short(wallet)} is proven by INAM ID ${did}` }];
   const ar = await agentAndReputation(registry, did, opts.fetch);
-  if (ar) items.push(reputationItem(...ar));
+  if (ar === "down") items.push({ id: "inam.reputation", status: "warn", label: "INAM reputation: registry unreachable" });
+  else if (ar) items.push(reputationItem(...ar));
   return items;
 }
 
@@ -342,6 +344,7 @@ export async function checkWallet(wallet: string, opts: CheckOptions & { chainId
 
 export async function checkDid(did: string, opts: CheckOptions = {}): Promise<CheckReport> {
   const ar = await agentAndReputation(opts.registryUrl ?? "https://api.inamprotocol.org", did, opts.fetch);
+  if (ar === "down") return finish(did, "did", [{ id: "inam.agent", status: "warn", label: "INAM registry unreachable: could not look this ID up" }]);
   if (!ar) return finish(did, "did", [{ id: "inam.agent", status: "fail", label: "INAM ID not found in the registry" }]);
   const [agent, rep] = ar;
   const checks: CheckItem[] = [agent.revokedAt ? { id: "inam.agent", status: "fail", label: `INAM ID revoked at ${agent.revokedAt}` } : agent.succeededBy ? { id: "inam.agent", status: "fail", label: `INAM ID succeeded by ${agent.succeededBy}; check that ID instead` } : agent.pendingSuccession ? { id: "inam.agent", status: "warn", label: `Succession to ${agent.pendingSuccession.successor} pending until ${agent.pendingSuccession.effectiveAt}; this key may be compromised` } : { id: "inam.agent", status: "pass", label: `INAM ID registered ${agent.createdAt ?? ""}`.trim() }, reputationItem(agent, rep)];
@@ -402,7 +405,8 @@ export async function checkUrl(url: string, opts: CheckOptions = {}): Promise<Ch
 
   if (inamDid) {
     const ar = await agentAndReputation(registry, inamDid, opts.fetch);
-    if (!ar) checks.push({ id: "inam.extension", status: "fail", label: `402 names INAM ID ${inamDid}, which the registry does not know` });
+    if (ar === "down") checks.push({ id: "inam.extension", status: "warn", label: `402 names INAM ID ${inamDid}: registry unreachable, binding not checked` });
+    else if (!ar) checks.push({ id: "inam.extension", status: "fail", label: `402 names INAM ID ${inamDid}, which the registry does not know` });
     else {
       const d = decideX402(ar[0], ar[1], accepts.map((a) => a.payTo), { minEvidence: "none" });
       checks.push(d.allow ? { id: "inam.extension", status: "pass", label: `402 names INAM ID ${inamDid} and payTo is its proven wallet` } : { id: "inam.extension", status: "fail", label: `402 names INAM ID ${inamDid}: ${d.reason}`, detail: "A seller can name a reputable ID while routing the money elsewhere; do not pay." });
