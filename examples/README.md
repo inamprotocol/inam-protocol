@@ -110,3 +110,7 @@ A fetch wrapper for Stripe machine payments (x402): on a 402 it runs `inam check
 ## `webhook/payment-webhook.ts`
 
 An Express payment-succeeded webhook (Stripe `payment_intent.succeeded` or Dodo `payment.succeeded` shaped events) that runs `inam check` on the buyer agent's INAM ID before fulfilling, then records the decision as a merchant-signed draft receipt whose `settlement.paymentRef` is the processor's payment id. INAM moves and holds no money. The signature check is a placeholder HMAC and the secret a placeholder; swap in the processor's own verification. No Stripe or Dodo calls. Self-check: `npx tsx examples/webhook/payment-webhook.ts`.
+
+## `acp-agent-signature.ts`
+
+A merchant stores which agent made an ACP checkout request (the gap in agentic-commerce-protocol#315). The agent signs `Timestamp` + JCS(body) with Ed25519 and puts its `did:key` in the body; the merchant verifies with no lookup, rejects tampered bodies, someone else's DID and stale timestamps, and keeps the DID with the session. The field name is illustrative: ACP defines no agent identifier today and leaves the signature algorithm out of band. It names a key, not a legal entity or a user, and whether card networks accept it as evidence is unknown. Offline self-check: `npx tsx examples/acp-agent-signature.ts`.
