@@ -218,6 +218,7 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
 ### Unreleased
+- `python -m inamprotocol check <url | 0x wallet | did:key>` and `inamprotocol.check()` / `format_report()`: the pre-payment check from the free hosted `/v1/check`, same report layout and exit codes as `npx inamprotocol check` (`--json`, `--strict`). Stdlib only; mocked-HTTP tests in `tests/test_check.py`. Not yet published to PyPI.
 - Key succession (SPEC §2.3): `client.succeed(successorKeypair)` (returns the record with `pendingSuccession`), `client.cancelSuccession(reason)` (a revoke); `successionSigningBytes`, `verifySuccession`, `headOf`, `lineageOf`, `SUCCESSION_WINDOW_MS` exported. `decideX402`, `decideA2A`, `decideTrust` and `check` refuse a succeeded ID and name its successor; `succession_pending` is in `DEFAULT_ESCROW_FLAGS` and `check` warns on it. `AgentRecord` gains `succeededBy`, `succeededAt`, `succession`, `pendingSuccession`.
 - `CheckOptions.fetch`: inject the `fetch` every outbound check request uses (the hosted `/v1/check` signs with Web Bot Auth through it). Registry lookups in the check now go through the same fetch instead of `InamClient`. `nextStep(report)` returns one suggested step from the worst line. CLI output unchanged.
 

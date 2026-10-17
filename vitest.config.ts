@@ -8,6 +8,6 @@ export default defineConfig({
     // contain nested git worktrees (each a full checkout, worker/ included)
     // that would otherwise leak into this glob and fail to resolve
     // Cloudflare-only imports like `cloudflare:workers`.
-    exclude: ["**/node_modules/**", "worker/**", ".claude/**", "integrations/agentkit/**"],
+    exclude: ["**/node_modules/**", "**/dist/**", "worker/**", ".claude/**", "integrations/agentkit/**"],
   },
 });

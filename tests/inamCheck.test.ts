@@ -20,6 +20,7 @@ interface World {
   status?: number;
   directory?: boolean;
   registryDown?: boolean;
+  agentDown?: boolean; // search works, per-agent lookups 503
   erc8004Down?: boolean;
 }
 
@@ -41,6 +42,7 @@ function stub(w: World) {
     }
     if (url.startsWith("https://rdap.org/domain/seller.example")) return json({ events: [{ eventAction: "registration", eventDate: "1995-08-14T04:00:00Z" }] });
     if (w.registryDown && new URL(url).origin === REG) return new Response("unavailable", { status: 503 });
+    if (w.agentDown && url.startsWith(`${REG}/v1/agents/did`)) return new Response("unavailable", { status: 503 });
     if (url.startsWith(`${REG}/v1/agents/search`)) return json({ agents: w.linked ? [agent] : [], hasMore: false });
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}`) return json(agent);
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}/reputation`) return json(reputation);
@@ -61,6 +63,7 @@ function stub(w: World) {
         return rpcResult(word(tagged ? (w.feedback?.receiptBacked ?? 0) : (w.feedback?.total ?? 0)) + word(0) + word(0)); // getSummary
       }
     }
+    if (url.startsWith(`${REG}/v1/agents/did`)) return json({ error: "AGENT_NOT_FOUND" }, 404);
     return new Response("unexpected", { status: 599 });
   });
 }
@@ -118,6 +121,19 @@ describe("inam check", () => {
     expect(r.checks.find((c) => c.id === "inam.link")).toMatchObject({ status: "warn", label: expect.stringMatching(/registry unreachable/) });
     expect(r.verdict).toBe("caution");
     expect((await run("https://seller.example/api")).verdict).not.toBe("pass");
+  });
+
+  it("a registry that lists the wallet but 503s on the agent lookup never yields a pass (wallet, did and URL targets)", async () => {
+    stub({ extensions: { inam: { info: { did: DID } } }, linked: PAYTO, agentDown: true, erc8004Owned: 1, feedback: { clients: ["0x2222222222222222222222222222222222222222"], total: 5, receiptBacked: 2 } });
+    const w = await run(PAYTO);
+    expect(w.checks.find((c) => c.id === "inam.reputation")).toMatchObject({ status: "warn", label: expect.stringMatching(/unreachable/) });
+    expect(w.verdict).toBe("caution");
+    const d = await run(DID);
+    expect(d.checks.find((c) => c.id === "inam.agent")).toMatchObject({ status: "warn", label: expect.stringMatching(/unreachable/) });
+    expect(d.verdict).toBe("caution");
+    const u = await run("https://seller.example/api");
+    expect(u.checks.find((c) => c.id === "inam.extension")).toMatchObject({ status: "warn" });
+    expect(u.verdict).not.toBe("pass");
   });
 
   it("ERC-8004 sources down is a warn, never a pass", async () => {

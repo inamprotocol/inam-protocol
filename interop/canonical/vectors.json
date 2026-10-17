@@ -1,0 +1,122 @@
+{
+  "description": "Canonical JSON vectors with non-ASCII and non-BMP content; reference: sdk-js/src/crypto/canonical.ts",
+  "vectors": [
+    {
+      "name": "astral-key-sorts-before-U+FFFF",
+      "input": {
+        "￿": 1,
+        "😀": 2
+      },
+      "canonical": "{\"😀\":2,\"￿\":1}",
+      "utf8Sha256": "48c5d098713870a7b88be7fc0ffc0a79e912d20f80ea8a4a5604426f49add103"
+    },
+    {
+      "name": "astral-key-sorts-before-U+E000",
+      "input": {
+        "": "private-use",
+        "𐀀": "linear-b",
+        "a": 0
+      },
+      "canonical": "{\"a\":0,\"𐀀\":\"linear-b\",\"\":\"private-use\"}",
+      "utf8Sha256": "5b26b7dcd5b746fc5f2d1f8e58c70b7bb9abfabff1fbde2a55936ce5965b79be"
+    },
+    {
+      "name": "astral-keys-among-bmp-keys",
+      "input": {
+        "z": 1,
+        "𝄞": 2,
+        "é": 3,
+        "日本": 4,
+        "A": 5,
+        "Ａ": 6
+      },
+      "canonical": "{\"A\":5,\"z\":1,\"é\":3,\"日本\":4,\"𝄞\":2,\"Ａ\":6}",
+      "utf8Sha256": "b6b7a2a1095bb9a8470e26cc35264d2669255d6abde0d490d4fd2bf691f347dd"
+    },
+    {
+      "name": "astral-key-nested-in-array",
+      "input": {
+        "list": [
+          {
+            "�": 1,
+            "🚀": 2
+          },
+          [
+            {
+              "𠀀": "cjk-ext-b",
+              "￯": "x"
+            }
+          ]
+        ]
+      },
+      "canonical": "{\"list\":[{\"🚀\":2,\"�\":1},[{\"𠀀\":\"cjk-ext-b\",\"￯\":\"x\"}]]}",
+      "utf8Sha256": "db5689390c763ec36522bbb1798d569f22b03ca010eb2be9408ec3f6375bdda1"
+    },
+    {
+      "name": "emoji-values",
+      "input": {
+        "a": "😀",
+        "b": "👨‍👩‍👧",
+        "c": "🇹🇷",
+        "d": "𝄞 clef"
+      },
+      "canonical": "{\"a\":\"😀\",\"b\":\"👨‍👩‍👧\",\"c\":\"🇹🇷\",\"d\":\"𝄞 clef\"}",
+      "utf8Sha256": "8907f06176aa2941e64fec7710d8505188d48d63f2d4e7c32126e8c601c3dc03"
+    },
+    {
+      "name": "bmp-non-ascii",
+      "input": {
+        "name": "Café",
+        "jp": "日本語",
+        "tr": "ğüşıöç İ"
+      },
+      "canonical": "{\"jp\":\"日本語\",\"name\":\"Café\",\"tr\":\"ğüşıöç İ\"}",
+      "utf8Sha256": "7482b59d09447b1fde215ad8a7bf2e41678a4bf35b9a80a41003e3e4d2e8cca9"
+    },
+    {
+      "name": "no-unicode-normalization",
+      "input": {
+        "nfc": "é",
+        "nfd": "é"
+      },
+      "canonical": "{\"nfc\":\"é\",\"nfd\":\"é\"}",
+      "utf8Sha256": "79eae438d105e852f86ea598ffdda91643386fad0b4f336b941528d30fbf1558"
+    },
+    {
+      "name": "lone-surrogates-escaped",
+      "input": {
+        "hi": "\ud800",
+        "lo": "\udc00",
+        "rev": "\udc00\ud800",
+        "\ud83d": "key"
+      },
+      "canonical": "{\"hi\":\"\\ud800\",\"lo\":\"\\udc00\",\"rev\":\"\\udc00\\ud800\",\"\\ud83d\":\"key\"}",
+      "utf8Sha256": "450ec9ac72567a72d99cddf0e97bad0c9952a1bed75ce16b802f435276c0a087"
+    },
+    {
+      "name": "control-and-special-chars",
+      "input": {
+        "c": "\u0000\b\t\n\f\r\u001f",
+        "q": "\"/",
+        "del": "",
+        "ls": "  "
+      },
+      "canonical": "{\"c\":\"\\u0000\\b\\t\\n\\f\\r\\u001f\",\"del\":\"\",\"ls\":\"  \",\"q\":\"\\\"/\"}",
+      "utf8Sha256": "b230efe90e496aac442bf66f13ba37036df1b102b9a8a723e794722eb95d1600"
+    },
+    {
+      "name": "key-order-digits-case-accents",
+      "input": {
+        "9": 4,
+        "10": 3,
+        "b": 1,
+        "B": 2,
+        "é": 5,
+        "e": 6,
+        "": 7
+      },
+      "canonical": "{\"\":7,\"10\":3,\"9\":4,\"B\":2,\"b\":1,\"e\":6,\"é\":5}",
+      "utf8Sha256": "ca65da7e132c4e02d1b747eee06e008c2f6442b731afe16d04d993109188ad22"
+    }
+  ]
+}

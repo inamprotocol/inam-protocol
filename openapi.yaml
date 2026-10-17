@@ -998,6 +998,20 @@ paths:
         "400": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
 
+  /badge:
+    get:
+      operationId: checkBadge
+      summary: "Shields-style SVG badge of the /check verdict (INAM | pass, caution, fail; grey unknown for an invalid target)"
+      security: []
+      parameters:
+        - { name: target, in: query, required: true, schema: { type: string }, description: "x402 endpoint http(s) URL, 0x EVM wallet (40 hex), or did:key" }
+      responses:
+        "200":
+          description: SVG image; cached up to 5 minutes. Never an error body.
+          content:
+            image/svg+xml: { schema: { type: string } }
+        "429": { $ref: "#/components/responses/Error" }
+
   /x402/check:
     get:
       operationId: checkTargetPaid

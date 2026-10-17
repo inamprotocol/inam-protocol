@@ -1,6 +1,6 @@
 import type { InamClient } from "./client.js";
 import type { AgentRecord, ReputationResult } from "./types.js";
-import { policyFailure, type X402Policy } from "./x402.js";
+import { policyFailure, registryMiss, type X402Policy } from "./x402.js";
 
 /** INAM reputation on an A2A Agent Card (SPEC.md §11.3).
  *
@@ -74,8 +74,8 @@ export async function verifyA2ACard(card: A2AAgentCardLike, inam: InamClient, po
   let agent: AgentRecord, reputation: ReputationResult;
   try {
     [agent, reputation] = await Promise.all([inam.getAgent(did), inam.getReputation(did)]);
-  } catch {
-    return { allow: false, did, reason: "INAM ID not found in the registry" };
+  } catch (e) {
+    return { allow: false, did, reason: registryMiss(e, "INAM ID not found in the registry") };
   }
   return decideA2A(card, agent, reputation, policy);
 }

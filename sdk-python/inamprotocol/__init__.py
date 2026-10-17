@@ -14,6 +14,7 @@ from .keys import (
 from .p256 import P256Keypair, generate_p256_keypair, p256_sign, p256_verify
 from .canonical import canonicalize
 from .client import InamClient
+from .check import check, format_report
 from .merkle_log import verify_inclusion, verify_consistency
 from .receipt import dispute_window_closes_at, is_dispute_window_open
 from .trust import DEFAULT_ESCROW_FLAGS, check_trust, decide_trust
@@ -22,6 +23,8 @@ from .succession import SUCCESSION_TYPE, succession_signing_bytes, verify_succes
 from .x402 import X402_POLICY_VERSION, counterparty_context, decide_x402, x402_policy_input
 
 __all__ = [
+    "check",
+    "format_report",
     "Keypair",
     "generate_keypair",
     "public_key_to_did",
