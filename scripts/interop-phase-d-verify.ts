@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { generateKeypair } from "../sdk-js/src/crypto/keys.js";
+import { generateKeypair, keypairFromPrivateKey, fromHex } from "../sdk-js/src/crypto/keys.js";
 import { InamClient } from "../sdk-js/src/client.js";
 
 /**
@@ -11,6 +11,7 @@ import { InamClient } from "../sdk-js/src/client.js";
  * object, not just that each language can talk to the registry on its own.
  */
 const BASE_URL = process.env.INAM_URL ?? "http://localhost:4021";
+const OPERATOR_HANDOFF_PATH = process.env.INAM_OPERATOR_HANDOFF ?? ".interop-tmp/operator-identity.json";
 const WORKER_HANDOFF_PATH = process.env.INAM_WORKER_HANDOFF ?? ".interop-tmp/worker-identity.json";
 
 async function main() {
@@ -19,6 +20,13 @@ async function main() {
   const verifier = new InamClient(BASE_URL, generateKeypair());
   await verifier.registerAgent(["verification"]);
   console.log(`[phase D / TypeScript] Registered independent verifier ${verifier.did}`);
+
+  // SPEC.md section 12.3: registering is not enough, the registry operator must
+  // authorize the verifier (the server was started with INAM_OPERATOR_DID).
+  const op = JSON.parse(readFileSync(OPERATOR_HANDOFF_PATH, "utf-8"));
+  const operator = new InamClient(BASE_URL, keypairFromPrivateKey(fromHex(op.privateKeyHex)));
+  await operator.setVerifierStatus(verifier.did, true);
+  console.log(`[phase D / TypeScript] Operator ${operator.did} authorized the verifier`);
 
   const { receipts } = await verifier.listReceipts(workerDid);
   const finalized = receipts.filter((r) => r.status === "finalized" && r.agentB.id === workerDid);

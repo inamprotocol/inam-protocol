@@ -9,6 +9,11 @@ cd "$(dirname "$0")/.."
 rm -f data/*.json .interop-tmp/*.json
 mkdir -p .interop-tmp
 
+# Phase D needs an operator-authorized verifier (SPEC.md section 12.3): mint a throwaway
+# operator key and tell the server its DID, as a real deployment does.
+npx tsx scripts/interop-operator-keygen.ts
+export INAM_OPERATOR_DID=$(node -p 'require("./.interop-tmp/operator-identity.json").did')
+
 npx tsx src/index.ts > /tmp/inam-interop-server.log 2>&1 &
 sleep 1.5
 
