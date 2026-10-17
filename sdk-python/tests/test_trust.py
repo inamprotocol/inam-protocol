@@ -66,3 +66,16 @@ class Known:
 def test_check_trust_denies_unknown_ids_and_decides_known_ones():
     assert check_trust(DID, Missing()) == {"did": DID, "decision": "deny", "reasons": ["INAM ID not found in the registry"]}
     assert check_trust(DID, Known())["decision"] == "escrow"
+
+
+def test_check_trust_denies_on_registry_outage_and_says_so():
+    class Down503:
+        def get_agent(self, did):
+            raise InamApiError("GET", "/v1/agents", 503, {})
+
+    class Offline:
+        def get_agent(self, did):
+            raise TimeoutError("timed out")
+
+    assert check_trust(DID, Down503())["reasons"] == ["INAM registry unavailable (HTTP 503)"]
+    assert check_trust(DID, Offline()) == {"did": DID, "decision": "deny", "reasons": ["INAM registry unavailable (TimeoutError)"]}

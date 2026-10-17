@@ -48,6 +48,13 @@ describe("checkTrust", () => {
     expect(await checkTrust(DID, inam)).toMatchObject({ decision: "deny", reasons: ["INAM ID not found in the registry"] });
   });
 
+  it.each([new Error("GET /v1/agents/x -> 503: unavailable"), new TypeError("fetch failed"), new DOMException("timed out", "TimeoutError")])("denies on a registry outage (%s), distinct from an unknown ID", async (err) => {
+    const inam = { getAgent: () => Promise.reject(err), getReputation: () => Promise.reject(err) } as unknown as InamClient;
+    const d = await checkTrust(DID, inam);
+    expect(d.decision).toBe("deny");
+    expect(d.reasons[0]).toMatch(/registry unavailable/);
+  });
+
   it("fetches and decides", async () => {
     const inam = { getAgent: async () => agent(), getReputation: async () => rep() } as unknown as InamClient;
     expect((await checkTrust(DID, inam)).decision).toBe("escrow");

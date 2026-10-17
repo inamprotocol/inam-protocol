@@ -129,6 +129,12 @@ export function counterpartyContext(
   };
 }
 
+/** Why a registry lookup failed: a 404 means unknown ID; anything else (5xx, timeout, network) is an outage. Both deny. */
+export function registryMiss(e: unknown, unknown_: string): string {
+  const msg = e instanceof Error ? e.message : String(e);
+  return /(^|\D)404(\D|$)/.test(msg) ? unknown_ : `INAM registry unavailable (${msg.slice(0, 120)})`;
+}
+
 export class X402PaymentBlocked extends Error {
   constructor(readonly decision: X402Decision) {
     super(`x402 payment blocked by INAM: ${decision.reason}`);
@@ -174,8 +180,8 @@ export function withInamX402Gate(inner: typeof fetch, inam: InamClient, policy: 
     let agent: AgentRecord, reputation: ReputationResult;
     try {
       [agent, reputation] = await Promise.all([inam.getAgent(did), inam.getReputation(did)]);
-    } catch {
-      throw new X402PaymentBlocked({ allow: false, did, reason: "payee INAM ID not found in the registry" });
+    } catch (e) {
+      throw new X402PaymentBlocked({ allow: false, did, reason: registryMiss(e, "payee INAM ID not found in the registry") });
     }
     const accepts = required.accepts ?? [];
     const decision = decideX402(agent, reputation, accepts.map((a) => a.payTo), policy);

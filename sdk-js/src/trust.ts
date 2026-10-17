@@ -1,6 +1,6 @@
 import type { InamClient } from "./client.js";
 import type { AgentRecord, ReputationResult } from "./types.js";
-import { policyFailure, type X402Policy } from "./x402.js";
+import { policyFailure, registryMiss, type X402Policy } from "./x402.js";
 
 /** A decision-ready trust check: allow, escrow, or deny, with the reasons.
  *
@@ -53,8 +53,8 @@ export async function checkTrust(did: string, inam: InamClient, policy: TrustPol
   let agent: AgentRecord, reputation: ReputationResult;
   try {
     [agent, reputation] = await Promise.all([inam.getAgent(did), inam.getReputation(did)]);
-  } catch {
-    return { did, decision: "deny", reasons: ["INAM ID not found in the registry"] };
+  } catch (e) {
+    return { did, decision: "deny", reasons: [registryMiss(e, "INAM ID not found in the registry")] };
   }
   return decideTrust(agent, reputation, policy);
 }
