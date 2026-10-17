@@ -34,7 +34,7 @@ export const succeedAgentSchema = z.object({
 
 export const registerAgentSchema = z.object({
   capabilities: z.array(z.string().min(1)).min(1),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const linkChallengeSchema = z.object({
