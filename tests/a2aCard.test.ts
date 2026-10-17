@@ -39,4 +39,12 @@ describe("A2A Agent Card extension (SPEC.md §11.3)", () => {
     expect((await verifyA2ACard(v1Card(), registry({ revokedAt: "2026-10-01T00:00:00Z" }))).reason).toMatch(/revoked/);
     expect((await verifyA2ACard(v1Card(), registry({ evidenceLevel: "none" }))).reason).toMatch(/evidence none/);
   });
+
+  it("fails closed on a registry outage, distinct from an unknown ID", async () => {
+    const err = new Error("GET /v1/agents/x -> 503: unavailable");
+    const down = { getAgent: () => Promise.reject(err), getReputation: () => Promise.reject(err) } as unknown as InamClient;
+    const d = await verifyA2ACard(v1Card(), down);
+    expect(d.allow).toBe(false);
+    expect(d.reason).toMatch(/registry unavailable/);
+  });
 });

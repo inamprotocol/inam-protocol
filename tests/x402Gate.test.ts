@@ -42,6 +42,13 @@ describe("x402 verify-before-pay gate (SPEC.md §11.2)", () => {
     expect(await blockedReason(withInamX402Gate(server402([BOUND]), registry({ missing: true }))("https://x"))).toMatch(/not found/);
   });
 
+  it.each([["503", new Error("GET /v1/agents/x -> 503: unavailable")], ["timeout", new DOMException("The operation timed out", "TimeoutError")], ["network", new TypeError("fetch failed")]])("fails closed on a registry outage (%s), saying so rather than 'not found'", async (_n, err) => {
+    const down = { getAgent: () => Promise.reject(err), getReputation: () => Promise.reject(err) } as unknown as InamClient;
+    const reason = await blockedReason(withInamX402Gate(server402([BOUND]), down)("https://x"));
+    expect(reason).toMatch(/registry unavailable/);
+    expect(reason).not.toMatch(/not found/);
+  });
+
   it("blocks when payTo is not the address the DID proved control of (borrowed DID)", async () => {
     expect(await blockedReason(withInamX402Gate(server402([OTHER]), registry())("https://x"))).toMatch(/payTo is not/);
     expect(await blockedReason(withInamX402Gate(server402([BOUND]), registry({ linked: "" }))("https://x"))).toMatch(/payTo is not/);

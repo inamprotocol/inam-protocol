@@ -9,19 +9,29 @@
 [![CI](https://github.com/inamprotocol/inam-protocol/actions/workflows/ci.yml/badge.svg)](https://github.com/inamprotocol/inam-protocol/actions/workflows/ci.yml)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue)](./LICENSE)
 
-**Your agent checks who it is paying before it pays.** An x402 payment only goes out if the payee's INAM ID proved control of the `payTo` wallet *and* has work that a real counterparty countersigned. A server that borrows a reputable agent's ID to collect the money gets nothing.
+**Check who your agent is about to pay, before it pays.** Free, no signup, no key. Pick one:
 
-<img src="site/public/x402-demo.svg" width="880" alt="npm run demo:x402: the honest seller is paid; an endpoint borrowing the seller's INAM ID with someone else's wallet is blocked; a newcomer with no work history is blocked">
-
-Check any x402 endpoint, wallet or agent before paying it, no key and no INAM data needed:
+```
+curl "https://api.inamprotocol.org/v1/check?target=https://x402.coinstats.app/markets"
+```
 
 ```
 npx inamprotocol check https://x402.coinstats.app/markets
 ```
 
-It reads the 402 (payTo, network, price), looks the payTo up in ERC-8004 (identity and whether any feedback is tied to delivered work), the INAM registry, the host's Web Bot Auth key directory and the domain's RDAP age, and prints what it found. Exit code 1 when a key check fails, so it can gate a payment or a CI step. Details: [`sdk-js/README.md`](./sdk-js/README.md#inam-check-before-you-pay).
+```
+claude mcp add --transport http inam https://api.inamprotocol.org/mcp
+```
 
-Agents can run the same check without installing anything: `GET https://api.inamprotocol.org/v1/check?target=<url | 0x wallet | did:key>` (JSON, adds a `next` step and `cachedAt`; cached 10 minutes), the MCP tool `inam_check` on `https://api.inamprotocol.org/mcp`, or the A2A skill `check`.
+Each one looks up the seller's payment details, wallet history and domain age, then answers `pass`, `caution` or `fail`. Swap in any web address, `0x` wallet or `did:key`. Python: `python -m inamprotocol check <target>` (from [`sdk-python`](./sdk-python/README.md#check-before-you-pay)).
+
+## More ways in
+
+**Local demo.** An x402 payment only goes out if the payee's INAM ID proved control of the `payTo` wallet and has work a real counterparty countersigned; a server that borrows a reputable agent's ID gets nothing (recording below, runnable under Try it).
+
+<img src="site/public/x402-demo.svg" width="880" alt="npm run demo:x402: the honest seller is paid; an endpoint borrowing the seller's INAM ID with someone else's wallet is blocked; a newcomer with no work history is blocked">
+
+The command line reads the 402 (payTo, network, price), looks the payTo up in ERC-8004 (identity and whether any feedback is tied to delivered work), the INAM registry, the host's Web Bot Auth key directory and the domain's RDAP age, and prints what it found. Exit code 1 when a key check fails, so it can gate a payment or a CI step. Details: [`sdk-js/README.md`](./sdk-js/README.md#inam-check-before-you-pay). The same check is also the MCP tool `inam_check` and the A2A skill `check`. The API answer adds a `next` step and `cachedAt` (cached 10 minutes).
 
 **Badge for sellers.** Show buyers your pre-payment verdict in your README (grey `unknown` when the target is invalid):
 
@@ -33,14 +43,14 @@ Agents can run the same check without installing anything: `GET https://api.inam
 
 ```yaml
 - id: inam
-  uses: inamprotocol/inam-protocol/actions/check@main
+  uses: inamprotocol/inam-protocol/actions/check@v1
   with:
     target: https://x402.coinstats.app/markets   # x402 URL, 0x wallet or did:key
     fail-on: fail                                # or "caution" to be stricter
 - run: echo "verdict ${{ steps.inam.outputs.verdict }}"
 ```
 
-Output `verdict` is `pass`, `caution` or `fail` (`error` when the API could not be reached or answered 4xx/5xx; an error never passes). The job summary lists every check. The step exits 1 when the verdict meets `fail-on`, 2 on an error. Optional `api-base` points at a self-hosted registry. Test: `node actions/check/test.mjs`.
+Output `verdict` is `pass`, `caution` or `fail` (`error` when the API could not be reached or answered 4xx/5xx; an error never passes). The job summary lists every check. The step exits 1 when the verdict meets `fail-on`, 2 on an error. Optional `api-base` points at a self-hosted registry. Details: [`actions/check/README.md`](./actions/check/README.md). Test: `node actions/check/test.mjs`.
 
 `/v1/check` stays free. `GET https://api.inamprotocol.org/v1/x402/check` is its paid twin over x402 (0.001 USDC on Base, listed in x402 Bazaars) for agents that shop there: same parameters, same answer. Payment never changes a verdict or a score ([GOVERNANCE](./GOVERNANCE.md): scores are not for sale). Send `INAM-Requester: <your did:key>` and the response carries an `INAM-Receipt` you can countersign (SPEC [§15](./SPEC.md#15-receipts-over-http-v041); `inamFetch` does it for you).
 

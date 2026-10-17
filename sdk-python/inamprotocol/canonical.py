@@ -37,7 +37,17 @@ this function to paper over the difference.
 
 import json
 import math
+import re
 from typing import Any
+
+# A Python str holds code points, so any surrogate in it is unpaired (a valid pair is one astral char).
+# JS JSON.stringify escapes those as lowercase backslash-u-d8xx; json.dumps(ensure_ascii=False) would
+# emit them raw and fail at UTF-8 encoding.
+_LONE_SURROGATE = re.compile("[\ud800-\udfff]")
+
+
+def _json_str(s: str) -> str:
+    return _LONE_SURROGATE.sub(lambda m: "\\u%04x" % ord(m.group()), json.dumps(s, ensure_ascii=False))
 
 
 def canonicalize(value: Any, keep_null: bool = False) -> str:
@@ -51,13 +61,14 @@ def _stringify(value: Any, keep_null: bool = False) -> str:
     if value is None and keep_null:
         return "null"
     if isinstance(value, dict):
-        keys = sorted(value.keys())
+        # JS sorts keys by UTF-16 code unit (RFC 8785); Python's default is code point. They differ for astral chars.
+        keys = sorted(value.keys(), key=lambda k: k.encode("utf-16-be", "surrogatepass"))
         entries = []
         for key in keys:
             v = value[key]
             if v is None and not keep_null:
                 continue
-            entries.append(json.dumps(key, ensure_ascii=False) + ":" + _stringify(v, keep_null))
+            entries.append(_json_str(key) + ":" + _stringify(v, keep_null))
         return "{" + ",".join(entries) + "}"
     if isinstance(value, list):
         return "[" + ",".join(_stringify(v, keep_null) for v in value) + "]"
@@ -68,7 +79,7 @@ def _stringify(value: Any, keep_null: bool = False) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float)):
         return _format_number(value)
-    return json.dumps(value, ensure_ascii=False)
+    return _json_str(value) if isinstance(value, str) else json.dumps(value, ensure_ascii=False)
 
 
 def _format_number(value: Any) -> str:
