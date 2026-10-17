@@ -9,6 +9,7 @@ import { requireIdempotencyKey } from "./idempotency.js";
 import { rateLimitRegistrationByIp, rateLimitWriteByAgent, rateLimitReadByIp } from "./rateLimit.js";
 import { ApiError, badRequest, forbidden } from "./errors.js";
 import * as agentService from "./agentService.js";
+import * as apiKeys from "./apiKeys.js";
 import * as receiptService from "./receiptService.js";
 import * as jobService from "./jobService.js";
 import * as verificationService from "./verificationService.js";
@@ -114,7 +115,7 @@ app.notFound((c) => c.json({ error: { code: "ROUTE_NOT_FOUND", message: `No rout
 
 // SPEC.md and pyproject.toml aren't JSON-importable; scripts/check-versions.mjs
 // fails CI if these two literals drift from them.
-const SPEC_VERSION = "0.42";
+const SPEC_VERSION = "0.43";
 const SDK_PYTHON_VERSION = "0.14.0";
 app.get("/v1/health", (c) =>
   c.json({
@@ -194,7 +195,7 @@ app.get("/v1/agents/:id/protocols", async (c) => {
 
 app.use("/v1/x402/*", cors({ origin: "*", exposeHeaders: ["PAYMENT-REQUIRED", "PAYMENT-RESPONSE", "INAM-Receipt"] }));
 app.get("/v1/x402/report/:id", rateLimitReadByIp, x402ReportHandler);
-// Paid twin of /v1/check: same answer for 0.001 USDC (see check.ts).
+// Paid twin of /v1/check: same answer for 0.02 USDC (see check.ts).
 app.get("/v1/x402/check", rateLimitReadByIp, x402CheckHandler(app));
 
 // Pre-payment check of any x402 URL, wallet or did:key from public signals (see check.ts).
@@ -288,6 +289,16 @@ app.post("/v1/agents/:id/succeed", requireSignedRequest, rateLimitWriteByAgent, 
   const body = parseBody(succeedAgentSchema, c.get("parsedBody"));
   return c.json(await agentService.requestSuccession(c.env, c.get("agentDid")!, body), 202);
 });
+
+// ---- API keys (SPEC.md §16) ----
+// Deliberately no requireIdempotencyKey: that middleware caches the response
+// body in KV for 24h, which would store the plaintext key. A retry mints a
+// second key instead (capped per agent) and the unused one can be revoked.
+
+app.post("/v1/api-keys", requireSignedRequest, rateLimitWriteByAgent, async (c) => c.json(await apiKeys.issueKey(c.env, c.get("agentDid")!), 201));
+app.get("/v1/api-keys", requireSignedRequest, rateLimitWriteByAgent, async (c) => c.json({ keys: await apiKeys.listKeys(c.env, c.get("agentDid")!) }));
+app.post("/v1/api-keys/:keyId/revoke", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, async (c) =>
+  c.json(await apiKeys.revokeKey(c.env, c.get("agentDid")!, c.req.param("keyId")!)));
 
 // ---- Jobs ----
 
@@ -435,7 +446,8 @@ app.post("/v1/verifications", requireSignedRequest, rateLimitWriteByAgent, requi
   return c.json(record, 201);
 });
 
-app.get("/v1/verifications/:id", async (c) => c.json(await verificationService.getVerification(c.env, c.req.param("id")!)));
+// SPEC.md §12.6: participants or public receipt only; everyone else gets 404, not 403.
+app.get("/v1/verifications/:id", optionalSignedRequest, async (c) => c.json(await verificationService.getVisibleVerification(c.env, c.req.param("id")!, c.get("agentDid"))));
 
 app.get("/v1/transparency/sth", rateLimitReadByIp, async (c) => c.json(await transparencyService.getSTH(c.env)));
 app.get("/v1/transparency/head", rateLimitReadByIp, async (c) => c.json(await transparencyService.getSTH(c.env))); // alias: agents guess "head"

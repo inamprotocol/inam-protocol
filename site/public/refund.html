@@ -6,12 +6,12 @@
 <title>Refunds — INAM Protocol</title>
 <link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
-<meta name="description" content="How refunds work for the optional 0.001 USDC x402 check, and why the free services have none.">
+<meta name="description" content="How refunds work for the optional 0.02 USDC x402 check, and why the free services have none.">
 <link rel="canonical" href="https://inamprotocol.org/refund">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="INAM Protocol">
 <meta property="og:title" content="Refunds — INAM Protocol">
-<meta property="og:description" content="How refunds work for the optional 0.001 USDC x402 check, and why the free services have none.">
+<meta property="og:description" content="How refunds work for the optional 0.02 USDC x402 check, and why the free services have none.">
 <meta property="og:url" content="https://inamprotocol.org/refund">
 <meta property="og:image" content="https://inamprotocol.org/og.png">
 <meta property="og:image:width" content="1200">
@@ -19,7 +19,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://inamprotocol.org/og.png">
 <meta name="twitter:title" content="Refunds — INAM Protocol">
-<meta name="twitter:description" content="How refunds work for the optional 0.001 USDC x402 check, and why the free services have none.">
+<meta name="twitter:description" content="How refunds work for the optional 0.02 USDC x402 check, and why the free services have none.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
 <style>
 :root {
@@ -160,9 +160,9 @@ footer.site { border-top: 1px solid var(--line); margin-top: 10px; padding: 26px
     <div class="status-line"><span class="dot"></span>Updated 16 Oct 2026</div>
     <h1 class="title">Refunds and cancellation</h1>
   </div>
-  <p class="lead">INAM has no subscriptions, so there is nothing to cancel. The only payment is an optional 0.001 USDC per-call check. This page says when we refund it.</p>
+  <p class="lead">INAM has no subscriptions, so there is nothing to cancel. The only payment is an optional 0.02 USDC per-call check. This page says when we refund it.</p>
   <h2>What can be refunded</h2>
-  <p>The paid endpoint <code>/v1/x402/check</code> costs 0.001 USDC on Base per call. We refund that amount in USDC on Base, to the address that paid, if:</p>
+  <p>The paid endpoint <code>/v1/x402/check</code> costs 0.02 USDC on Base per call. We refund that amount in USDC on Base, to the address that paid, if:</p>
   <ul>
     <li>you paid and the call returned an error or no answer (any 5xx, a timeout, or a response that is not a check result), or</li>
     <li>you were charged more than once for one call, or</li>

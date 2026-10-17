@@ -1,0 +1,16 @@
+# Copy into .github/workflows/inam-check.yml in your repo.
+name: inam-check
+on:
+  schedule: [{ cron: "0 6 * * 1" }]   # weekly; also run it before you wire a new paid API into your agent
+  workflow_dispatch:
+permissions: {}                        # the action needs no token and no secrets
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - id: inam
+        uses: inamprotocol/inam-check@v1
+        with:
+          target: https://x402.coinstats.app/markets   # x402 URL, 0x wallet or did:key
+          fail-on: fail                                # "caution" is stricter
+      - run: echo "verdict ${{ steps.inam.outputs.verdict }}"

@@ -52,7 +52,7 @@ The command line reads the 402 (payTo, network, price), looks the payTo up in ER
 
 Output `verdict` is `pass`, `caution` or `fail` (`error` when the API could not be reached or answered 4xx/5xx; an error never passes). The job summary lists every check. The step exits 1 when the verdict meets `fail-on`, 2 on an error. Optional `api-base` points at a self-hosted registry. Details: [`actions/check/README.md`](./actions/check/README.md). Test: `node actions/check/test.mjs`.
 
-`/v1/check` stays free. `GET https://api.inamprotocol.org/v1/x402/check` is its paid twin over x402 (0.001 USDC on Base, listed in x402 Bazaars) for agents that shop there: same parameters, same answer. Payment never changes a verdict or a score ([GOVERNANCE](./GOVERNANCE.md): scores are not for sale). Send `INAM-Requester: <your did:key>` and the response carries an `INAM-Receipt` you can countersign (SPEC [§15](./SPEC.md#15-receipts-over-http-v041); `inamFetch` does it for you).
+`/v1/check` stays free. `GET https://api.inamprotocol.org/v1/x402/check` is its paid twin over x402 (0.02 USDC on Base, listed in x402 Bazaars) for agents that shop there: same parameters, same answer. Payment never changes a verdict or a score ([GOVERNANCE](./GOVERNANCE.md): scores are not for sale). Send `INAM-Requester: <your did:key>` and the response carries an `INAM-Receipt` you can countersign (SPEC [§15](./SPEC.md#15-receipts-over-http-v041); `inamFetch` does it for you).
 
 Try it (one command, local, no real money, no signup):
 
@@ -266,7 +266,11 @@ POST /receipts/:id/dispute        (signed)
 POST /receipts/:id/dispute/resolve  the opener withdraws it: disputed -> finalized (signed)
 
 POST /verifications                independent attestation of a finalized receipt (signed)
-GET  /verifications/:id
+GET  /verifications/:id            404 unless the receipt is public or the caller is a participant/the verifier
+
+POST /api-keys                     mint an API key (signed, Worker only; free tier on /x402/check, SPEC §16)
+GET  /api-keys                     your keys + usage (signed)
+POST /api-keys/:keyId/revoke       (signed)
 
 GET  /transparency/sth             current Merkle tree size + root hash
 GET  /transparency/entries?limit=&offset=

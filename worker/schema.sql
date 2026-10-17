@@ -158,3 +158,16 @@ CREATE TABLE IF NOT EXISTS transparency_log (
   leaf_hash TEXT NOT NULL,
   payload TEXT              -- v0.34: payload the entry's dataHash commits to; NULL = withheld or erased
 );
+
+-- v0.43: API keys + usage meter (SPEC.md §16). Existing databases:
+-- migration-add-api-keys.sql. Only the SHA-256 of a key is stored.
+CREATE TABLE IF NOT EXISTS api_keys (
+  key_id TEXT PRIMARY KEY,
+  key_hash TEXT NOT NULL UNIQUE,   -- sha256 hex of the plaintext key
+  agent_id TEXT NOT NULL REFERENCES agents(id),
+  created_at TEXT NOT NULL,
+  revoked_at TEXT,
+  calls INTEGER NOT NULL DEFAULT 0 -- free-tier calls spent
+);
+
+CREATE INDEX IF NOT EXISTS idx_api_keys_agent ON api_keys(agent_id);
