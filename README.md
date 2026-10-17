@@ -145,6 +145,7 @@ Registers a TypeScript-side "requester" and a Python-side "worker" (see `sdk-pyt
 
 - [`interop/emilia/`](./interop/emilia): an EMILIA Gate-admitted action, copied unchanged from EMILIA's repo, and an INAM receipt whose `task.specHash` is the SHA-256 of that action's canonical bytes, with a one-byte negative case. `node interop/emilia/verify.mjs` checks both signatures and the binding offline, using only Node built-ins.
 - [`examples/agent-receipts-adapter.ts`](./examples/agent-receipts-adapter.ts): an Agent Receipts local receipt becomes an INAM draft signed with the same Ed25519 key. It becomes reputation-eligible only after the requester countersigns.
+- [`docs/VERIFIER.md`](./docs/VERIFIER.md): running an independent verifier: which checks are deterministic, how to ask for authority, and a ten-line offline receipt check ([`examples/verify-receipt-offline.ts`](./examples/verify-receipt-offline.ts)). Payment-side examples: [`examples/stripe-x402/`](./examples/stripe-x402) (`inam check` on an x402 payTo) and [`examples/webhook/`](./examples/webhook) (check the buyer agent in a payment webhook, record a signed receipt).
 
 ## Live deployment
 

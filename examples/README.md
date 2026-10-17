@@ -98,3 +98,15 @@ INAM is a receipt layer that works on any payment rail. Every agent checkout tou
 ```
 npx tsx examples/payment-rails/demo.ts
 ```
+
+## `verify-receipt-offline.ts`
+
+Checks a receipt's content-addressed id, both Ed25519 signatures and (optionally) an output hash with no registry and no network, in about ten lines (SPEC.md §2, §4.2, §5.4). Walkthrough in [`docs/VERIFIER.md`](../docs/VERIFIER.md). `npx tsx examples/verify-receipt-offline.ts`; test: `tests/verifierExamples.test.ts`, which also runs it against a receipt finalized by an in-process registry.
+
+## `stripe-x402/payee-check.ts`
+
+A fetch wrapper for Stripe machine payments (x402): on a 402 it runs `inam check` on every `payTo` and throws before the x402 client signs anything if a check fails (`strict: true` also refuses "caution", which a brand-new deposit address will usually get). INAM moves and holds no money; the payment stays on x402 / Stripe. Offline self-check with a stubbed `check`: `npx tsx examples/stripe-x402/payee-check.ts`.
+
+## `webhook/payment-webhook.ts`
+
+An Express payment-succeeded webhook (Stripe `payment_intent.succeeded` or Dodo `payment.succeeded` shaped events) that runs `inam check` on the buyer agent's INAM ID before fulfilling, then records the decision as a merchant-signed draft receipt whose `settlement.paymentRef` is the processor's payment id. INAM moves and holds no money. The signature check is a placeholder HMAC and the secret a placeholder; swap in the processor's own verification. No Stripe or Dodo calls. Self-check: `npx tsx examples/webhook/payment-webhook.ts`.
