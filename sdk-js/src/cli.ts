@@ -29,8 +29,20 @@ const bool = (name: string) => {
   return i !== -1 && (args.splice(i, 1), true);
 };
 
+if (bool("--help") || bool("-h")) {
+  console.log(USAGE);
+  process.exit(0);
+}
+
 if (args[0] === "link-wallet") {
   const registry = flag("--registry") ?? "https://api.inamprotocol.org";
+  if (args.length > 1) {
+    // an unknown flag must never start the wallet flow (it registers an ID and opens a local server)
+    console.error(`inam link-wallet: unexpected argument ${JSON.stringify(args[1])}
+
+${USAGE}`);
+    process.exit(2);
+  }
   try {
     const dir = join(homedir(), ".inam");
     const keyFile = join(dir, "seller-key.json");
@@ -55,7 +67,7 @@ Next: add the inam extension to your 402 (SELLER.md).`);
   }
 }
 
-if (bool("--help") || bool("-h") || args[0] !== "check" || !args[1]) {
+if (args[0] !== "check" || !args[1]) {
   console.error(USAGE);
   process.exit(args.length ? 2 : 0);
 }

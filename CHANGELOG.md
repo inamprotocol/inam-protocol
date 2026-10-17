@@ -217,6 +217,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.22.1 — 2026-10-17
+- `inam link-wallet --help` (and any unknown flag) no longer starts the wallet flow: help prints usage and exits 0, an unexpected argument exits 2. Before, `--help` created a key, registered an ID and opened the local signing page.
+
 ### 0.22.0 — 2026-10-17
 - `npx inamprotocol link-wallet`: a seller proves control of a payTo wallet from the browser wallet (one-time page on 127.0.0.1, two `personal_sign` prompts), no code to read. `inamSellerMiddleware` (Express) and `inamSellerHono` add the `inam` extension to the x402 v2 `PAYMENT-REQUIRED` header. See SELLER.md. The key recovery from the first signature has only been tested against mocks.
 - The check reports `warn`, not `pass` or `info`, when the INAM registry or the ERC-8004 sources can't be reached; the x402 gate, `checkTrust` and `verifyA2ACard` say "registry unavailable" instead of "not found" on an outage.

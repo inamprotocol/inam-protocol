@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { secp256k1 } from "../sdk-js/node_modules/@noble/curves/secp256k1.js";
 import { inamSellerMiddleware, inamSellerHono, withInamExtension } from "../sdk-js/src/seller.js";
 import { linkWallet, introMessage } from "../sdk-js/src/linkWallet.js";
@@ -74,5 +76,20 @@ describe("link-wallet page flow", () => {
     await fetch(`${url}/complete`, { method: "POST", body: JSON.stringify({ signature: sig2 }) });
     expect(await done).toBe(address);
     expect(linked).toBe(address);
+  });
+});
+
+describe("cli: link-wallet never starts on help or unknown flags", () => {
+  const run = (...a: string[]) =>
+    spawnSync(process.execPath, ["--import", "tsx", fileURLToPath(new URL("../sdk-js/src/cli.ts", import.meta.url)), ...a], { encoding: "utf8", timeout: 20000, env: { ...process.env, HOME: "/nonexistent", USERPROFILE: "/nonexistent" } });
+  it("--help prints usage and exits 0 without touching the key file", () => {
+    const r = run("link-wallet", "--help");
+    expect(r.status).toBe(0);
+    expect(r.stdout).toContain("Usage: inam link-wallet");
+  });
+  it("an unknown flag exits 2", () => {
+    const r = run("link-wallet", "--bogus");
+    expect(r.status).toBe(2);
+    expect(r.stderr).toContain("unexpected argument");
   });
 });
