@@ -217,8 +217,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
-### Unreleased
-- `python -m inamprotocol check <url | 0x wallet | did:key>` and `inamprotocol.check()` / `format_report()`: the pre-payment check from the free hosted `/v1/check`, same report layout and exit codes as `npx inamprotocol check` (`--json`, `--strict`). Stdlib only; mocked-HTTP tests in `tests/test_check.py`. Not yet published to PyPI.
+### 0.22.0 — 2026-10-17
+- `npx inamprotocol link-wallet`: a seller proves control of a payTo wallet from the browser wallet (one-time page on 127.0.0.1, two `personal_sign` prompts), no code to read. `inamSellerMiddleware` (Express) and `inamSellerHono` add the `inam` extension to the x402 v2 `PAYMENT-REQUIRED` header. See SELLER.md. The key recovery from the first signature has only been tested against mocks.
+- The check reports `warn`, not `pass` or `info`, when the INAM registry or the ERC-8004 sources can't be reached; the x402 gate, `checkTrust` and `verifyA2ACard` say "registry unavailable" instead of "not found" on an outage.
 - Key succession (SPEC §2.3): `client.succeed(successorKeypair)` (returns the record with `pendingSuccession`), `client.cancelSuccession(reason)` (a revoke); `successionSigningBytes`, `verifySuccession`, `headOf`, `lineageOf`, `SUCCESSION_WINDOW_MS` exported. `decideX402`, `decideA2A`, `decideTrust` and `check` refuse a succeeded ID and name its successor; `succession_pending` is in `DEFAULT_ESCROW_FLAGS` and `check` warns on it. `AgentRecord` gains `succeededBy`, `succeededAt`, `succession`, `pendingSuccession`.
 - `CheckOptions.fetch`: inject the `fetch` every outbound check request uses (the hosted `/v1/check` signs with Web Bot Auth through it). Registry lookups in the check now go through the same fetch instead of `InamClient`. `nextStep(report)` returns one suggested step from the worst line. CLI output unchanged.
 
@@ -357,7 +358,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Node reference server & Cloudflare Worker
 
-### Unreleased (Worker)
+### 0.13.0 (Worker) — 2026-10-17
+- `GET /v1/badge?target=` returns a small SVG with the verdict of `GET /v1/check` (grey `unknown` for a missing or invalid target), for sellers to embed in a README. SPEC §6 and openapi list it.
+- An unreachable registry or ERC-8004 source is a `warn` in `/v1/check`, never a `pass`.
 - Key succession (SPEC v0.42 §2.3), both runtimes: `POST /v1/agents/:id/succeed` (202, pending 72h), cancel by revoke, lazy activation at the start of each request (no cron), lineage-aware reputation, `agent_succession_pending`/`agent_succeeded`/`agent_succession_cancelled` log entries, succeeded IDs refused at the signed-request check and dropped from search, succeeded verifiers' attestations no longer counted. Request, cancel and activation are compare-and-swaps; activation is one D1 batch. **Worker: run `worker/migration-add-succession.sql` before deploying.** Tests in `tests/succession.test.ts` and `worker/tests/api.test.ts`.
 - Paid twin of the check: `GET /v1/x402/check` (same params, same JSON body as `/v1/check`, reusing its handler) behind x402 v2 at 0.001 USDC on Base, with a `bazaar` extension (query input + output schema) for x402 Bazaars. `/v1/check` stays free; payment never changes a verdict or score. Off (503 `X402_DISABLED`) until `X402_PAY_TO` is set, the same payout wallet as `/v1/x402/report`. With `INAM-Requester`, the response carries an `INAM-Receipt` (SPEC §15) drafted by the hosted agent (`DEMO_PRIVATE_KEY`) with capability `demo.x402-check`, so it never counts toward reputation. Optional `CDP_API_KEY_ID` / `CDP_API_KEY_SECRET` (Ed25519) switch the default facilitator to CDP's, which Bazaar indexing needs. The x402 gate is now shared by both paid routes; paid answers are `cache-control: no-store`. Tests in `worker/tests/api.test.ts`.
 - Hosted receipt check: `POST /v1/receipts/:id/verify` (optional body `{ spec, output }`) returns a pass/fail verdict with per-check reasons (both signatures, content-addressed id, transparency-log inclusion, parties not revoked, no active dispute, spec/output hashes), the inclusion proof, the §12 net verdict, and an Ed25519 attestation by the hosted agent key (`DEMO_PRIVATE_KEY`; `null` if unset). Not a Verification record, not logged, no reputation effect: the registry checks integrity, it does not re-execute work. Also the hosted MCP tool `inam_verify_receipt` and the A2A skill `verify_receipt`. Per-IP read rate limit, open CORS. Worker only. Tests in `worker/tests/api.test.ts`.
@@ -554,7 +557,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Python SDK (`sdk-python`)
 
-### Unreleased
+### 0.14.0 — 2026-10-17
+- `python -m inamprotocol check <url | 0x wallet | did:key>` and `inamprotocol.check()` / `format_report()`: the pre-payment check from the free hosted `/v1/check`, same report layout and exit codes as `npx inamprotocol check` (`--json`, `--strict`). Stdlib only; mocked-HTTP tests in `tests/test_check.py`. Not yet published to PyPI.
+- `canonicalize` sorts keys by UTF-16 code unit (RFC 8785, as `sdk-js`) and escapes lone surrogates, so signatures over keys with characters beyond U+FFFF match across languages. Shared vectors in `interop/canonical/vectors.json`.
+- `check_trust` and the x402 decisions deny with "registry unavailable" on a network error or 5xx instead of raising or saying "not found".
 - Key succession (SPEC §2.3): `InamClient.succeed(successor_keypair)`, `InamClient.cancel_succession(reason)`, `succession_signing_bytes`, `verify_succession`; `decide_x402`/`decide_trust` refuse a succeeded ID; `succession_pending` added to `DEFAULT_ESCROW_FLAGS`. Statement bytes and signatures checked against the TypeScript vectors (`tests/test_succession.py`).
 - `InamClient(url)` without a keypair now works for reads (GETs go unsigned). Signing calls raise a `ValueError` saying the client has no keypair, instead of a `TypeError` at construction.
 
