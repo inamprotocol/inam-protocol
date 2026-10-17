@@ -116,6 +116,38 @@ function job(overrides?: Partial<Record<string, unknown>>) {
   };
 }
 
+describe("signed-request timestamp freshness (STALE_SIGNATURE)", () => {
+  async function post(ts: string) {
+    const kp = generateKeypair();
+    const path = "/v1/agents";
+    const rawBody = JSON.stringify({ capabilities: ["x"] });
+    const signature = toBase64(sign(new TextEncoder().encode(`POST
+${path}
+${ts}
+${sha256Hex(rawBody)}`), kp.privateKey));
+    const request = new Request(`http://worker.test${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "cf-connecting-ip": crypto.randomUUID(), "inam-agent": kp.did, "inam-timestamp": ts, "inam-signature": signature, "idempotency-key": `ts:${kp.did}` },
+      body: rawBody,
+    });
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(request, env, ctx);
+    await waitOnExecutionContext(ctx);
+    return { status: res.status, json: (await res.json().catch(() => ({}))) as { error?: { code?: string } } };
+  }
+
+  it.each([["past", -10 * 60_000], ["future", 10 * 60_000]])("rejects a validly signed request timestamped 10 minutes in the %s", async (_n, off) => {
+    const r = await post(String(Date.now() + off));
+    expect(r.status).toBe(401);
+    expect(r.json.error?.code).toBe("STALE_SIGNATURE");
+  });
+
+  it("rejects a malformed timestamp and accepts one inside the skew", async () => {
+    expect((await post("not-a-number")).json.error?.code).toBe("STALE_SIGNATURE");
+    expect((await post(String(Date.now() - 60_000))).status).toBe(201);
+  });
+});
+
 describe("malformed request bodies", () => {
   it("returns 400 INVALID_JSON, not 500, for a syntactically invalid but correctly-signed body", async () => {
     // Confirmed live before this fix: signedRequest.ts's JSON.parse(rawBody)
@@ -2916,16 +2948,18 @@ describe("hosted demo counterparty (SPEC.md §14)", () => {
     const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
     const { buildSignableContent } = await import("../../sdk-js/src/core/receiptContent.js");
     const finalize = async (a: Keypair, b: Keypair, capability = "job.posting", countersign = true) => {
-      const input = { ...job(), task: { ...job().task, capability } } as ReturnType<typeof job>;
+      // One job() call: two calls straddling a millisecond tick made createdAt > completedAt (flaky 400 INVALID_TIMESTAMP).
+      const base = job();
+      const input = { ...base, task: { ...base.task, capability } } as ReturnType<typeof job>;
       const content = buildSignableContent(a.did, b.did, input);
       const sig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined })), b.privateKey));
       const d = await call("POST", "/v1/receipts", { keypair: b, idempotencyKey: `receipt:${input.jobId}`, body: { ...input, agentAId: a.did, signature: sig } });
-      expect(d.status).toBe(201);
+      expect(d.status, JSON.stringify(d.json)).toBe(201);
       const receiptId = (d.json as { receiptId: string }).receiptId;
       if (!countersign) return;
       const csig = toBase64(sign(new TextEncoder().encode(canonicalize({ ...content, dispute: undefined, receiptId })), a.privateKey));
       const f = await call("POST", `/v1/receipts/${encodeURIComponent(receiptId)}/countersign`, { keypair: a, idempotencyKey: `countersign:${receiptId}`, body: { signature: csig } });
-      expect(f.status).toBe(200);
+      expect(f.status, JSON.stringify(f.json)).toBe(200);
     };
     const link = (kp: Keypair) => env.DB.prepare("UPDATE agents SET linked = ? WHERE id = ?").bind(JSON.stringify({ erc8004_id: "0x8BCd93d094BB0B995f5E8D81568431875252E01e" }), kp.did).run();
 
