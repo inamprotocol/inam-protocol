@@ -17,6 +17,16 @@ export const MAINTAINER_AGENT_IDS: readonly string[] = [
   "did:key:z6MkjE6iZEFoKkBoxR3QygfWaFUkLUUkj1ry527tUWQB8Gpk", // Reference Reviewer (README.md)
   "did:key:z6MkpSvw1Yuc3ReWhCmt5RwY5LVZqMRY9p8NvpA2TSQCPPyK", // Reference Extractor (sdk-js/README.md)
   "did:key:z6MkrdaWFKVAgrJAB4fM8o5NPgwkM7uWXHnx3bg87Xos8HXy", // INAM service ID (linked wallet 0x8BCd93d094BB0B995f5E8D81568431875252E01e is the maintainers')
+  // Maintainers' own test/smoke agents (found 17 Oct by reading the registry; none is an outside user).
+  "did:key:z6MkoEDhSMwK6uDsrvBrBs9kfJs39SRwahybe6vsuUUUs2DN", // 22 Sep prod smoke test (job_prodlive_*) requester
+  "did:key:z6MkqkWegxNygaJHCQjN47eVZoJS2H1gKaFYWuL4SgcR18PX", // 22 Sep prod smoke test worker
+  "did:key:z6Mkf7s7aQc26UCBfqVyb2EjaPFgJvzgks5dhdWq8ipHYNDP", // 9 Oct live test: HTTP receipts worker
+  "did:key:z6MksCiVRFc3zNJJ9xWzgGph7VPcrbPrEzPHnzQjAVV2EtKD", // 9 Oct live test: HTTP receipts requester
+  "did:key:z6MksGBaGCj5LUt1hrAXonzPvqWxFhUE16Pc2TUz7X2Z3VNR", // 10 Oct quickstart verification run
+  "did:key:z6MkvYBn8nM22N7QnfLEEmK72ewkCk8VnPitQ7f9pifRxzMM", // 10 Oct quickstart verification run (python)
+  "did:key:z6MkoGNs9969z1nYHBMNqBrPNTeaGaHjyT8PhYyeXou5se4S", // 10 Oct quickstart verification run
+  "did:key:z6MkgCPs6QFa9Mpr7PbrdebLPD1Z6xTLAZmQabn138zbAS8W", // 10 Oct quickstart verification run (python)
+  "did:key:z6MkqoAm5q9AZQvgK8QXVwBSRtMGeqyHrgymvK6chAyuw7bf", // 17 Oct link-wallet test (x402 seller)
 ];
 
 const DAY_MS = 86_400_000;
@@ -92,7 +102,7 @@ export async function computeStats(env: Env, now = Date.now()) {
     countersignedReceiptsBetweenIndependentParties: count(independentReceipt),
     definitions: {
       nonOperatorAgent: "registered agent that is not an operator agent (operatorAgents) and does not self-declare metadata.demo or metadata.test. Self-declared flags can only exclude an agent, never include one.",
-      linkedWallet: "agent whose linked.erc8004_id is set; that field is only written after a challenge signed by the wallet's secp256k1 key (SPEC.md ง2.1). Split by the same operator test as nonOperatorAgent.",
+      linkedWallet: "agent whose linked.erc8004_id is set; that field is only written after a challenge signed by the wallet's secp256k1 key (SPEC.md ยง2.1). Split by the same operator test as nonOperatorAgent.",
       independentReceipt: "status finalized (both signatures verified; disputed excluded), not demo/test labelled (demo.* or test.* capability, demo agent, metadata.demo/test), and both parties are different nonOperatorAgents. Independence is by registry identity only: one person running two did:keys still counts, and is not detectable here.",
     },
     counterpartyPairs: new Set(signed.map((r) => [r.agentA.id, r.agentB.id].sort().join(" "))).size,
