@@ -39,7 +39,7 @@ import { a2aHandler, agentCard } from "./a2a.js";
 import * as demo from "./demo.js";
 import { checkReceipt } from "./receiptCheck.js";
 import { x402ReportHandler } from "./x402Report.js";
-import { checkHandler, x402CheckHandler } from "./check.js";
+import { badgeHandler, checkHandler, x402CheckHandler } from "./check.js";
 import { computeStats } from "./statsService.js";
 import { fromHex, keypairFromPrivateKey } from "../../sdk-js/src/crypto/keys.js";
 import { DIRECTORY_PATH, directoryResponseHeaders, httpMessageSignaturesDirectory } from "../../sdk-js/src/webBotAuth.js";
@@ -198,6 +198,7 @@ app.get("/v1/x402/report/:id", rateLimitReadByIp, x402ReportHandler);
 app.get("/v1/x402/check", rateLimitReadByIp, x402CheckHandler(app));
 
 // Pre-payment check of any x402 URL, wallet or did:key from public signals (see check.ts).
+app.get("/v1/badge", rateLimitReadByIp, badgeHandler(app));
 app.get("/v1/check", cors({ origin: "*" }), rateLimitReadByIp, checkHandler(app));
 
 app.get("/v1/agents/:id/reputation", rateLimitReadByIp, async (c) => c.json(await computeReputation(c.env, c.req.param("id")!)));

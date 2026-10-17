@@ -23,6 +23,12 @@ It reads the 402 (payTo, network, price), looks the payTo up in ERC-8004 (identi
 
 Agents can run the same check without installing anything: `GET https://api.inamprotocol.org/v1/check?target=<url | 0x wallet | did:key>` (JSON, adds a `next` step and `cachedAt`; cached 10 minutes), the MCP tool `inam_check` on `https://api.inamprotocol.org/mcp`, or the A2A skill `check`.
 
+**Badge for sellers.** Show buyers your pre-payment verdict in your README (grey `unknown` when the target is invalid):
+
+```md
+![INAM](https://api.inamprotocol.org/v1/badge?target=https://your-api.example/endpoint)
+```
+
 **GitHub Action.** Gate a workflow on the same check (composite action, calls the free hosted `/v1/check` with curl and jq, read-only, no secrets):
 
 ```yaml

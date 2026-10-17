@@ -10,6 +10,7 @@ import { httpOutputHash, httpSpecHash, INAM_RECEIPT_HEADER, INAM_REQUESTER_HEADE
 import { x402Paid, type Settlement, type X402Offer } from "./x402Report.js";
 import { demoKeypair, ensureRegistered } from "./demo.js";
 import * as receiptService from "./receiptService.js";
+import { renderBadgeSvg } from "./badgeService.js";
 
 /**
  * Hosted pre-payment check: GET /v1/check?target=<url | 0x wallet | did:key>[&method=POST][&rdap=0].
@@ -181,5 +182,28 @@ export function x402CheckHandler(app: Hono<AppEnv>) {
     }
     if (!c.req.query("target")?.trim()) return free(c); // 400 with usage, never a charge
     return x402Paid(c, CHECK_OFFER, async () => free(c), (res, s) => draftReceipt(c, res, s));
+  };
+}
+
+/**
+ * GET /v1/badge?target=...: a shields-style SVG of the /v1/check verdict, for a seller's README.
+ * Runs the free check handler (same cache, same outbound rules); any non-200 or error is a grey "unknown".
+ */
+const BADGE_COLORS: Record<string, string> = { pass: "#4c1", caution: "#dfb317", fail: "#e05d44" };
+export function badgeHandler(app: Hono<AppEnv>) {
+  const check = checkHandler(app);
+  return async (c: Context<AppEnv>) => {
+    let verdict = "unknown";
+    try {
+      const res = await check(c);
+      const v = res.status === 200 ? ((await res.json()) as { verdict?: string }).verdict : undefined;
+      if (v && v in BADGE_COLORS) verdict = v;
+    } catch {
+      // never leak errors through an image
+    }
+    return c.body(renderBadgeSvg({ label: "INAM", value: verdict, color: BADGE_COLORS[verdict] ?? "#9f9f9f", status: "scored" }), 200, {
+      "Content-Type": "image/svg+xml; charset=utf-8",
+      "Cache-Control": "public, max-age=300",
+    });
   };
 }
