@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { submitVerificationSchema } from "../../sdk-js/src/core/schemas.js";
-import { requireSignedRequest } from "../middleware/signedRequest.js";
+import { requireSignedRequest, optionalSignedRequest } from "../middleware/signedRequest.js";
 import { requireIdempotencyKey } from "../middleware/idempotency.js";
 import { rateLimitWriteByAgent } from "../middleware/rateLimit.js";
 import { badRequest } from "../middleware/errors.js";
@@ -15,6 +15,6 @@ verificationsRouter.post("/", requireSignedRequest, rateLimitWriteByAgent, requi
   res.status(201).json(record);
 });
 
-verificationsRouter.get("/:id", (req, res) => {
-  res.json(verificationService.getVerification(req.params.id));
+verificationsRouter.get("/:id", optionalSignedRequest, (req, res) => {
+  res.json(verificationService.getVisibleVerification(req.params.id, req.agentDid));
 });

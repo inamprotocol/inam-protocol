@@ -266,7 +266,11 @@ POST /receipts/:id/dispute        (signed)
 POST /receipts/:id/dispute/resolve  the opener withdraws it: disputed -> finalized (signed)
 
 POST /verifications                independent attestation of a finalized receipt (signed)
-GET  /verifications/:id
+GET  /verifications/:id            404 unless the receipt is public or the caller is a participant/the verifier
+
+POST /api-keys                     mint an API key (signed, Worker only; free tier on /x402/check, SPEC §16)
+GET  /api-keys                     your keys + usage (signed)
+POST /api-keys/:keyId/revoke       (signed)
 
 GET  /transparency/sth             current Merkle tree size + root hash
 GET  /transparency/entries?limit=&offset=

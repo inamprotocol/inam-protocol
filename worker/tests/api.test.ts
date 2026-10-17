@@ -35,6 +35,7 @@ const SCHEMA_STATEMENTS = [
   "CREATE TABLE IF NOT EXISTS link_challenges (challenge_id TEXT PRIMARY KEY, agent_id TEXT NOT NULL REFERENCES agents(id), protocol TEXT NOT NULL, external_public_key TEXT NOT NULL, key_type TEXT NOT NULL, challenge TEXT NOT NULL, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used INTEGER NOT NULL DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS verifications (verification_id TEXT PRIMARY KEY, receipt_id TEXT NOT NULL REFERENCES receipts(receipt_id), provider TEXT NOT NULL, verifier TEXT NOT NULL, result TEXT NOT NULL, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_verifications_receipt ON verifications(receipt_id)",
+  "CREATE TABLE IF NOT EXISTS api_keys (key_id TEXT PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, agent_id TEXT NOT NULL REFERENCES agents(id), created_at TEXT NOT NULL, revoked_at TEXT, calls INTEGER NOT NULL DEFAULT 0)",
   "CREATE TABLE IF NOT EXISTS transparency_log (leaf_index INTEGER PRIMARY KEY, entry_type TEXT NOT NULL, ref_id TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL, leaf_hash TEXT NOT NULL, payload TEXT)",
 ];
 
@@ -2069,6 +2070,124 @@ describe("receipt visibility (SPEC.md §4.4, audit #13)", () => {
 
     expect(after.components.rawReceipts).toBe(before.components.rawReceipts + 1);
     expect(after.components.verifiedReceipts).toBe(before.components.verifiedReceipts + 1);
+  });
+
+  it("GET /verifications/:id: 404 (not 403) for non-participants of a participants_only receipt, same as a missing id; public receipts and participants unaffected", async () => {
+    const { canonicalize } = await import("../../sdk-js/src/crypto/canonical.js");
+    const { buildSignableVerificationContent } = await import("../../sdk-js/src/core/verificationContent.js");
+    const requester = generateKeypair();
+    const provider = generateKeypair();
+    const verifier = generateKeypair();
+    const stranger = generateKeypair();
+    for (const k of [requester, provider, verifier, stranger]) {
+      await call("POST", "/v1/agents", { keypair: k, idempotencyKey: `reg:${k.did}`, body: { capabilities: ["x"] } });
+    }
+    await authorizeVerifier(verifier);
+    async function verifyOf(receipt: { receiptId: string; jobId: string; result: { outputHash: string } }) {
+      const input = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+      const signature = toBase64(sign(new TextEncoder().encode(canonicalize(buildSignableVerificationContent(input as never))), verifier.privateKey));
+      const res = await call("POST", "/v1/verifications", {
+        keypair: verifier,
+        idempotencyKey: `verify:${receipt.receiptId}`,
+        body: { receiptId: input.receiptId, verifier: verifier.did, method: input.method, outputHash: input.outputHash, result: input.result, signature },
+      });
+      return encodeURIComponent((res.json as { verificationId: string }).verificationId);
+    }
+    const restrictedId = await verifyOf(await finalizeReceipt(requester, provider, `job_vgate_r_${Math.random().toString(36).slice(2)}`, "participants_only"));
+    const publicId = await verifyOf(await finalizeReceipt(requester, provider, `job_vgate_p_${Math.random().toString(36).slice(2)}`, "public"));
+
+    const missing = await call("GET", `/v1/verifications/${encodeURIComponent("sha256:" + "0".repeat(64))}`);
+    expect(missing.status).toBe(404);
+    for (const caller of [undefined, stranger]) {
+      const res = await call("GET", `/v1/verifications/${restrictedId}`, { keypair: caller });
+      expect(res.status).toBe(404);
+      expect((res.json as { error: { code: string } }).error.code).toBe("VERIFICATION_NOT_FOUND");
+    }
+    for (const caller of [requester, provider, verifier]) {
+      expect((await call("GET", `/v1/verifications/${restrictedId}`, { keypair: caller })).status).toBe(200);
+    }
+    expect((await call("GET", `/v1/verifications/${publicId}`)).status).toBe(200);
+    expect((await call("GET", `/v1/verifications/${publicId}`, { keypair: stranger })).status).toBe(200);
+  });
+});
+
+describe("API keys + usage meter (SPEC.md §16)", () => {
+  const WALLET = "0x2222222222222222222222222222222222222222";
+  async function agent() {
+    const k = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: k, idempotencyKey: `reg:${k.did}`, body: { capabilities: ["x"] } });
+    return k;
+  }
+  async function getWith(path: string, headers: Record<string, string>, e: typeof env = env) {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(new Request(`http://worker.test${path}`, { headers: { "cf-connecting-ip": crypto.randomUUID(), ...headers } }), e, ctx);
+    await waitOnExecutionContext(ctx);
+    return res;
+  }
+  const issue = async (k: Keypair) => (await call("POST", "/v1/api-keys", { keypair: k })).json as { apiKey: string; keyId: string; calls: number; pricePerCallUsdc: string };
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("issues a key to a registered agent only, stores a hash not the key, and caps active keys", async () => {
+    expect((await call("POST", "/v1/api-keys", { keypair: generateKeypair() })).status).toBe(404); // unregistered
+    expect((await call("POST", "/v1/api-keys")).status).toBe(401); // unsigned
+    const k = await agent();
+    const key = await issue(k);
+    expect(key.apiKey).toMatch(/^inam_k_[0-9a-f]{64}$/);
+    expect(key.pricePerCallUsdc).toBe("0.001");
+    const rows = await env.DB.prepare("SELECT * FROM api_keys WHERE key_id = ?").bind(key.keyId).all<Record<string, unknown>>();
+    expect(JSON.stringify(rows.results)).not.toContain(key.apiKey);
+    expect(rows.results[0].key_hash).toBe(sha256Hex(key.apiKey));
+    for (let i = 0; i < 4; i++) expect((await call("POST", "/v1/api-keys", { keypair: k })).status).toBe(201);
+    const sixth = await call("POST", "/v1/api-keys", { keypair: k });
+    expect(sixth.status).toBe(409);
+    expect((sixth.json as { error: { code: string } }).error.code).toBe("API_KEY_LIMIT");
+    // The list never carries the secret.
+    const list = await call("GET", "/v1/api-keys", { keypair: k });
+    expect(JSON.stringify(list.json)).not.toContain(key.apiKey);
+    // Revoke frees a slot, once.
+    const rev = await call("POST", `/v1/api-keys/${key.keyId}/revoke`, { keypair: k, idempotencyKey: `rv:${key.keyId}` });
+    expect(rev.status).toBe(200);
+    expect((await call("POST", `/v1/api-keys/${key.keyId}/revoke`, { keypair: await agent(), idempotencyKey: `rv2:${key.keyId}` })).status).toBe(404);
+    expect((await call("POST", "/v1/api-keys", { keypair: k })).status).toBe(201);
+  });
+
+  it("meters free-tier calls on /v1/x402/check, serves them without payment, then falls back to 402", async () => {
+    vi.stubGlobal("fetch", async (input: string) => {
+      const url = String(input);
+      if (url.startsWith("https://api.8004scan.io/")) return Response.json({ items: [] });
+      if (url === "https://mainnet.base.org") return Response.json({ jsonrpc: "2.0", id: 1, result: "0x" + "0".repeat(64) });
+      return new Response("not found", { status: 404 });
+    });
+    const k = await agent();
+    const { apiKey, keyId } = await issue(k);
+    const path = (n: number) => `/v1/x402/check?target=0x${n.toString(16).padStart(40, "0")}&rdap=0`;
+    const withPay = { ...env, X402_PAY_TO: "0x209693Bc6afc0C5328bA36FaF03C514EF312287C" } as typeof env;
+
+    expect((await getWith(path(1), { "inam-key": "inam_k_nope" })).status).toBe(401);
+    expect((await getWith(path(1), { "inam-key": apiKey })).status).toBe(200); // works even with payments off
+    expect((await getWith("/v1/x402/check", { "inam-key": apiKey }, withPay)).status).toBe(400); // bad request is not metered
+
+    const calls = async () => ((await call("GET", "/v1/api-keys", { keypair: k })).json as { keys: { keyId: string; calls: number; freeTierRemaining: number }[] }).keys.find((x) => x.keyId === keyId)!;
+    expect((await calls()).calls).toBe(1);
+
+    await env.DB.prepare("UPDATE api_keys SET calls = 99 WHERE key_id = ?").bind(keyId).run();
+    expect((await getWith(path(2), { "inam-key": apiKey })).status).toBe(200); // the 100th
+    const c = await calls();
+    expect(c.calls).toBe(100);
+    expect(c.freeTierRemaining).toBe(0);
+    // Exhausted: the ordinary x402 flow, and the counter stays put.
+    expect((await getWith(path(3), { "inam-key": apiKey }, withPay)).status).toBe(402);
+    expect((await getWith(path(3), { "inam-key": apiKey })).status).toBe(402); // no payout wallet: plain 402
+    expect((await calls()).calls).toBe(100);
+
+    await call("POST", `/v1/api-keys/${keyId}/revoke`, { keypair: k, idempotencyKey: `rv:${keyId}` });
+    expect((await getWith(path(4), { "inam-key": apiKey })).status).toBe(401);
+  });
+
+  it("derives the x402 price from the single CHECK_PRICE_USDC constant", async () => {
+    const { CHECK_PRICE_USDC, CHECK_PRICE_UNITS } = await import("../src/apiKeys.js");
+    expect(CHECK_PRICE_UNITS).toBe(String(Math.round(Number(CHECK_PRICE_USDC) * 1e6)));
   });
 });
 

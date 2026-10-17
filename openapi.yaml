@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: INAM Protocol Registry API
-  version: "0.42.0"
+  version: "0.43.0"
   description: >
     The open reputation, verification, and economic-history layer for the agent
     economy. See SPEC.md in this repository for the full protocol specification
@@ -17,6 +17,8 @@ servers:
     description: Local Node reference server (npm run dev)
 
 tags:
+  - name: api-keys
+    description: Optional API keys and a free-tier usage meter for the paid check (SPEC.md section 16)
   - name: agents
     description: Identity, discovery, and reputation
   - name: jobs
@@ -405,6 +407,57 @@ paths:
         "404": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
         "429": { $ref: "#/components/responses/Error" }
+
+  /api-keys:
+    post:
+      operationId: createApiKey
+      summary: Mint an API key for the calling agent (SPEC.md section 16, optional)
+      description: >-
+        Signed by a registered INAM ID. The plaintext key is returned once and only its SHA-256 is stored.
+        No Idempotency-Key (a cached response would hold the plaintext); a retry mints another key.
+        At most 5 active keys per agent (409 API_KEY_LIMIT). Send the key as `INAM-Key` on GET /x402/check
+        to spend its free tier (100 calls, no reset) before paying.
+      tags: [api-keys]
+      security: [{ inamSignature: [] }]
+      responses:
+        "201":
+          description: The key, once
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiKeyIssued" }
+        "404": { $ref: "#/components/responses/Error" }
+        "409": { $ref: "#/components/responses/Error" }
+        "429": { $ref: "#/components/responses/Error" }
+    get:
+      operationId: listApiKeys
+      summary: List the caller's API keys with usage (never returns key material)
+      tags: [api-keys]
+      security: [{ inamSignature: [] }]
+      responses:
+        "200":
+          description: Keys
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { keys: { type: array, items: { $ref: "#/components/schemas/ApiKeyUsage" } } }
+
+  /api-keys/{keyId}/revoke:
+    post:
+      operationId: revokeApiKey
+      summary: Revoke one of the caller's API keys (owner only)
+      tags: [api-keys]
+      security: [{ inamSignature: [] }]
+      parameters:
+        - { name: keyId, in: path, required: true, schema: { type: string } }
+        - { $ref: "#/components/parameters/IdempotencyKey" }
+      responses:
+        "200":
+          description: The revoked key's usage record
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ApiKeyUsage" }
+        "404": { $ref: "#/components/responses/Error" }
 
   /jobs:
     post:
@@ -853,8 +906,12 @@ paths:
     get:
       operationId: getVerification
       summary: Fetch a single verification
+      description: >-
+        Visible when the referenced receipt is public, or the (optionally signed) caller is that
+        receipt's requester or provider or this verification's verifier (SPEC.md section 12.6, v0.43).
+        Anyone else gets the same 404 VERIFICATION_NOT_FOUND as for a missing id, so existence does not leak.
       tags: [verifications]
-      security: []
+      security: [{}, { inamSignature: [] }]
       parameters: [{ $ref: "#/components/parameters/VerificationId" }]
       responses:
         "200":
@@ -1035,9 +1092,11 @@ paths:
         - { name: rdap, in: query, required: false, schema: { type: string, enum: ["0"] }, description: "0 skips the domain-age (RDAP) lookup" }
         - { name: PAYMENT-SIGNATURE, in: header, required: false, schema: { type: string }, description: Base64 x402 v2 PaymentPayload }
         - { name: INAM-Requester, in: header, required: false, schema: { type: string }, description: "Caller's registered did:key; asks for a SPEC §15 receipt" }
+        - { name: INAM-Key, in: header, required: false, schema: { type: string }, description: "API key from POST /api-keys (SPEC.md section 16). Spends one free-tier call instead of paying; an exhausted key falls through to the 402 flow" }
       responses:
         "200": { description: "Same body as GET /check; PAYMENT-RESPONSE header carries the settlement, INAM-Receipt the draft receipt id when requested" }
         "400": { $ref: "#/components/responses/Error" }
+        "401": { $ref: "#/components/responses/Error" }
         "402": { description: "Payment required; PAYMENT-REQUIRED header carries the base64 PaymentRequired object (with a bazaar discovery extension)" }
         "429": { $ref: "#/components/responses/Error" }
         "503": { $ref: "#/components/responses/Error" }
@@ -1238,6 +1297,22 @@ components:
           schema: { $ref: "#/components/schemas/ErrorBody" }
 
   schemas:
+    ApiKeyUsage:
+      type: object
+      properties:
+        keyId: { type: string }
+        agentId: { type: string }
+        createdAt: { type: string, format: date-time }
+        revokedAt: { type: [string, "null"], format: date-time }
+        calls: { type: integer, description: Free-tier calls spent }
+        freeTierCalls: { type: integer }
+        freeTierRemaining: { type: integer }
+        pricePerCallUsdc: { type: string, description: "Per-call price of the paid check, one constant in the registry" }
+    ApiKeyIssued:
+      allOf:
+        - { $ref: "#/components/schemas/ApiKeyUsage" }
+        - type: object
+          properties: { apiKey: { type: string, description: "inam_k_ + 64 hex. Shown once, never stored." } }
     ErrorBody:
       type: object
       properties:

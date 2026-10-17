@@ -179,3 +179,33 @@ describe("receipt visibility (SPEC.md §4.4)", () => {
     expect(after.components.verifiedReceipts).toBe(before.components.verifiedReceipts + 1);
   });
 });
+
+describe("GET /verifications/:id visibility (SPEC.md §12.6)", () => {
+  it("404s (not 403) for non-participants of a participants_only receipt, identical to a missing id; public receipts and participants unaffected", async () => {
+    const [requester, provider, verifier, stranger] = [generateKeypair(), generateKeypair(), generateKeypair(), generateKeypair()];
+    for (const k of [requester, provider, verifier, stranger]) registerAgent(k.did, { capabilities: ["x"] });
+    setVerifierStatus(testOperatorKeypair.did, verifier.did, true);
+    const verifyOf = (receipt: ReturnType<typeof finalizeReceipt>) => {
+      const input: VerificationContentInput = { receiptId: receipt.receiptId, jobId: receipt.jobId, provider: provider.did, verifier: verifier.did, method: "deterministic", outputHash: receipt.result.outputHash, result: "verified" };
+      const signature = toBase64(sign(new TextEncoder().encode(canonicalize(buildSignableVerificationContent(input))), verifier.privateKey));
+      return encodeURIComponent(submitVerification(verifier.did, { ...input, signature }).verificationId);
+    };
+    const restrictedId = verifyOf(finalizeReceipt(requester, provider, `job_vg_r_${Math.random()}`, "participants_only"));
+    const publicId = verifyOf(finalizeReceipt(requester, provider, `job_vg_p_${Math.random()}`, "public"));
+    const get = (id: string, as?: ReturnType<typeof generateKeypair>) => {
+      const path = `/v1/verifications/${id}`;
+      return fetch(`${baseUrl}${path}`, { headers: as ? signedGetHeaders(path, as) : {} });
+    };
+
+    const missing = await get(encodeURIComponent("sha256:" + "0".repeat(64)));
+    expect(missing.status).toBe(404);
+    for (const caller of [undefined, stranger]) {
+      const res = await get(restrictedId, caller);
+      expect(res.status).toBe(404);
+      expect(((await res.json()) as { error: { code: string } }).error.code).toBe("VERIFICATION_NOT_FOUND");
+    }
+    for (const caller of [requester, provider, verifier]) expect((await get(restrictedId, caller)).status).toBe(200);
+    expect((await get(publicId)).status).toBe(200);
+    expect((await get(publicId, stranger)).status).toBe(200);
+  });
+});
