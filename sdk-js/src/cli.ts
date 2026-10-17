@@ -1,7 +1,14 @@
 #!/usr/bin/env node
 import { checkTarget, formatReport } from "./check.js";
+import { linkWallet } from "./linkWallet.js";
+import { InamClient } from "./client.js";
+import { generateKeypair, keypairFromPrivateKey, fromHex, toHex } from "./crypto/keys.js";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-const USAGE = `Usage: inam check <target> [--json] [--strict] [--method POST] [--registry URL] [--no-rdap]
+const USAGE = `Usage: inam link-wallet [--registry URL]   (sellers: prove you control your x402 payTo wallet, see SELLER.md)
+       inam check <target> [--json] [--strict] [--method POST] [--registry URL] [--no-rdap]
 
   <target>   an x402 resource URL, an EVM wallet (0x...), or an INAM did:key
 
@@ -21,6 +28,32 @@ const bool = (name: string) => {
   const i = args.indexOf(name);
   return i !== -1 && (args.splice(i, 1), true);
 };
+
+if (args[0] === "link-wallet") {
+  const registry = flag("--registry") ?? "https://api.inamprotocol.org";
+  try {
+    const dir = join(homedir(), ".inam");
+    const keyFile = join(dir, "seller-key.json");
+    if (!existsSync(keyFile)) {
+      mkdirSync(dir, { recursive: true });
+      writeFileSync(keyFile, JSON.stringify({ privateKeyHex: toHex(generateKeypair().privateKey) }), { mode: 0o600 });
+    }
+    const inam = new InamClient(registry, keypairFromPrivateKey(fromHex(JSON.parse(readFileSync(keyFile, "utf8")).privateKeyHex)));
+    await inam.getAgent(inam.did).catch(() => inam.registerAgent(["x402.seller"], { name: "x402 seller" }));
+    console.log(`Your INAM ID: ${inam.did}
+Key file: ${keyFile} (keep it; it is your seller identity)`);
+    const wallet = await linkWallet(inam, (url) => console.log(`Open this in the browser with your wallet (expires in ~10 min):
+  ${url}`));
+    console.log(`
+Linked ${wallet}. Anyone can now check it:
+  ${registry}/v1/check?target=${wallet}
+Next: add the inam extension to your 402 (SELLER.md).`);
+    process.exit(0);
+  } catch (e) {
+    console.error(`inam link-wallet: ${(e as Error).message}`);
+    process.exit(2);
+  }
+}
 
 if (bool("--help") || bool("-h") || args[0] !== "check" || !args[1]) {
   console.error(USAGE);
