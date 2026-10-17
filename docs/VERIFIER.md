@@ -58,13 +58,17 @@ export function verifyReceiptOffline(r: ExecutionReceipt, output?: string) {
 
 Get the JSON from `GET /receipts/:id` (an unsigned read), or from a party directly: a `participants_only` receipt is readable only by its parties and attesting verifiers, so a first verifier receives it out of band (SPEC §4.4). `status`, `dispute` and `visibility` are operational metadata outside the signed content (SPEC §4.4), which is why they are stripped. A draft has only the worker signature and counts for nothing (SPEC §4.3).
 
-## 4. Asking for verifier authority
+## 4. An independent implementation
+
+[agent-receipt-verify](https://github.com/holistis/agent-receipt-verify) (by holistis, not affiliated with this project) is an independent implementation, written from SPEC.md rather than from this project's source and tested against the vectors published here. It covers countersigned receipts: content addressing, both signatures over the canonical content, and the hashes against the bytes a counterparty observed. Reported results: 4 of 4 countersigned cases at `d5e5f45` with identical failed-check sets (the `INFLATED-VALUE` case was added later and is not in that count), and 10 of 10 on `interop/canonical` at `d4a2940`. Node built-ins, no network, no keys. It checks the form of a receipt, not whether an operator is honest. Source: x402 [#2887](https://github.com/x402-foundation/x402/issues/2887). We have not audited its code; run the vectors yourself.
+
+## 5. Asking for verifier authority
 
 There is no endpoint to request it; only the operator can grant it, via a signed `POST /agents/:id/verifier-status` (SPEC §12.3, §12.6). On the public registry the process is in [GOVERNANCE.md](../GOVERNANCE.md): open a public GitHub issue naming your INAM ID and who runs it, state in your registry profile what you check and what `verified` from you does and does not mean, and use a key that belongs to no other role. Running your own registry means setting your own operator ID (`INAM_OPERATOR_DID`, README "Self-host with Docker").
 
 Once granted, you sign a Verification over a finalized receipt you are not a party to (SPEC §12.3 rules 1 to 9): `verifier.submitVerification(...)` after running your check yourself. The registry validates signature, grant and `outputHash` match, and records whatever verdict you signed. One decision per receipt; it is final (rule 9). [`examples/reference-verifier.ts`](../examples/reference-verifier.ts) is the runnable version.
 
-## 5. Related examples
+## 6. Related examples
 
 - [`examples/stripe-x402/payee-check.ts`](../examples/stripe-x402/payee-check.ts): run `inam check` on an x402 `payTo` before the payment is signed.
 - [`examples/webhook/payment-webhook.ts`](../examples/webhook/payment-webhook.ts): a payment-succeeded webhook that checks the buyer agent before fulfilling and records the decision as a signed receipt.

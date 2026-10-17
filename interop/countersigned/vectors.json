@@ -91,6 +91,22 @@
           "outputHashMatchesObservedBytes"
         ]
       }
+    },
+    {
+      "id": "INFLATED-VALUE",
+      "description": "The genuine receipt, but value raised from 100 to 999 in the file and the event, feedbackHash recomputed. Signatures, hashes and wallet all still check out; only the value-to-outcome rule catches it, and a receipt with no outcome (or a checker that skips the rule) would leave the amount unbound.",
+      "feedbackFile": "{\"agentId\":7,\"agentRegistry\":\"eip155:8453:0x8004000000000000000000000000000000000000\",\"clientAddress\":\"eip155:8453:0x1111111111111111111111111111111111111111\",\"createdAt\":\"2026-10-03T00:00:00.000Z\",\"inam\":{\"receipt\":{\"agentA\":{\"id\":\"did:key:z6Mkkrq4oHrSaU8E2ZctUreJkiXyrVbPRM4FZgPxYx3X8XCS\",\"role\":\"requester\"},\"agentB\":{\"id\":\"did:key:z6MkenP9pSJt69Re5GYC3HeA6JC4BbFSATBbVkjx3TVbE4LL\",\"role\":\"worker\"},\"jobId\":\"http:countersigned-vectors-v0.1\",\"receiptId\":\"sha256:c4b80bbc9472979127dca9491a729396514bc9b6c36391b79ba9419fbb2828c3\",\"receiptVersion\":\"1.0\",\"result\":{\"completedAt\":\"2026-10-01T10:00:01.000Z\",\"outputHash\":\"sha256:e344fa3b83cf2b142293de2a4e56c6b211d4a157f8adb3c954c51ab67f41a46a\"},\"signatures\":{\"agentA\":\"mjXSDW6FMCAL5wBv0ASZ4BR7Dst7KXNMtQF1mrPaApJw0QCzuwWHPsuQqEkVjb4LOTvGfmJzaa6QtK/QLbKTCQ==\",\"agentB\":\"wDDUXpemxNcVEVQfH7kaTZr2rJk/zzLNNpAkx3a70UjyrGK9OPMAX/dhgxsVneGCse/jXV2s6F+n5WLFDqYwBQ==\"},\"task\":{\"capability\":\"translation.tr-en\",\"createdAt\":\"2026-10-01T10:00:00.000Z\",\"specHash\":\"sha256:423007c3904c15d5f43b0485ff3e442b0003925cb283ac7b58c16634429bce20\"},\"verification\":{\"method\":\"payer_confirmation\",\"outcome\":\"success\"}}},\"tag1\":\"inam-receipt\",\"tag2\":\"translation.tr-en\",\"value\":999,\"valueDecimals\":0}",
+      "onchainEvent": {
+        "clientAddress": "0x1111111111111111111111111111111111111111",
+        "feedbackHash": "0xf69618bc201c7d63996234defa77a02dbd8b6fb12c8d64e23bf7bed16ccc3863",
+        "value": 999
+      },
+      "expected": {
+        "accepted": false,
+        "failedChecks": [
+          "valueMatchesOutcome"
+        ]
+      }
     }
   ]
 }
