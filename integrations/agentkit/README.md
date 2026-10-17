@@ -42,3 +42,11 @@ npm install && npm test        # vitest, mocked fetch, no network
 The action uses AgentKit's `customActionProvider`, so no decorator or `reflect-metadata` setup is needed. Peer dependency `@coinbase/agentkit` `>=0.10.0`. If AgentKit wants this inside its monorepo instead, the code moves as is under `typescript/agentkit/src/action-providers/inam/`.
 
 Apache-2.0. Not affiliated with Coinbase.
+
+## Publishing (maintainer, one-time setup)
+
+Publishing runs from `.github/workflows/publish-npm-agentkit.yml` (manual dispatch, npm Trusted Publishing via OIDC, no token). Before the first run:
+
+1. Create the `@inamprotocol` scope on npmjs.com (an organization named `inamprotocol`).
+2. npm only allows a Trusted Publisher on a package that exists, so publish `0.1.0` once by hand from this directory (`npm publish --access public` after `npm run build`), then on the package's Settings page add a Trusted Publisher: GitHub Actions, owner `inamprotocol`, repository `inam-protocol`, workflow `publish-npm-agentkit.yml`.
+3. For later releases bump `version` in `package.json` and dispatch the workflow.

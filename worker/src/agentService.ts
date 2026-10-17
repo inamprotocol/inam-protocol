@@ -64,6 +64,8 @@ export async function setVerifierStatus(env: Env, callerDid: string, targetAgent
   if (target.revokedAt) throw conflict("AGENT_REVOKED", `Agent ${targetAgentId} was revoked at ${target.revokedAt}`);
   if (target.succeededBy) throw conflict("AGENT_SUCCEEDED", `Agent ${targetAgentId} was succeeded by ${target.succeededBy}`);
   await db.updateAgentVerifierStatus(env, targetAgentId, authorized);
+  // SPEC v0.44 §13.1: every grant and revoke is logged, so the operator's choices are tamper-evident too.
+  await transparencyService.appendEntry(env, "verifier_status_changed", targetAgentId, { agentId: targetAgentId, authorized, operator: callerDid });
   return getAgent(env, targetAgentId);
 }
 

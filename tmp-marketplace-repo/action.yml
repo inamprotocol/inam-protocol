@@ -1,0 +1,31 @@
+name: INAM check
+description: Pre-payment check of an x402 URL, 0x wallet or did:key via INAM's free hosted /v1/check. Read-only, no secrets.
+branding:
+  icon: shield
+  color: blue
+inputs:
+  target:
+    description: x402 endpoint URL, 0x EVM wallet or did:key
+    required: true
+  fail-on:
+    description: "'fail' (default) fails the step on a fail verdict; 'caution' also fails on caution"
+    required: false
+    default: fail
+  api-base:
+    description: INAM API base URL
+    required: false
+    default: https://api.inamprotocol.org
+outputs:
+  verdict:
+    description: pass, caution or fail
+    value: ${{ steps.check.outputs.verdict }}
+runs:
+  using: composite
+  steps:
+    - id: check
+      shell: bash
+      env:
+        INAM_TARGET: ${{ inputs.target }}
+        INAM_FAIL_ON: ${{ inputs.fail-on }}
+        INAM_API_BASE: ${{ inputs.api-base }}
+      run: bash "${{ github.action_path }}/check.sh"

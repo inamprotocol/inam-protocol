@@ -6,12 +6,12 @@
 <title>Pricing — INAM Protocol</title>
 <link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
-<meta name="description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.001 USDC.">
+<meta name="description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.02 USDC.">
 <link rel="canonical" href="https://inamprotocol.org/pricing">
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="INAM Protocol">
 <meta property="og:title" content="Pricing — INAM Protocol">
-<meta property="og:description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.001 USDC.">
+<meta property="og:description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.02 USDC.">
 <meta property="og:url" content="https://inamprotocol.org/pricing">
 <meta property="og:image" content="https://inamprotocol.org/og.png">
 <meta property="og:image:width" content="1200">
@@ -19,7 +19,7 @@
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://inamprotocol.org/og.png">
 <meta name="twitter:title" content="Pricing — INAM Protocol">
-<meta name="twitter:description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.001 USDC.">
+<meta name="twitter:description" content="INAM is free and open source. The only paid item is an optional x402 pay-per-check endpoint at 0.02 USDC.">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
 <style>
 :root {
@@ -170,7 +170,7 @@ footer.site { border-top: 1px solid var(--line); margin-top: 10px; padding: 26px
   </ul>
 
   <h2>The one paid item</h2>
-  <p><code>GET https://api.inamprotocol.org/v1/x402/check</code> returns the same answer as the free check, paid per call over <a href="https://x402.org">x402</a>: <strong>0.001 USDC on Base</strong> per check, no account, no minimum. It exists so that autonomous agents, which pay over x402 and do not have API keys, can use the check without a signup. Paying does not change a verdict, a score or what we publish.</p>
+  <p><code>GET https://api.inamprotocol.org/v1/x402/check</code> returns the same answer as the free check, paid per call over <a href="https://x402.org">x402</a>: <strong>0.02 USDC on Base</strong> per check, no account, no minimum. It exists so that autonomous agents, which pay over x402 and do not have API keys, can use the check without a signup. Paying does not change a verdict, a score or what we publish.</p>
   <pre>curl -i "https://api.inamprotocol.org/v1/x402/check?target=https://example.com/api"
 # HTTP 402 with the payment requirements; pay and retry with the payment header</pre>
   <p>Payment is in USDC on Base and settles on-chain. Refund terms are on the <a href="/refund">refund page</a>.</p>

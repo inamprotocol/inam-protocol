@@ -61,6 +61,8 @@ export function setVerifierStatus(callerDid: string, targetAgentId: string, auth
   if (record.succeededBy) throw conflict("AGENT_SUCCEEDED", `Agent ${targetAgentId} was succeeded by ${record.succeededBy}`);
   const updated: AgentRecord = { ...record, isAuthorizedVerifier: authorized };
   agents.set(targetAgentId, updated);
+  // SPEC v0.44 §13.1: every grant and revoke is logged, so the operator's choices are tamper-evident too.
+  transparencyService.appendEntry("verifier_status_changed", targetAgentId, { agentId: targetAgentId, authorized, operator: callerDid });
   return updated;
 }
 
