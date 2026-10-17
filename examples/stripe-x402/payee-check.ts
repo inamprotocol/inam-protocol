@@ -34,6 +34,7 @@ export function withInamPayeeCheck(
     if (res.status !== 402) return res;
     const required = parsePaymentRequired(res.headers, await res.clone().text());
     for (const { payTo } of paymentOptions(required)) {
+      if (!/^0x[0-9a-fA-F]{40}$/.test(payTo)) continue; // only EVM deposit addresses are checkable (SPEC.md section 11.2); never feed a remote value to the check as a URL
       const report = await check(payTo);
       if (report.verdict === "fail" || (opts.strict && report.verdict === "caution")) throw new PayeeBlocked(payTo, report);
     }
