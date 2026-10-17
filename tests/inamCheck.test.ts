@@ -44,7 +44,7 @@ function stub(w: World) {
     if (url.startsWith(`${REG}/v1/agents/search`)) return json({ agents: w.linked ? [agent] : [], hasMore: false });
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}`) return json(agent);
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}/reputation`) return json(reputation);
-    if (w.erc8004Down && (url.startsWith("https://api.8004scan.io") || url === "https://mainnet.base.org")) return new Response("unavailable", { status: 503 });
+    if (w.erc8004Down && ["https://api.8004scan.io", "https://mainnet.base.org"].includes(new URL(url).origin)) return new Response("unavailable", { status: 503 });
     if (url.startsWith("https://api.8004scan.io/api/v1/agents")) {
       const items = w.erc8004Owned ? [{ chain_id: 8453, token_id: 7, owner_address: PAYTO, name: "Seller", total_feedbacks: w.feedback?.total ?? 0, is_testnet: false }] : [];
       return json({ items });
