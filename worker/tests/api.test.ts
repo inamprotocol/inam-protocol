@@ -2683,12 +2683,12 @@ describe("hosted receipt check (POST /v1/receipts/:id/verify)", () => {
   type CheckBody = { verdict: string; checks: { name: string; result: string }[]; log: { leafIndex: number } | null; independentVerification: string; nextStep: string; attestation: { signer: string; signature: string } };
   const results = (b: CheckBody) => Object.fromEntries(b.checks.map((x) => [x.name, x.result]));
 
-  async function finalized() {
+  async function finalized(visibility?: "participants_only") {
     const requester = generateKeypair();
     const worker_ = generateKeypair();
     await call("POST", "/v1/agents", { keypair: requester, idempotencyKey: `reg:${requester.did}`, body: { capabilities: ["job.posting"] } });
     await call("POST", "/v1/agents", { keypair: worker_, idempotencyKey: `reg:${worker_.did}`, body: { capabilities: ["x"] } });
-    const base = job();
+    const base = job(visibility && { visibility });
     const input = { ...base, task: { ...base.task, specHash: `sha256:${sha256Hex(SPEC)}` }, result: { ...base.result, outputHash: `sha256:${sha256Hex(OUTPUT)}` } };
     const content = buildSignableContent(requester.did, worker_.did, input as never);
     const bytes = new TextEncoder().encode(canonicalize({ ...content, dispute: undefined }));
@@ -2789,6 +2789,34 @@ describe("hosted receipt check (POST /v1/receipts/:id/verify)", () => {
     });
     const a2aRes = (await (await worker.fetch(a2aReq, env, createExecutionContext())).json()) as { result: { message: { parts: { data: { skill: string; result: { verdict: string } } }[] } } };
     expect(a2aRes.result.message.parts[0].data).toMatchObject({ skill: "verify_receipt", result: { verdict: "pass" } });
+  });
+
+  it("does not show a participants_only receipt to strangers through /verify, MCP or A2A (SPEC.md §4.4)", async () => {
+    const { receiptId, requester, worker_ } = await finalized("participants_only");
+    const stranger = generateKeypair();
+    await call("POST", "/v1/agents", { keypair: stranger, idempotencyKey: `reg:${stranger.did}`, body: { capabilities: ["y"] } });
+    const path = `/v1/receipts/${encodeURIComponent(receiptId)}/verify`;
+    for (const res of [await check(receiptId), await call("POST", path, { keypair: stranger, body: {} })]) {
+      expect(res.status).toBe(403);
+      expect((res.json as { error: { code: string } }).error.code).toBe("RECEIPT_NOT_VISIBLE");
+    }
+    expect((await call("POST", path, { keypair: requester, body: {} })).status).toBe(200);
+
+    const rpc = async (url: string, body: unknown) => {
+      const req = new Request(url, { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "cf-connecting-ip": crypto.randomUUID() }, body: JSON.stringify(body) });
+      return JSON.stringify(await (await worker.fetch(req, env, createExecutionContext())).json());
+    };
+    const leaks = (text: string) => [requester.did, worker_.did, sha256Hex(OUTPUT), sha256Hex(SPEC)].filter((s) => text.includes(s));
+    for (const name of ["inam_get_receipt", "inam_verify_receipt"]) {
+      const text = await rpc("http://worker.test/mcp", { jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: { receiptId } } });
+      expect(text, name).toContain("RECEIPT_NOT_VISIBLE");
+      expect(leaks(text), name).toEqual([]);
+    }
+    for (const ask of [`show receipt ${receiptId}`, `please verify ${receiptId}`]) {
+      const text = await rpc("http://worker.test/a2a", { jsonrpc: "2.0", id: 1, method: "SendMessage", params: { message: { messageId: "p1", role: "ROLE_USER", parts: [{ text: ask }] } } });
+      expect(text, ask).toContain("HTTP 403");
+      expect(leaks(text), ask).toEqual([]);
+    }
   });
 });
 

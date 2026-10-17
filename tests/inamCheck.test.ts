@@ -19,6 +19,8 @@ interface World {
   feedback?: { clients: string[]; total: number; receiptBacked: number };
   status?: number;
   directory?: boolean;
+  registryDown?: boolean;
+  erc8004Down?: boolean;
 }
 
 function stub(w: World) {
@@ -38,9 +40,11 @@ function stub(w: World) {
       return new Response(JSON.stringify(httpMessageSignaturesDirectory([key.publicKey])), { headers: directoryResponseHeaders("seller.example", key.privateKey) });
     }
     if (url.startsWith("https://rdap.org/domain/seller.example")) return json({ events: [{ eventAction: "registration", eventDate: "1995-08-14T04:00:00Z" }] });
+    if (w.registryDown && new URL(url).origin === REG) return new Response("unavailable", { status: 503 });
     if (url.startsWith(`${REG}/v1/agents/search`)) return json({ agents: w.linked ? [agent] : [], hasMore: false });
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}`) return json(agent);
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}/reputation`) return json(reputation);
+    if (w.erc8004Down && ["https://api.8004scan.io", "https://mainnet.base.org"].includes(new URL(url).origin)) return new Response("unavailable", { status: 503 });
     if (url.startsWith("https://api.8004scan.io/api/v1/agents")) {
       const items = w.erc8004Owned ? [{ chain_id: 8453, token_id: 7, owner_address: PAYTO, name: "Seller", total_feedbacks: w.feedback?.total ?? 0, is_testnet: false }] : [];
       return json({ items });
@@ -106,6 +110,21 @@ describe("inam check", () => {
     expect(status(r, "inam.extension")).toEqual(["pass"]);
     expect(r.checks.find((c) => c.id === "inam.reputation")?.label).toMatch(/countersigned, 3 countersigned receipts/);
     expect(status(r, "webbotauth.directory")).toEqual(["pass"]);
+  });
+
+  it("an unreachable registry is a warn, never a pass (wallet and URL targets)", async () => {
+    stub({ erc8004Owned: 1, feedback: { clients: ["0x2222222222222222222222222222222222222222"], total: 5, receiptBacked: 2 }, registryDown: true });
+    const r = await run(PAYTO);
+    expect(r.checks.find((c) => c.id === "inam.link")).toMatchObject({ status: "warn", label: expect.stringMatching(/registry unreachable/) });
+    expect(r.verdict).toBe("caution");
+    expect((await run("https://seller.example/api")).verdict).not.toBe("pass");
+  });
+
+  it("ERC-8004 sources down is a warn, never a pass", async () => {
+    stub({ erc8004Owned: 1, erc8004Down: true });
+    const r = await run(PAYTO);
+    expect(r.checks.find((c) => c.id === "erc8004.identity")).toMatchObject({ status: "warn", label: expect.stringMatching(/could not check/) });
+    expect(r.verdict).not.toBe("pass");
   });
 
   it("fails on a non-402 answer and on plain http", async () => {

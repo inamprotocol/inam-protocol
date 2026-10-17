@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto";
 import { describe, expect, it, vi } from "vitest";
-import { generateKeypair, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
+import { fromBase64, generateKeypair, sign, toBase64, verify } from "../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../sdk-js/src/crypto/canonical.js";
 import { registerAgent } from "../src/services/agentService.js";
-import { buildSignableContent, createDraft, countersign, openDispute, resolveDispute } from "../src/services/receiptService.js";
+import { buildSignableContent, computeReceiptId, createDraft, countersign, getReceipt, openDispute, resolveDispute } from "../src/services/receiptService.js";
+import { getSTH } from "../src/services/transparencyService.js";
 import { computeReputation } from "../src/services/reputationService.js";
 import { ApiError } from "../src/middleware/errors.js";
 import type { CreateDraftInput } from "../src/services/receiptService.js";
@@ -465,5 +466,114 @@ describe("execution receipt lifecycle", () => {
 
     const withHonestHistory = computeReputation(attackerB.did);
     expect(withHonestHistory.trustScore).toBeGreaterThan(0);
+  });
+});
+
+// Conformance: a signed receipt field changed after signing must be caught on every path that checks it.
+describe("per-field tamper matrix (SPEC.md §4.2/§4.3)", () => {
+  const signedPart = (r: object) => ({ ...r, signatures: undefined, status: undefined, dispute: undefined, visibility: undefined });
+  // What any offline holder of the JSON can check: content-addressed id and both signatures.
+  function offlineVerify(r: ReturnType<typeof createDraft>) {
+    const bytes = new TextEncoder().encode(canonicalize(signedPart(r)));
+    return {
+      idRecomputes: computeReceiptId(r.agentA.id, r.agentB.id, r) === r.receiptId,
+      agentA: verify(fromBase64(r.signatures.agentA!), bytes, r.agentA.id),
+      agentB: verify(fromBase64(r.signatures.agentB!), bytes, r.agentB.id),
+    };
+  }
+  const later = (iso: string, ms: number) => new Date(Date.parse(iso) + ms).toISOString();
+  // [field, mutate, expressible as POST /receipts input]. third = another registered agent.
+  const TAMPERS: [string, (c: any, third: string) => void, boolean][] = [
+    ["jobId", (c) => (c.jobId += "_x"), true],
+    ["agentA.id", (c, third) => (c.agentA.id = third), true],
+    ["agentA.role", (c) => (c.agentA.role = "worker"), false],
+    ["agentB.id", (c, third) => (c.agentB.id = third), true],
+    ["agentB.role", (c) => (c.agentB.role = "requester"), false],
+    ["task.capability", (c) => (c.task.capability = "translation.en-tr"), true],
+    ["task.specHash", (c) => (c.task.specHash = `sha256:${"0".repeat(64)}`), true],
+    ["task.createdAt", (c) => (c.task.createdAt = later(c.task.createdAt, -1000)), true],
+    ["result.outputHash", (c) => (c.result.outputHash = `sha256:${"1".repeat(64)}`), true],
+    ["result.outputUri", (c) => (c.result.outputUri = "https://evil.example/out"), true],
+    ["result.completedAt", (c) => (c.result.completedAt = later(c.result.completedAt, 1000)), true],
+    ["settlement.amount", (c) => (c.settlement.amount = "1250.00"), true],
+    ["settlement.currency", (c) => (c.settlement.currency = "EURC"), true],
+    ["settlement.paymentRef", (c) => (c.settlement.paymentRef = "0xdeadbeef"), true],
+    ["verification.method", (c) => (c.verification.method = "test_suite_pass"), true],
+    ["verification.outcome", (c) => (c.verification.outcome = "failed"), true],
+  ];
+
+  it.each(TAMPERS)("rejects a change to %s on draft, countersign and offline verification", async (field, mutate, viaPost) => {
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    const third = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+    registerAgent(third.did, { capabilities: ["translation.tr-en"] });
+    const input = freshInput(`job_tamper_${field}_${Math.random()}`);
+    const signature = signDraft(requester.did, worker.privateKey, worker.did, input);
+    const tamper = <T>(v: T): T => {
+      const t = structuredClone(v);
+      mutate(t, third.did);
+      return t;
+    };
+
+    // (a) POST /receipts with the tampered content but the original agent_b signature.
+    if (viaPost) {
+      const t = tamper(buildSignableContent(requester.did, worker.did, input));
+      const { jobId, task, result, settlement, verification } = t;
+      await expectApiError(() => createDraft(t.agentB.id, { jobId, task, result, settlement, verification, agentAId: t.agentA.id, signature }), "INVALID_RECEIPT_SIGNATURE");
+    }
+
+    // (b) agent_a countersigns a tampered copy of the stored draft: rejected, the draft stays a draft.
+    const draft = createDraft(worker.did, { ...input, agentAId: requester.did, signature });
+    await expectApiError(() => countersign(draft.receiptId, requester.did, signCountersign(tamper(draft), requester.privateKey)), "INVALID_RECEIPT_SIGNATURE");
+    expect(getReceipt(draft.receiptId).status).toBe("draft");
+
+    // (c) offline: the untampered receipt verifies, the tampered one fails both signatures.
+    const finalized = countersign(draft.receiptId, requester.did, signCountersign(draft, requester.privateKey));
+    expect(offlineVerify(finalized)).toEqual({ idRecomputes: true, agentA: true, agentB: true });
+    // receiptId hard-codes the two roles (computeReceiptId), so only the signatures catch a role swap.
+    expect(offlineVerify(tamper(finalized))).toEqual({ idRecomputes: field.endsWith(".role"), agentA: false, agentB: false });
+  });
+
+  it("does not sign visibility, status or dispute: changing them keeps the id and both signatures valid", () => {
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+    const input = freshInput(`job_unsigned_${Math.random()}`);
+    const draft = createDraft(worker.did, { ...input, agentAId: requester.did, signature: signDraft(requester.did, worker.privateKey, worker.did, input) });
+    const r = countersign(draft.receiptId, requester.did, signCountersign(draft, requester.privateKey));
+    const changed = { ...r, visibility: "participants_only" as const, status: "disputed" as const, dispute: { status: "open" as const, windowClosesAt: null, reason: "x" } };
+    expect(offlineVerify(changed)).toEqual({ idRecomputes: true, agentA: true, agentB: true });
+  });
+});
+
+describe("finalize on a single valid signature (SPEC.md §4.3 MUST NOT)", () => {
+  it("rejects an invalid countersignature and leaves the receipt a draft, reputation and log unchanged", async () => {
+    const requester = generateKeypair();
+    const worker = generateKeypair();
+    registerAgent(requester.did, { capabilities: ["job.posting"] });
+    registerAgent(worker.did, { capabilities: ["translation.tr-en"] });
+    const input = freshInput(`job_single_sig_${Math.random()}`);
+    const draft = createDraft(worker.did, { ...input, agentAId: requester.did, signature: signDraft(requester.did, worker.privateKey, worker.did, input) });
+    const other = freshInput(`job_other_${Math.random()}`);
+    const repBefore = computeReputation(worker.did);
+    const logBefore = getSTH().treeSize;
+
+    const bad = {
+      empty: "",
+      garbage: toBase64(new Uint8Array(64).fill(7)),
+      "agent_b signature copied": draft.signatures.agentB!,
+      "signed over other content": signDraft(requester.did, requester.privateKey, worker.did, other),
+    };
+    for (const [why, sig] of Object.entries(bad)) {
+      await expectApiError(() => countersign(draft.receiptId, requester.did, sig), "INVALID_RECEIPT_SIGNATURE");
+      expect(getReceipt(draft.receiptId).status, why).toBe("draft");
+      expect(getReceipt(draft.receiptId).signatures.agentA, why).toBeUndefined();
+    }
+    const repAfter = computeReputation(worker.did);
+    expect([repAfter.components, repAfter.trustScore]).toEqual([repBefore.components, repBefore.trustScore]);
+    expect(getSTH().treeSize).toBe(logBefore);
   });
 });

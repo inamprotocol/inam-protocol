@@ -229,12 +229,12 @@ function erc8004Items(wallet: string, r: WalletErc8004): CheckItem[] {
   const owned = Math.max(r.agents?.length ?? 0, r.onchain?.balance ?? 0);
   const chains = [...new Set((r.agents ?? []).map((a) => chainName(a.chainId)))];
   const where = r.onchain ? ` (on-chain on ${chainName(r.onchain.chainId)}: ${r.onchain.balance})` : "";
-  if (r.agents === null && r.onchain === null) return [{ id: "erc8004.identity", status: "info", label: "ERC-8004 identity: could not check", detail: r.errors.join("; ") }];
+  if (r.agents === null && r.onchain === null) return [{ id: "erc8004.identity", status: "warn", label: "ERC-8004 identity: could not check", detail: r.errors.join("; ") }];
   if (!owned)
     return [{ id: "erc8004.identity", status: "warn", label: `No ERC-8004 identity owned by ${short(wallet)}${where}`, detail: "Only ownership is reverse-indexed; an agent that set this as agentWallet without owning it is not found." }];
   const items: CheckItem[] = [{ id: "erc8004.identity", status: "pass", label: `ERC-8004: owns ${owned} agent${owned > 1 ? "s" : ""}${chains.length ? ` on ${chains.slice(0, 4).join(", ")}${chains.length > 4 ? "…" : ""}` : ""}${where}`, detail: (r.agents ?? []).slice(0, 5).map((a) => `${a.chainId}:${a.agentId}${a.name ? ` ${a.name}` : ""}`).join(", ") || undefined }];
   const f = r.feedback;
-  if (!f) items.push({ id: "erc8004.feedback", status: "info", label: "ERC-8004 feedback: not checked", detail: r.errors.join("; ") || undefined });
+  if (!f) items.push({ id: "erc8004.feedback", status: r.errors.length ? "warn" : "info", label: "ERC-8004 feedback: not checked", detail: r.errors.join("; ") || undefined });
   else if (f.receiptBacked > 0) items.push({ id: "erc8004.feedback", status: "pass", label: `ERC-8004 feedback: ${f.total}, of which ${f.receiptBacked} backed by a signed INAM receipt` });
   else if (f.total > 0) items.push({ id: "erc8004.feedback", status: "warn", label: `ERC-8004 feedback: ${f.total}, none tied to a task receipt`, detail: "Bare scores: any wallet can send them, nothing links them to delivered work." });
   else items.push({ id: "erc8004.feedback", status: "warn", label: "ERC-8004 feedback: none" });
@@ -275,7 +275,8 @@ async function walletInam(wallet: string, opts: CheckOptions): Promise<CheckItem
   try {
     linked = opts.linkedWallets ?? (await inamLinkedWallets(registry, opts.timeoutMs, opts.fetch));
   } catch (e) {
-    return [{ id: "inam.link", status: "info", label: "INAM wallet link: registry unreachable", detail: (e as Error).message }];
+    // An outage is not "nothing to see": warn, so a pre-payment check never passes on it.
+    return [{ id: "inam.link", status: "warn", label: "INAM wallet link: registry unreachable", detail: (e as Error).message }];
   }
   const did = linked.get(wallet.toLowerCase());
   if (!did) return [{ id: "inam.link", status: "warn", label: `${short(wallet)} is not linked to any INAM ID`, detail: "No INAM ID proved control of this wallet, so there are no receipts to read." }];
