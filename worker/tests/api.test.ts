@@ -2134,7 +2134,7 @@ describe("API keys + usage meter (SPEC.md §16)", () => {
     const k = await agent();
     const key = await issue(k);
     expect(key.apiKey).toMatch(/^inam_k_[0-9a-f]{64}$/);
-    expect(key.pricePerCallUsdc).toBe("0.001");
+    expect(key.pricePerCallUsdc).toBe("0.02");
     const rows = await env.DB.prepare("SELECT * FROM api_keys WHERE key_id = ?").bind(key.keyId).all<Record<string, unknown>>();
     expect(JSON.stringify(rows.results)).not.toContain(key.apiKey);
     expect(rows.results[0].key_hash).toBe(sha256Hex(key.apiKey));
@@ -3201,13 +3201,13 @@ describe("paid x402 check (GET /v1/x402/check)", () => {
     expect(((await res.json()) as any).error.code).toBe("X402_DISABLED");
   });
 
-  it("answers 402 with x402 v2 requirements at 0.001 USDC and a Bazaar listing with the query input", async () => {
+  it("answers 402 with x402 v2 requirements at 0.02 USDC and a Bazaar listing with the query input", async () => {
     const res = await get(`/v1/x402/check?target=${WALLET}`, enabled);
     expect(res.status).toBe(402);
     const required = decode(res.headers.get("payment-required"));
     expect(required.x402Version).toBe(2);
     expect(required.resource.url).toBe(`http://worker.test/v1/x402/check?target=${WALLET}`);
-    expect(required.accepts[0]).toMatchObject({ scheme: "exact", network: "eip155:8453", amount: "1000", payTo: PAY_TO, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" });
+    expect(required.accepts[0]).toMatchObject({ scheme: "exact", network: "eip155:8453", amount: "20000", payTo: PAY_TO, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" });
     expect(required.extensions.bazaar.info.input).toMatchObject({ type: "http", method: "GET", queryParams: { target: expect.any(String) } });
     expect(required.extensions.bazaar.schema.properties.input.properties.queryParams.required).toEqual(["target"]);
     // Missing target: the usage error, never a charge.
@@ -3248,7 +3248,7 @@ describe("paid x402 check (GET /v1/x402/check)", () => {
 
     const { httpSpecHash, httpOutputHash } = await import("../../sdk-js/src/http.js");
     const draft = (await call("GET", `/v1/receipts/${encodeURIComponent(receiptId)}`, { keypair: requester })).json as any;
-    expect(draft).toMatchObject({ status: "draft", agentA: { id: requester.did }, task: { capability: "demo.x402-check" }, settlement: { paymentRef: "0x1234", amount: "0.001", currency: "USDC" } });
+    expect(draft).toMatchObject({ status: "draft", agentA: { id: requester.did }, task: { capability: "demo.x402-check" }, settlement: { paymentRef: "0x1234", amount: "0.02", currency: "USDC" } });
     expect(draft.task.specHash).toBe(httpSpecHash("GET", `http://worker.test${path}`, new Uint8Array()));
     expect(draft.result.outputHash).toBe(httpOutputHash(bytes));
 

@@ -69,7 +69,7 @@ export function checkHandler(app: Hono<AppEnv>) {
 
 /**
  * Paid twin of the check: GET /v1/x402/check, same params, same JSON body, behind
- * x402 v2 (0.001 USDC on Base). It buys the same answer /v1/check gives for free;
+ * x402 v2 (0.02 USDC on Base). It buys the same answer /v1/check gives for free;
  * payment never changes a verdict or a score (GOVERNANCE.md). Off until X402_PAY_TO is set.
  */
 const CHECK_PRICE = { units: CHECK_PRICE_UNITS, usdc: CHECK_PRICE_USDC }; // set in apiKeys.ts
@@ -139,7 +139,7 @@ const CHECK_OFFER: X402Offer = {
 };
 
 // demo.* receipts are real, signed and logged but never count toward reputation
-// (SPEC.md §5.2), so a $0.001 call can't buy the payer score.
+// (SPEC.md §5.2), so a $0.02 call can't buy the payer score.
 const RECEIPT_CAPABILITY = "demo.x402-check";
 
 /**

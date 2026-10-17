@@ -6,7 +6,7 @@ import type { Env } from "./types.js";
 /** Price of one paid check call in USDC. The ONE place it is set: the x402
  * offer (check.ts) and the key usage reports both derive from it. To move to
  * 0.005, change this line. */
-export const CHECK_PRICE_USDC = "0.001";
+export const CHECK_PRICE_USDC = "0.02";
 /** Same price in USDC base units (6 decimals), derived. */
 export const CHECK_PRICE_UNITS = String(Math.round(Number(CHECK_PRICE_USDC) * 1e6));
 

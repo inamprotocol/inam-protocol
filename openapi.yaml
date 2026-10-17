@@ -1079,7 +1079,7 @@ paths:
   /x402/check:
     get:
       operationId: checkTargetPaid
-      summary: "Paid twin of /check over x402 v2: same parameters, same JSON body, 0.001 USDC on Base (optional; off unless the registry configures a payout wallet)"
+      summary: "Paid twin of /check over x402 v2: same parameters, same JSON body, 0.02 USDC on Base (optional; off unless the registry configures a payout wallet)"
       description: >-
         Buys exactly the answer GET /check gives for free. Payment never changes a verdict or a score
         (GOVERNANCE.md, "Scores are not for sale"). A paying request that sends `INAM-Requester: <did:key>`

@@ -195,7 +195,7 @@ app.get("/v1/agents/:id/protocols", async (c) => {
 
 app.use("/v1/x402/*", cors({ origin: "*", exposeHeaders: ["PAYMENT-REQUIRED", "PAYMENT-RESPONSE", "INAM-Receipt"] }));
 app.get("/v1/x402/report/:id", rateLimitReadByIp, x402ReportHandler);
-// Paid twin of /v1/check: same answer for 0.001 USDC (see check.ts).
+// Paid twin of /v1/check: same answer for 0.02 USDC (see check.ts).
 app.get("/v1/x402/check", rateLimitReadByIp, x402CheckHandler(app));
 
 // Pre-payment check of any x402 URL, wallet or did:key from public signals (see check.ts).
