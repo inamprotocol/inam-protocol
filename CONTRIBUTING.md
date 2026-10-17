@@ -112,3 +112,10 @@ before merge.
 - Run the relevant test suite(s) locally before opening a PR.
 - If you touch `SPEC.md`, explain the "why" in the PR description —
   spec changes affect every implementation and SDK, not just this repo.
+
+## Maintainer measurement scripts
+
+Dependency-free Node scripts in `scripts/`, run by hand; neither posts anything.
+
+- `node scripts/snapshot-metrics.mjs [metrics.md]` fetches `GET /v1/stats` (override with `INAM_STATS_URL`) and appends one dated row of the 30-day-rule counters (`nonOperatorAgents`, `linkedWallets`, `countersignedReceiptsBetweenIndependentParties`). Idempotent per UTC day; creates the file with a header if missing. The counters are defined in the response's `definitions` object.
+- `node scripts/radar.mjs [--since YYYY-MM-DD]` (default 7 days) uses the authenticated `gh` CLI, read-only, to list issues and discussions touched in the watched ecosystem repos that match INAM keywords, as a markdown list.

@@ -958,6 +958,13 @@ paths:
                   agents:
                     type: object
                     properties: { registered: { type: integer }, inCountersignedReceipts: { type: integer } }
+                  nonOperatorAgents: { type: integer, description: Registered agents that are not operator agents and not self-declared metadata.demo/test }
+                  linkedWallets:
+                    type: object
+                    description: Agents with linked.erc8004_id set (proved by key possession, §2.1)
+                    properties: { total: { type: integer }, operator: { type: integer }, nonOperator: { type: integer } }
+                  countersignedReceiptsBetweenIndependentParties: { type: integer, description: Finalized, not demo/test labelled, both parties different non-operator agents }
+                  definitions: { type: object, additionalProperties: { type: string }, description: Plain-language definitions of the three counters above }
                   counterpartyPairs: { type: integer, description: Distinct unordered agent pairs across countersigned receipts }
                   operatorAgents: { type: array, items: { type: string } }
         "429": { $ref: "#/components/responses/Error" }
