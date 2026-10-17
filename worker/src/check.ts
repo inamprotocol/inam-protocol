@@ -11,6 +11,7 @@ import { x402Paid, type Settlement, type X402Offer } from "./x402Report.js";
 import { demoKeypair, ensureRegistered } from "./demo.js";
 import * as receiptService from "./receiptService.js";
 import { renderBadgeSvg } from "./badgeService.js";
+import { CHECK_PRICE_UNITS, CHECK_PRICE_USDC, meterKey, refundKey } from "./apiKeys.js";
 
 /**
  * Hosted pre-payment check: GET /v1/check?target=<url | 0x wallet | did:key>[&method=POST][&rdap=0].
@@ -68,10 +69,10 @@ export function checkHandler(app: Hono<AppEnv>) {
 
 /**
  * Paid twin of the check: GET /v1/x402/check, same params, same JSON body, behind
- * x402 v2 (0.001 USDC on Base). It buys the same answer /v1/check gives for free;
+ * x402 v2 (0.02 USDC on Base). It buys the same answer /v1/check gives for free;
  * payment never changes a verdict or a score (GOVERNANCE.md). Off until X402_PAY_TO is set.
  */
-const CHECK_PRICE = { units: "1000", usdc: "0.001" };
+const CHECK_PRICE = { units: CHECK_PRICE_UNITS, usdc: CHECK_PRICE_USDC }; // set in apiKeys.ts
 const CHECK_OFFER: X402Offer = {
   price: CHECK_PRICE.units,
   description: "Pre-payment check of an x402 endpoint URL, EVM wallet or did:key: INAM ID bound to its payTo wallet, countersigned work history, ERC-8004 registration, domain age. Returns a pass/caution/fail verdict with per-line checks. Same answer as the free GET /v1/check.",
@@ -138,7 +139,7 @@ const CHECK_OFFER: X402Offer = {
 };
 
 // demo.* receipts are real, signed and logged but never count toward reputation
-// (SPEC.md §5.2), so a $0.001 call can't buy the payer score.
+// (SPEC.md §5.2), so a $0.02 call can't buy the payer score.
 const RECEIPT_CAPABILITY = "demo.x402-check";
 
 /**
@@ -177,7 +178,22 @@ async function draftReceipt(c: Context<AppEnv>, res: Response, settlement: Settl
 export function x402CheckHandler(app: Hono<AppEnv>) {
   const free = checkHandler(app);
   return async (c: Context<AppEnv>) => {
+    // SPEC.md §16: an API key (INAM-Key header) spends its free tier first; metering only, no billing.
+    // An exhausted key falls through to the normal x402 payment below.
+    const apiKey = c.req.header("inam-key")?.trim();
+    let exhausted = false;
+    if (apiKey && c.req.query("target")?.trim()) {
+      const metered = await meterKey(c.env, apiKey);
+      if (metered === "invalid") return c.json({ error: { code: "INVALID_API_KEY", message: "Unknown or revoked INAM-Key" } }, 401);
+      if (metered === "granted") {
+        const res = await free(c);
+        if (res.status !== 200) await refundKey(c.env, apiKey); // a rejected request is not a call
+        return res;
+      }
+      exhausted = true;
+    }
     if (!c.env.X402_PAY_TO) {
+      if (exhausted) return c.json({ error: { code: "FREE_TIER_EXHAUSTED", message: "This API key's free tier is used up and this registry has no payment route configured." } }, 402);
       return c.json({ error: { code: "X402_DISABLED", message: "The paid check is not enabled on this registry (no payout wallet configured). GET /v1/check is free and returns the same answer." } }, 503);
     }
     if (!c.req.query("target")?.trim()) return free(c); // 400 with usage, never a charge

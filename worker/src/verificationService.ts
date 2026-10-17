@@ -3,6 +3,7 @@ import { badRequest, conflict, forbidden, notFound } from "./errors.js";
 import { verify } from "../../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
 import { buildSignableVerificationContent, type VerificationContentInput } from "../../sdk-js/src/core/verificationContent.js";
+import { isReceiptRestricted, isReceiptParticipant } from "../../sdk-js/src/core/receiptVisibility.js";
 import * as receiptService from "./receiptService.js";
 import { getAgent } from "./agentService.js";
 import type { Env, VerificationRecord } from "./types.js";
@@ -126,6 +127,20 @@ export async function submitVerification(env: Env, callerDid: string, input: Sub
 export async function getVerification(env: Env, id: string): Promise<VerificationRecord> {
   const record = await db.getVerification(env, id);
   if (!record) throw notFound("VERIFICATION_NOT_FOUND", `No verification with id ${id}`);
+  return record;
+}
+
+/**
+ * GET /verifications/:id gate (SPEC.md §12.6): visible when the referenced
+ * receipt is public, or the caller is its requester, provider or this
+ * verification's verifier. Anyone else gets the same 404 as a missing id, so
+ * the response never confirms a participants_only verification exists.
+ */
+export async function getVisibleVerification(env: Env, id: string, callerDid: string | undefined): Promise<VerificationRecord> {
+  const record = await getVerification(env, id);
+  const receipt = await receiptService.getReceipt(env, record.receiptId);
+  const allowed = !isReceiptRestricted(receipt) || isReceiptParticipant(receipt, callerDid) || (!!callerDid && callerDid === record.verifier);
+  if (!allowed) throw notFound("VERIFICATION_NOT_FOUND", `No verification with id ${id}`);
   return record;
 }
 

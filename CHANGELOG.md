@@ -4,6 +4,11 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.43 (Draft) — 2026-10-17
+- **Verification visibility (§12.6).** `GET /verifications/:id` is gated by the referenced receipt: participants_only receipts reveal their verifications only to the requester, provider and that verifier, and everyone else gets the same 404 as a missing id, so existence does not leak. The public flag is the receipt's existing `visibility`. Both runtimes.
+- **API keys and usage meter (new §16, optional).** Signed issuance, hash-only storage, a free tier of metered calls on `GET /x402/check` via `INAM-Key`, price in one constant. Metering only, no billing. Worker only; needs `worker/migration-add-api-keys.sql`. New error codes `API_KEY_LIMIT`, `API_KEY_NOT_FOUND`, `INVALID_API_KEY`, `FREE_TIER_EXHAUSTED`.
+- **Open questions (new §17, non-normative).** Three open questions on dispute bonds: who funds, who decides, where the money lives.
+
 ### v0.42 (Draft) — 2026-10-13
 - **Key succession (new §2.3).** `POST /agents/:id/succeed` requests handing an INAM ID's history to a new, unregistered key. Both keys sign `canonical({ type: "inam.succession.v1", predecessor, successor })`. The request is pending for 72 hours (`pendingSuccession`, log entry `agent_succession_pending`, flag `succession_pending:<did>`); the ID keeps working, and revoking it cancels the succession and burns the ID (`agent_succession_cancelled`), so an owner who notices a thief's request can stop the reputation from moving. After the window, applied lazily on the next request, the predecessor gets `succeededBy` and signs nothing further (`AGENT_SUCCEEDED`), the successor is created with the statement as `succession`, and an `agent_succeeded` leaf is logged. Reputation is computed over the lineage with counterparties counted under their chain head, so succession conserves evidence: disputes, rejections and non-performance reports follow the successor, nothing is merged or forked. Linked identities, verifier grants and stake do not carry over. §2.3 states what the window does and doesn't solve for a stolen key, and reserves `recovery` for pre-rotation or guardian recovery. Raised by two outside reviews. New error codes `AGENT_SUCCEEDED`, `SUCCESSION_INVALID`, `SUCCESSION_PENDING`; flags `succession_pending:<did>`, `succeeded:<did>`, `inherited_from:<did>`.
 
@@ -360,6 +365,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### Unreleased
+- `GET /v1/verifications/:id` (both runtimes) now accepts an optional signature and returns `404 VERIFICATION_NOT_FOUND`, identical to a missing id, to anyone but the receipt's requester or provider or the verification's verifier when the receipt is `participants_only` (SPEC v0.43 §12.6). Public receipts are unchanged. Unsigned callers of a participants_only receipt's verification used to get 200.
+- Worker only: API keys and a free-tier usage meter for `GET /v1/x402/check` (SPEC v0.43 §16). `POST /v1/api-keys` (signed, registered agents), `GET /v1/api-keys`, `POST /v1/api-keys/:keyId/revoke`; `INAM-Key` header on the paid check spends 100 free calls per key before the normal x402 `402`. Only a SHA-256 of each key is stored; no billing. The per-call price is the one constant `CHECK_PRICE_USDC` in `worker/src/apiKeys.ts` (0.02 from this release; was 0.001). **Run `worker/migration-add-api-keys.sql` against D1 before deploying.**
 
 ### 0.13.0 (Worker) — 2026-10-17
 - `GET /v1/badge?target=` returns a small SVG with the verdict of `GET /v1/check` (grey `unknown` for a missing or invalid target), for sellers to embed in a README. SPEC §6 and openapi list it.
