@@ -12,7 +12,12 @@ import { generateKeypair, canonicalize, sign, verify, fromBase64 } from "../sdk-
  *
  *   - algorithm: Ed25519; the key is a did:key, so the DID names the agent AND carries
  *     the public key: a merchant verifies with no lookup and no registry.
- *   - signed bytes: `${Timestamp}\n${JCS(body)}` (RFC 8785, `canonicalize`).
+ *   - signed bytes: `${Timestamp}\n${canonicalize(body)}`. `canonicalize` is a subset of JCS
+ *     (RFC 8785), not full JCS (SPEC section 4.2): keys sorted by UTF-16 code unit, no whitespace,
+ *     strings and numbers as JSON.stringify writes them, NaN/Infinity throw, and the input is not
+ *     checked to be plain JSON. A verifier in another language must reproduce these bytes
+ *     (vectors: interop/canonical/vectors.json); a strict RFC 8785 library is only known to agree
+ *     for bodies made of strings, integers, booleans, null, arrays and objects.
  *   - identifier: a body field carrying the DID. `agent_identity.did` below is an
  *     ILLUSTRATIVE name, not part of ACP: ACP defines no such field. Being in the body,
  *     it takes part in idempotency comparison (section 6.7) and is covered by the signature.
