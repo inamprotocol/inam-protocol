@@ -3207,6 +3207,26 @@ describe("hosted pre-payment check (GET /v1/check)", () => {
     expect(seen.length).toBe(calls);
   });
 
+  it("serves an SVG badge with the check verdict, grey unknown for a bad target", async () => {
+    stubOutbound();
+    const get = async (q: string) => {
+      const ctx = createExecutionContext();
+      const res = await worker.fetch(new Request(`http://worker.test/v1/badge?${q}`, { headers: { "cf-connecting-ip": crypto.randomUUID() } }), env, ctx);
+      await waitOnExecutionContext(ctx);
+      return { res, svg: await res.text() };
+    };
+    const ok = await get(`target=${encodeURIComponent(`https://seller.example/api?n=${crypto.randomUUID()}`)}&rdap=0`);
+    expect(ok.res.status).toBe(200);
+    expect(ok.res.headers.get("content-type")).toContain("image/svg+xml");
+    expect(ok.res.headers.get("cache-control")).toContain("max-age");
+    expect(ok.svg).toContain("INAM");
+    expect(ok.svg).toContain("caution");
+    const bad = await get("target=not-a-target");
+    expect(bad.res.status).toBe(200);
+    expect(bad.svg).toContain("unknown");
+    expect((await get("")).svg).toContain("unknown");
+  });
+
   it("signs outbound requests with Web Bot Auth when WEB_BOT_AUTH_KEY is set", async () => {
     stubOutbound();
     await check(`target=${encodeURIComponent(`https://seller.example/api?n=${crypto.randomUUID()}`)}&rdap=0`, { ...env, WEB_BOT_AUTH_KEY: "04".repeat(32) });

@@ -33,6 +33,12 @@ Each one looks up the seller's payment details, wallet history and domain age, t
 
 The command line reads the 402 (payTo, network, price), looks the payTo up in ERC-8004 (identity and whether any feedback is tied to delivered work), the INAM registry, the host's Web Bot Auth key directory and the domain's RDAP age, and prints what it found. Exit code 1 when a key check fails, so it can gate a payment or a CI step. Details: [`sdk-js/README.md`](./sdk-js/README.md#inam-check-before-you-pay). The same check is also the MCP tool `inam_check` and the A2A skill `check`. The API answer adds a `next` step and `cachedAt` (cached 10 minutes).
 
+**Badge for sellers.** Show buyers your pre-payment verdict in your README (grey `unknown` when the target is invalid):
+
+```md
+![INAM](https://api.inamprotocol.org/v1/badge?target=https://your-api.example/endpoint)
+```
+
 **GitHub Action.** Gate a workflow on the same check (composite action, calls the free hosted `/v1/check` with curl and jq, read-only, no secrets):
 
 ```yaml
