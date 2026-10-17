@@ -4,6 +4,7 @@
 
 ## Start here
 
+- [Quickstart by role](https://inamprotocol.org/quickstart): buyer (check before paying), seller (prove your payTo), agent developer (identity + first receipt)
 - [Use cases](https://inamprotocol.org/use-cases.html): concrete Job -> Receipt -> Verification flows
 - [Quickstart](https://github.com/inamprotocol/inam-protocol/blob/main/QUICKSTART.md): `npm i inamprotocol`, zero to a changed trust score against the live registry
 - [Specification](https://docs.inamprotocol.org/spec/): full protocol spec

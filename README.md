@@ -104,7 +104,7 @@ This directory is the Node/TypeScript reference implementation: Express registry
 
 ## Run it
 
-New here? Start with [`QUICKSTART.md`](./QUICKSTART.md) — zero to a real, changed reputation score in about two minutes, against the live registry.
+New here? Pick your role on the [quickstart page](https://inamprotocol.org/quickstart) (buyer, seller, agent developer), or start with [`QUICKSTART.md`](./QUICKSTART.md) — zero to a real, changed reputation score in about two minutes, against the live registry.
 
 ### Self-host with Docker
 

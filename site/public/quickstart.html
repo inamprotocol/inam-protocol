@@ -1,0 +1,267 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Quickstart — INAM Protocol</title>
+<link rel="icon" href="https://inamprotocol.org/logo.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="https://inamprotocol.org/apple-touch-icon.png">
+<meta name="description" content="Check before you pay, prove your payTo wallet, or give your agent an identity and a first receipt. Copy-paste commands, with the honest limits.">
+<link rel="canonical" href="https://inamprotocol.org/quickstart">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="INAM Protocol">
+<meta property="og:title" content="Quickstart — INAM Protocol">
+<meta property="og:description" content="Check before you pay, prove your payTo wallet, or give your agent an identity and a first receipt. Copy-paste commands, with the honest limits.">
+<meta property="og:url" content="https://inamprotocol.org/quickstart">
+<meta property="og:image" content="https://inamprotocol.org/og.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:image" content="https://inamprotocol.org/og.png">
+<meta name="twitter:title" content="Quickstart — INAM Protocol">
+<meta name="twitter:description" content="Check before you pay, prove your payTo wallet, or give your agent an identity and a first receipt. Copy-paste commands, with the honest limits.">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=Public+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap">
+<style>
+:root {
+  --bg: #ffffff;
+  --bg-2: #f4f5f7;
+  --bg-3: #ebedf1;
+  --ink: #14161b;
+  --ink-dim: #4a505c;
+  --ink-faint: #7b8290;
+  --line: #dde1e7;
+  --accent: #7a2e2e;
+  --accent-ink: #632424;
+  --accent-soft: #f5e8e8;
+  --code-bg: #f4f5f7;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0d0e11;
+    --bg-2: #16181d;
+    --bg-3: #1d2027;
+    --ink: #e6e8ec;
+    --ink-dim: #a2a8b5;
+    --ink-faint: #6b7280;
+    --line: #262a32;
+    --accent: #d98686;
+    --accent-ink: #e6a3a3;
+    --accent-soft: #241616;
+    --code-bg: #16181d;
+  }
+}
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Public Sans", -apple-system, "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6;
+  -webkit-font-smoothing: antialiased;
+}
+code, pre, kbd, .mono { font-family: "IBM Plex Mono", ui-monospace, "SF Mono", Consolas, monospace; }
+a { color: var(--accent-ink); }
+a:hover { text-decoration-thickness: 2px; }
+h1, h2, h3, h4 { text-wrap: balance; font-weight: 600; }
+p { max-width: 72ch; }
+.wrap { max-width: 880px; margin: 0 auto; padding: 0 28px; }
+
+.topbar { border-bottom: 1px solid var(--line); background: var(--bg); }
+.topbar-inner {
+  max-width: 880px; margin: 0 auto; padding: 14px 28px;
+  display: flex; align-items: baseline; gap: 24px; flex-wrap: wrap;
+}
+.wordmark {
+  font-family: "IBM Plex Mono", monospace; font-weight: 600; font-size: 14px;
+  letter-spacing: 0.02em; color: var(--ink); text-decoration: none; white-space: nowrap;
+}
+.wordmark:hover { color: var(--ink); }
+.topnav { display: flex; gap: 20px; flex-wrap: wrap; font-family: "IBM Plex Mono", monospace; font-size: 12.5px; }
+.topnav a { color: var(--ink-dim); text-decoration: none; }
+.topnav a:hover { color: var(--accent-ink); }
+.topnav a.current { color: var(--accent-ink); }
+
+.masthead { padding: 44px 0 8px; }
+.status-line {
+  font-family: "IBM Plex Mono", monospace; font-size: 11.5px; letter-spacing: 0.07em;
+  text-transform: uppercase; color: var(--accent-ink);
+  display: flex; align-items: center; gap: 9px; margin-bottom: 14px;
+}
+.status-line .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); display: inline-block; }
+h1.title { font-size: 2.1rem; margin: 0 0 14px; letter-spacing: -0.01em; }
+p.lead { color: var(--ink-dim); font-size: 1.02rem; max-width: 66ch; }
+
+section { padding: 30px 0; border-top: 1px solid var(--line); }
+section:first-of-type { border-top: none; }
+h2.h {
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--ink-faint); margin: 0 0 6px; font-weight: 600;
+}
+h3.case-title { font-size: 1.15rem; margin: 0 0 8px; }
+p.case-desc { color: var(--ink-dim); margin: 0 0 14px; }
+.case-meta {
+  display: flex; gap: 16px; flex-wrap: wrap;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint);
+  margin-bottom: 14px;
+}
+.case-meta a { color: var(--ink-faint); }
+.case-meta a:hover { color: var(--accent-ink); }
+
+pre {
+  background: var(--code-bg); border: 1px solid var(--line); border-radius: 3px;
+  padding: 13px 15px; overflow-x: auto; margin: 0; font-size: 13.5px; line-height: 1.55;
+}
+code { font-size: 0.92em; }
+.pre-label {
+  font-family: "IBM Plex Mono", monospace; font-size: 10.5px; letter-spacing: 0.05em;
+  text-transform: uppercase; color: var(--ink-faint); margin-bottom: 6px; display: block;
+}
+.case { margin-bottom: 34px; }
+.case:last-child { margin-bottom: 0; }
+
+footer.site { border-top: 1px solid var(--line); margin-top: 10px; padding: 26px 0 60px; }
+.footer-grid {
+  display: flex; justify-content: space-between; flex-wrap: wrap; gap: 14px;
+  font-family: "IBM Plex Mono", monospace; font-size: 12px; color: var(--ink-faint);
+}
+.footer-grid a { color: var(--ink-faint); }
+.footer-grid a:hover { color: var(--accent-ink); }
+.legal h2 { font-size: 1.1rem; margin: 30px 0 8px; }
+.legal ul { max-width: 72ch; padding-left: 1.2em; }
+.legal li { margin-bottom: 6px; }
+.stat { border: 1px solid var(--line); background: var(--bg-2); border-radius: 3px; padding: 14px 16px; max-width: 72ch; font-family: "IBM Plex Mono", monospace; font-size: 13.5px; }
+.stat .n { font-size: 1.4rem; font-weight: 600; color: var(--accent-ink); }
+.stat .note { color: var(--ink-faint); font-size: 12px; margin-top: 6px; }
+.tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 22px 0 4px; }
+.tabs a { font-family: "IBM Plex Mono", monospace; font-size: 12.5px; letter-spacing: 0.04em; text-transform: uppercase; padding: 8px 14px; border: 1px solid var(--line); border-radius: 3px; color: var(--ink-dim); text-decoration: none; background: var(--bg-2); }
+.tabs a:hover { color: var(--accent-ink); }
+.tabs a.on { color: var(--accent-ink); border-color: var(--accent); background: var(--accent-soft); }
+.js .panel { display: none; }
+.js .panel.on { display: block; }
+.panel h3 { font-size: 1.05rem; margin: 26px 0 6px; }
+.panel pre { margin: 6px 0 10px; }
+.honest { border: 1px solid var(--line); background: var(--bg-2); border-radius: 3px; padding: 12px 16px; max-width: 72ch; color: var(--ink-dim); font-size: 14.5px; }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="topbar-inner">
+    <a class="wordmark" href="/">INAM PROTOCOL</a>
+    <nav class="topnav">
+      <a class="current" href="/quickstart">Quickstart</a>
+      <a href="/use-cases">Use Cases</a>
+      <a href="/cohort">Cohort</a>
+      <a href="/blog/">Blog</a>
+      <a href="https://docs.inamprotocol.org/spec/">Specification</a>
+      <a href="https://docs.inamprotocol.org/api/">API Reference</a>
+      <a href="https://explorer.inamprotocol.org" target="_blank" rel="noopener">Explorer</a>
+      <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">Source</a>
+    </nav>
+  </div>
+</div>
+
+<script>document.documentElement.className="js";</script>
+<div class="wrap legal">
+  <div class="masthead">
+    <div class="status-line"><span class="dot"></span>Quickstart</div>
+    <h1 class="title">Quickstart</h1>
+  </div>
+  <p class="lead">Pick what you are doing. Every command here runs against the live public registry, with no signup and no API key.</p>
+  <div class="honest"><strong>Honest limits.</strong> The registry is run by the INAM maintainers. It has <strong>0 receipts between independent parties</strong> so far, so most targets will show &ldquo;not linked to any INAM ID&rdquo; and a <code>caution</code>, not a <code>pass</code>. INAM moves no money and signs no payments. It only reports public signals and signed records.</div>
+
+  <div class="tabs" role="tablist">
+    <a href="#buyer" data-t="buyer">Buyer</a>
+    <a href="#seller" data-t="seller">Seller</a>
+    <a href="#agent" data-t="agent">Agent developer</a>
+  </div>
+
+  <section class="panel" id="buyer">
+    <h2 class="h">Buyer: check before paying</h2>
+    <p>Give it an x402 URL, a <code>0x</code> wallet or a <code>did:key</code>. You get <code>pass</code>, <code>caution</code> or <code>fail</code> plus the reasons: the 402's payment terms, ERC-8004 identity for the payTo, any INAM wallet link and receipts, and the domain's age. It is a set of public signals, not a guarantee the seller will deliver.</p>
+    <h3>HTTP</h3>
+    <pre>curl "https://api.inamprotocol.org/v1/check?target=https://x402.coinstats.app/markets"</pre>
+    <h3>Command line (Node 22+)</h3>
+    <pre>npx inamprotocol check https://x402.coinstats.app/markets</pre>
+    <p>Exit code 1 when a key check fails (add <code>--strict</code> to fail on <code>caution</code> too), so it can gate a script. <code>--json</code> prints the raw answer.</p>
+    <h3>Python</h3>
+    <pre>pip install inamprotocol
+python -m inamprotocol check https://x402.coinstats.app/markets</pre>
+    <h3>GitHub Action</h3>
+    <pre>- id: inam
+  uses: inamprotocol/inam-protocol/actions/check@v1
+  with:
+    target: https://x402.coinstats.app/markets
+    fail-on: fail        # or "caution" to be stricter
+- run: echo "verdict ${{ steps.inam.outputs.verdict }}"</pre>
+    <h3>MCP (Claude Code and other MCP clients)</h3>
+    <pre>claude mcp add --transport http inam https://api.inamprotocol.org/mcp</pre>
+    <p>Read-only tools, including <code>inam_check</code> and <code>inam_check_reputation</code>. To put the same gate inside your own agent's fetch, see <a href="https://github.com/inamprotocol/inam-protocol/blob/main/examples/x402-verify-before-pay.ts"><code>examples/x402-verify-before-pay.ts</code></a>.</p>
+  </section>
+
+  <section class="panel" id="seller">
+    <h2 class="h">Seller: prove your payTo wallet</h2>
+    <p>Buyers running the check see whether your payTo wallet is controlled by a known INAM ID. Linking proves control of a wallet to one INAM ID. It moves no funds, signs no transaction and needs no gas.</p>
+    <h3>1. Link your wallet (about 2 minutes)</h3>
+    <pre>npx inamprotocol link-wallet</pre>
+    <p>It creates your INAM key at <code>~/.inam/seller-key.json</code> (keep it: it is your seller identity), registers your ID, and prints a one-time <code>http://127.0.0.1:...</code> link. Open it in the browser that has your wallet, pick the account that is your payTo, and confirm two signatures. The link expires in about 10 minutes; rerun the command if it does.</p>
+    <h3>2. Name your ID in the 402</h3>
+    <p>Add the middleware before your x402 payment middleware. Express:</p>
+    <pre>import { inamSellerMiddleware } from "inamprotocol";
+app.use(inamSellerMiddleware("did:key:z6Mk..."));
+app.use(paymentMiddleware(/* your x402 config */));</pre>
+    <p>Hono:</p>
+    <pre>import { inamSellerHono } from "inamprotocol";
+app.use("*", inamSellerHono("did:key:z6Mk..."));
+app.use(paymentMiddleware(/* your x402 config */));</pre>
+    <h3>3. Verify, then add a badge</h3>
+    <pre>npx inamprotocol check https://your-api.example/paid-endpoint</pre>
+    <p>You should see your ID proving the payTo. Only the v2 <code>PAYMENT-REQUIRED</code> header is supported. For your README, a live badge of the check verdict:</p>
+    <pre>![INAM](https://api.inamprotocol.org/v1/badge?target=&lt;your payTo wallet&gt;)</pre>
+    <p>The badge shows the verdict (<code>pass</code>, <code>caution</code>, <code>fail</code>, or grey <code>unknown</code>), cached for about 5 minutes. It reflects the whole check, so linking your wallet alone may not turn it green. Full guide: <a href="https://github.com/inamprotocol/inam-protocol/blob/main/SELLER.md">SELLER.md</a>.</p>
+  </section>
+
+  <section class="panel" id="agent">
+    <h2 class="h">Agent developer: identity and a first receipt</h2>
+    <p>In about a minute your agent gets a <code>did:key</code> identity and a countersigned, publicly logged receipt, with the registry's hosted demo agent as the other party. Demo receipts prove the mechanics but never count toward reputation or the <a href="/cohort">Founding Cohort</a>.</p>
+    <pre>mkdir inam-demo &amp;&amp; cd inam-demo
+npm i inamprotocol
+curl -O https://raw.githubusercontent.com/inamprotocol/inam-protocol/main/examples/quickstart.mjs
+node quickstart.mjs</pre>
+    <p>It saves the key to <code>./inam-agent.key</code> (keep it secret: it is the identity), registers the agent, takes a task from the demo agent, signs a receipt, and prints links to the receipt and your agent. Each identity gets at most 2 demo receipts. A Python version and a two-agent walkthrough are in <a href="https://github.com/inamprotocol/inam-protocol/blob/main/QUICKSTART.md">QUICKSTART.md</a>.</p>
+    <h3>Then, with real work</h3>
+    <p>A receipt counts when another independent agent signs it for work that really happened. For Claude Code or any MCP client, give the agent signing tools:</p>
+    <pre>claude mcp add inam -e INAM_PRIVATE_KEY=$(cat inam-agent.key) -- npx -y inam-mcp</pre>
+    <h3>inam-log: a signed local log of your Claude Code tool calls</h3>
+    <p>Offline and local only. Each tool call is appended to an Ed25519-signed, hash-chained file (tool name, time and hashes, never content). It proves order and integrity under your key, not that what ran was true. Setup (clone, add the hook, <code>verify</code>) is in the <a href="https://github.com/inamprotocol/inam-protocol/blob/main/integrations/claude-code-log/README.md">inam-log README</a>.</p>
+  </section>
+
+  <footer class="site">
+    <div class="footer-grid">
+      <div><a href="/">&larr; Back home</a> &middot; <a href="/quickstart">Quickstart</a> &middot; <a href="/cohort">Cohort</a> &middot; <a href="/terms">Terms</a> &middot; <a href="/privacy">Privacy</a></div>
+      <div>
+        <a href="https://github.com/inamprotocol/inam-protocol/blob/main/LICENSE" target="_blank" rel="noopener">Apache-2.0</a>
+        &middot;
+        <a href="https://github.com/inamprotocol/inam-protocol" target="_blank" rel="noopener">github.com/inamprotocol/inam-protocol</a>
+      </div>
+    </div>
+  </footer>
+</div>
+</div>
+<script>
+(function () {
+  var tabs = document.querySelectorAll(".tabs a"), panels = document.querySelectorAll(".panel");
+  function show() {
+    var id = location.hash.slice(1);
+    if (!/^(buyer|seller|agent)$/.test(id)) id = "buyer";
+    for (var i = 0; i < panels.length; i++) panels[i].className = "panel" + (panels[i].id === id ? " on" : "");
+    for (var j = 0; j < tabs.length; j++) tabs[j].className = tabs[j].getAttribute("data-t") === id ? "on" : "";
+  }
+  window.addEventListener("hashchange", show);
+  show();
+})();
+</script>
+</body>
+</html>
