@@ -3,6 +3,7 @@ import { badRequest, conflict, forbidden, notFound } from "../middleware/errors.
 import { verify } from "../../sdk-js/src/crypto/keys.js";
 import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
 import { buildSignableVerificationContent, type VerificationContentInput } from "../../sdk-js/src/core/verificationContent.js";
+import { isReceiptRestricted, isReceiptParticipant } from "../../sdk-js/src/core/receiptVisibility.js";
 import * as receiptService from "./receiptService.js";
 import { getAgent } from "./agentService.js";
 import type { VerificationRecord } from "../types.js";
@@ -115,6 +116,15 @@ export function submitVerification(callerDid: string, input: SubmitVerificationI
 export function getVerification(id: string): VerificationRecord {
   const record = verifications.get(id);
   if (!record) throw notFound("VERIFICATION_NOT_FOUND", `No verification with id ${id}`);
+  return record;
+}
+
+/** GET /verifications/:id gate (SPEC.md §12.6); mirrors worker/src/verificationService.ts. */
+export function getVisibleVerification(id: string, callerDid: string | undefined): VerificationRecord {
+  const record = getVerification(id);
+  const receipt = receiptService.getReceipt(record.receiptId);
+  const allowed = !isReceiptRestricted(receipt) || isReceiptParticipant(receipt, callerDid) || (!!callerDid && callerDid === record.verifier);
+  if (!allowed) throw notFound("VERIFICATION_NOT_FOUND", `No verification with id ${id}`);
   return record;
 }
 
