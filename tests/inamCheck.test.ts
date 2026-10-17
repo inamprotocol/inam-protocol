@@ -39,7 +39,7 @@ function stub(w: World) {
       return new Response(JSON.stringify(httpMessageSignaturesDirectory([key.publicKey])), { headers: directoryResponseHeaders("seller.example", key.privateKey) });
     }
     if (url.startsWith("https://rdap.org/domain/seller.example")) return json({ events: [{ eventAction: "registration", eventDate: "1995-08-14T04:00:00Z" }] });
-    if (w.registryDown && url.startsWith(REG)) return new Response("unavailable", { status: 503 });
+    if (w.registryDown && new URL(url).origin === REG) return new Response("unavailable", { status: 503 });
     if (url.startsWith(`${REG}/v1/agents/search`)) return json({ agents: w.linked ? [agent] : [], hasMore: false });
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}`) return json(agent);
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}/reputation`) return json(reputation);
