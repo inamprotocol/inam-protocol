@@ -6,9 +6,16 @@
   "license": "Apache-2.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",
@@ -29,5 +36,13 @@
     "typescript": "^5.5.4",
     "vitest": "^2.1.9",
     "zod": "^3.25.76"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
+  "homepage": "https://github.com/inamprotocol/inam-protocol/tree/main/integrations/agentkit#readme",
+  "bugs": {
+    "url": "https://github.com/inamprotocol/inam-protocol/issues"
   }
 }
