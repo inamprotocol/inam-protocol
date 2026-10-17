@@ -29,6 +29,10 @@ The checks in `verify.mjs`, each of which fails closed:
 
 Not covered by the fixtures, and needing live state (§11.1 step 4): the registry reports the receipt `finalized` and not disputed, and the ERC-8004 `agentId` belongs to the provider.
 
+## The amount is not bound by the signed content
+
+The signed receipt binds the outcome (`verification.outcome`), not an amount. `value` is derived from the outcome (100 / 50 / 0) and sits in the feedback file and the on-chain event, outside the signed content. Check 4 therefore catches an inflated `value` only for a checker that reads the receipt's outcome (`INFLATED-VALUE`). Where a receipt carries no outcome or no `settlement` evidence, nothing in the signed content constrains the amount: a checker that lacks an outcome to compare against, or a case where one party controls both the file and the event, leaves it riding on the file hash alone. Binding the amount to a payment needs settlement evidence checked against the chain (for example an x402 settlement), which this method does not require. Reported by holistis on x402 [#2887](https://github.com/x402-foundation/x402/issues/2887), who mutated the positive vector twelve ways.
+
 ## What is public when used in a feedback file
 
 Per §11.1, only a `finalized`, `public` receipt may be published. The file then exposes: the requester's wallet (`clientAddress`), both DIDs, `task.capability`, `specHash`, `outputHash`, the verification outcome, both signatures, and, if the parties included them, `settlement.paymentRef`, `amount` and `currency`. Hashes reveal nothing about content to someone who does not already hold it, but low-entropy inputs can be guessed and checked.
@@ -41,7 +45,7 @@ Requires Node only (built-in `crypto`, no install, no INAM server):
 node interop/countersigned/verify.mjs
 ```
 
-It prints PASS or FAIL per case and exits 1 on any mismatch. `vectors.json` holds four cases (`POSITIVE`, `WRONG-WALLET-COPY`, `TAMPERED-OUTPUT-HASH`, `OUTPUT-NOT-WHAT-WAS-SERVED`), the observed request and response bytes, the parties, and for each case `expected.accepted` and `expected.failedChecks`. To rebuild the vectors with the INAM SDK: `npx tsx interop/countersigned/generate.ts`.
+It prints PASS or FAIL per case and exits 1 on any mismatch. `vectors.json` holds five cases (`POSITIVE`, `WRONG-WALLET-COPY`, `TAMPERED-OUTPUT-HASH`, `OUTPUT-NOT-WHAT-WAS-SERVED`, `INFLATED-VALUE`), the observed request and response bytes, the parties, and for each case `expected.accepted` and `expected.failedChecks`. To rebuild the vectors with the INAM SDK: `npx tsx interop/countersigned/generate.ts`.
 
 A second implementation in another language reads `vectors.json`, runs the checks above for each case, and compares `accepted` and the exact list of failed check names to `expected`. The parts that need care are: the canonical serializer (sorted keys by UTF-16 code unit, no whitespace; shared vectors in `interop/canonical/vectors.json`; this is a subset of RFC 8785, §4.2), Ed25519 verification from a `did:key`, and Keccak-256 (Ethereum's padding, not NIST SHA3-256). `verify.mjs` is about 100 lines and is the reference for each.
 

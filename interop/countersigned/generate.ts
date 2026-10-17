@@ -62,6 +62,11 @@ export function generate() {
   edited.inam.receipt.result.outputHash = httpOutputHash(enc(ALTERED_RESPONSE_BODY));
   const editedText = canonicalize(edited);
 
+  // Amount inflated in the file and the event, feedbackHash recomputed so the file still matches its event. Nothing else is touched.
+  const inflated = JSON.parse(fb.fileText);
+  inflated.value = 999;
+  const inflatedText = canonicalize(inflated);
+
   // Provider signed a draft over an output different from what it served; a requester that did not recompute countersigned it.
   const careless = signedReceipt(ALTERED_RESPONSE_BODY);
   const carelessFb = buildErc8004Feedback(careless, requesterRecord, TARGET, "2026-10-03T00:00:00.000Z");
@@ -89,6 +94,7 @@ export function generate() {
       caseOf("WRONG-WALLET-COPY", "The genuine file, byte for byte, sent from a wallet that is not the requester's proven erc8004_id (the Sybil copy).", fb.fileText, event(OTHER_WALLET, fb.feedbackHash), false, ["fileClientAddressMatchesSender", "senderIsRequesterWallet"]),
       caseOf("TAMPERED-OUTPUT-HASH", "result.outputHash edited inside the carried receipt; feedbackHash recomputed over the edited file, sent from the right wallet.", editedText, event(REQUESTER_ADDRESS, keccak(editedText)), false, ["receiptIdRecomputes", "workerSignature", "requesterSignature", "outputHashMatchesObservedBytes"]),
       caseOf("OUTPUT-NOT-WHAT-WAS-SERVED", "Both signatures are valid, but the provider's outputHash commits to different bytes than the requester received. A requester that recomputes (SPEC §15 step 3) refuses to countersign this.", carelessFb.fileText, event(REQUESTER_ADDRESS, carelessFb.feedbackHash), false, ["outputHashMatchesObservedBytes"]),
+      caseOf("INFLATED-VALUE", "The genuine receipt, but value raised from 100 to 999 in the file and the event, feedbackHash recomputed. Signatures, hashes and wallet all still check out; only the value-to-outcome rule catches it, and a receipt with no outcome (or a checker that skips the rule) would leave the amount unbound.", inflatedText, { ...event(REQUESTER_ADDRESS, keccak(inflatedText)), value: 999 }, false, ["valueMatchesOutcome"]),
     ],
   };
   return { "vectors.json": JSON.stringify(vectors, null, 2) + "\n" };

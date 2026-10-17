@@ -144,6 +144,7 @@ Registers a TypeScript-side "requester" and a Python-side "worker" (see `sdk-pyt
 ### Interop fixtures with neighboring protocols
 
 - [`interop/emilia/`](./interop/emilia): an EMILIA Gate-admitted action, copied unchanged from EMILIA's repo, and an INAM receipt whose `task.specHash` is the SHA-256 of that action's canonical bytes, with a one-byte negative case. `node interop/emilia/verify.mjs` checks both signatures and the binding offline, using only Node built-ins.
+- [agent-receipt-verify](https://github.com/holistis/agent-receipt-verify) (holistis): independent verifier of `interop/countersigned` receipts, written from SPEC.md; 4 of 4 countersigned cases at `d5e5f45`, 10 of 10 `interop/canonical` at `d4a2940`. Checks the form of a receipt, not whether an operator is honest. See [`docs/VERIFIER.md`](./docs/VERIFIER.md) section 4.
 - [`examples/agent-receipts-adapter.ts`](./examples/agent-receipts-adapter.ts): an Agent Receipts local receipt becomes an INAM draft signed with the same Ed25519 key. It becomes reputation-eligible only after the requester countersigns.
 - [`docs/VERIFIER.md`](./docs/VERIFIER.md): running an independent verifier: which checks are deterministic, how to ask for authority, and a ten-line offline receipt check ([`examples/verify-receipt-offline.ts`](./examples/verify-receipt-offline.ts)). Payment-side examples: [`examples/stripe-x402/`](./examples/stripe-x402) (`inam check` on an x402 payTo) and [`examples/webhook/`](./examples/webhook) (check the buyer agent in a payment webhook, record a signed receipt).
 
