@@ -68,6 +68,14 @@ d = check_trust(did, client, allow={"min_evidence": "independently_verified", "m
 
 A revoked or unknown ID is `deny`; warning flags (`in_dispute`, `attestation_rejected`, `nonperformance_reported`, `concentrated_counterparty`) cap the decision at `escrow` (change with `escrow_flags`).
 
+### Check before you pay
+
+```
+python -m inamprotocol check https://x402.coinstats.app/markets   # or a 0x wallet / did:key
+```
+
+Same report as `npx inamprotocol check`, from the free hosted `/v1/check` (stdlib only, no key). Exit 1 on a failed key check (`--strict`: also on caution), 2 on error. In code: `from inamprotocol import check; check(target)["verdict"]`.
+
 ### Verifying an x402 payee before paying
 
 A payer pays only a `payTo` the payee's INAM ID proved control of (`linked.erc8004_id`), and only if its reputation meets the payer's policy (SPEC.md §11.2). `counterparty_context` records that decision as an x402 `CounterpartyContext` (x402 #1777), with `policy_input_hash` over the JCS form of exactly what was checked:
