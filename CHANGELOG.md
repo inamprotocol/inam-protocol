@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.44 (Draft) — 2026-10-17
+- **Verifier grants are logged (§13.1).** Every successful `POST /agents/:id/verifier-status` appends a `verifier_status_changed` leaf with `{ agentId, authorized, operator }`. Grants made earlier enter the log when the operator repeats them. Consumers that switch on `entryType` must accept the new value; proofs and the monitor are unaffected. (v0.43 is taken by PR #140.)
+
 ### v0.43 (Draft) — 2026-10-17
 - **Verification visibility (§12.6).** `GET /verifications/:id` is gated by the referenced receipt: participants_only receipts reveal their verifications only to the requester, provider and that verifier, and everyone else gets the same 404 as a missing id, so existence does not leak. The public flag is the receipt's existing `visibility`. Both runtimes.
 - **API keys and usage meter (new §16, optional).** Signed issuance, hash-only storage, a free tier of metered calls on `GET /x402/check` via `INAM-Key`, price in one constant. Metering only, no billing. Worker only; needs `worker/migration-add-api-keys.sql`. New error codes `API_KEY_LIMIT`, `API_KEY_NOT_FOUND`, `INVALID_API_KEY`, `FREE_TIER_EXHAUSTED`.
@@ -365,6 +368,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.14.0 (Node) / 0.14.0 (Worker) — 2026-10-17
+- Verifier grants and revokes are appended to the transparency log (SPEC v0.44). No migration: the log table already stores any `entry_type`.
+- Tests: a refused call adds no leaf; a grant and a revoke add one each with the expected payload (`tests/transparencyFlow.test.ts`, `worker/tests/api.test.ts`).
 
 ### Unreleased
 - `GET /v1/verifications/:id` (both runtimes) now accepts an optional signature and returns `404 VERIFICATION_NOT_FOUND`, identical to a missing id, to anyone but the receipt's requester or provider or the verification's verifier when the receipt is `participants_only` (SPEC v0.43 §12.6). Public receipts are unchanged. Unsigned callers of a participants_only receipt's verification used to get 200.

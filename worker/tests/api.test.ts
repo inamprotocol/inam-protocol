@@ -3600,3 +3600,43 @@ describe("key succession (SPEC.md §2.3, v0.42)", () => {
     expect(code(await succeed(a, generateKeypair()))).toBe("AGENT_REVOKED");
   });
 });
+
+describe("verifier grants in the transparency log (SPEC v0.44 §13.1)", () => {
+  it("logs every operator grant and revoke, and nothing for a refused call", async () => {
+    const target = generateKeypair();
+    const outsider = generateKeypair();
+    for (const kp of [target, outsider]) {
+      await call("POST", "/v1/agents", { keypair: kp, idempotencyKey: `reg:${kp.did}`, body: { capabilities: ["verify.x"] } });
+    }
+    const sth = async () => ((await call("GET", "/v1/transparency/sth")).json as { treeSize: number }).treeSize;
+    const before = await sth();
+
+    const refused = await call("POST", `/v1/agents/${encodeURIComponent(target.did)}/verifier-status`, {
+      keypair: outsider,
+      idempotencyKey: `grant-refused:${target.did}`,
+      body: { authorized: true },
+    });
+    expect(refused.status).toBe(403);
+    expect(await sth()).toBe(before);
+
+    for (const authorized of [true, false]) {
+      const res = await call("POST", `/v1/agents/${encodeURIComponent(target.did)}/verifier-status`, {
+        keypair: testOperatorKeypair,
+        idempotencyKey: `grant:${target.did}:${authorized}`,
+        body: { authorized },
+      });
+      expect(res.status).toBe(200);
+    }
+    const { entries } = (await call("GET", `/v1/transparency/entries?limit=10&offset=${before}`)).json as {
+      entries: { entryType: string; refId: string; payload: string | null }[];
+    };
+    expect(entries.map((e) => [e.entryType, e.refId])).toEqual([
+      ["verifier_status_changed", target.did],
+      ["verifier_status_changed", target.did],
+    ]);
+    expect(entries.map((e) => JSON.parse(e.payload!))).toEqual([
+      { agentId: target.did, authorized: true, operator: testOperatorKeypair.did },
+      { agentId: target.did, authorized: false, operator: testOperatorKeypair.did },
+    ]);
+  });
+});

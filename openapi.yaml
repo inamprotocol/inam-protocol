@@ -1176,7 +1176,7 @@ paths:
                       type: object
                       properties:
                         leafIndex: { type: integer }
-                        entryType: { type: string, enum: [receipt_finalized, dispute_opened, dispute_resolved, nonperformance_reported, agent_succession_pending, agent_succeeded, agent_succession_cancelled] }
+                        entryType: { type: string, enum: [receipt_finalized, dispute_opened, dispute_resolved, nonperformance_reported, agent_succession_pending, agent_succeeded, agent_succession_cancelled, verifier_status_changed] }
                         refId: { type: string }
                         createdAt: { type: string, format: date-time }
                         data: { type: string, description: "Canonical JSON entry the leafHash covers. Since v0.34 it holds dataHash, not the payload" }
