@@ -27,6 +27,8 @@ export const MAINTAINER_AGENT_IDS: readonly string[] = [
   "did:key:z6MkoGNs9969z1nYHBMNqBrPNTeaGaHjyT8PhYyeXou5se4S", // 10 Oct quickstart verification run
   "did:key:z6MkgCPs6QFa9Mpr7PbrdebLPD1Z6xTLAZmQabn138zbAS8W", // 10 Oct quickstart verification run (python)
   "did:key:z6MkqoAm5q9AZQvgK8QXVwBSRtMGeqyHrgymvK6chAyuw7bf", // 17 Oct link-wallet test (x402 seller)
+  "did:key:z6Mkw8JzrefGuh36cQj2KQT3D82E6EQuFfNmhUzviyrTDJuH", // 8 Oct quickstart verification run (revoked)
+  "did:key:z6Mktm8bcK6qGwrmBprjUP75rRCgHYKitLkZkqYT7B17LGop", // 17 Oct operator-controlled requester for the countersigned receipt with holistis (x402 #2887); one independent party only
 ];
 
 const DAY_MS = 86_400_000;
