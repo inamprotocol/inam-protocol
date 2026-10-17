@@ -50,6 +50,7 @@ export function webhookApp(d: Deps) {
     const pay = event.data;
     const buyer: string | undefined = pay.metadata?.inam_agent;
     if (!buyer) return res.json({ fulfilled: false, reason: "no inam_agent in metadata" });
+    if (!/^did:key:z[1-9A-HJ-NP-Za-km-z]+$/.test(buyer)) return res.json({ fulfilled: false, reason: "inam_agent is not a did:key" }); // never feed a remote value to the check unvalidated
 
     const report = await check(buyer);
     const ok = report.verdict === "pass" || (report.verdict === "caution" && !d.strict);
