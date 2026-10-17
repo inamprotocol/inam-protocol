@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.44 (Draft) — 2026-10-17
+- **Verifier grants are logged (§13.1).** Every successful `POST /agents/:id/verifier-status` appends a `verifier_status_changed` leaf with `{ agentId, authorized, operator }`. Grants made earlier enter the log when the operator repeats them. Consumers that switch on `entryType` must accept the new value; proofs and the monitor are unaffected. (v0.43 is taken by PR #140.)
+
 ### v0.42 (Draft) — 2026-10-13
 - **Key succession (new §2.3).** `POST /agents/:id/succeed` requests handing an INAM ID's history to a new, unregistered key. Both keys sign `canonical({ type: "inam.succession.v1", predecessor, successor })`. The request is pending for 72 hours (`pendingSuccession`, log entry `agent_succession_pending`, flag `succession_pending:<did>`); the ID keeps working, and revoking it cancels the succession and burns the ID (`agent_succession_cancelled`), so an owner who notices a thief's request can stop the reputation from moving. After the window, applied lazily on the next request, the predecessor gets `succeededBy` and signs nothing further (`AGENT_SUCCEEDED`), the successor is created with the statement as `succession`, and an `agent_succeeded` leaf is logged. Reputation is computed over the lineage with counterparties counted under their chain head, so succession conserves evidence: disputes, rejections and non-performance reports follow the successor, nothing is merged or forked. Linked identities, verifier grants and stake do not carry over. §2.3 states what the window does and doesn't solve for a stolen key, and reserves `recovery` for pre-rotation or guardian recovery. Raised by two outside reviews. New error codes `AGENT_SUCCEEDED`, `SUCCESSION_INVALID`, `SUCCESSION_PENDING`; flags `succession_pending:<did>`, `succeeded:<did>`, `inherited_from:<did>`.
 
@@ -360,6 +363,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Verified with a real `npm pack` + clean-room install (fresh throwaway project, no workspace/dev context) confirming `InamClient`, `generateKeypair`, and `canonicalize` all work from the published tarball.
 
 ## Node reference server & Cloudflare Worker
+
+### 0.14.0 (Node) / 0.14.0 (Worker) — 2026-10-17
+- Verifier grants and revokes are appended to the transparency log (SPEC v0.44). No migration: the log table already stores any `entry_type`.
+- Tests: a refused call adds no leaf; a grant and a revoke add one each with the expected payload (`tests/transparencyFlow.test.ts`, `worker/tests/api.test.ts`).
 
 ### 0.13.0 (Worker) — 2026-10-17
 - `GET /v1/badge?target=` returns a small SVG with the verdict of `GET /v1/check` (grey `unknown` for a missing or invalid target), for sellers to embed in a README. SPEC §6 and openapi list it.
