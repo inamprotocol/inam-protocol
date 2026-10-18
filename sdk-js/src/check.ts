@@ -366,7 +366,13 @@ export async function checkUrl(url: string, opts: CheckOptions = {}): Promise<Ch
   let res: Response;
   let body = "";
   try {
-    res = await timedFetch(url, { method, headers: { accept: "application/json", ...(method === "GET" || method === "HEAD" ? {} : { "content-type": "application/json" }) }, body: method === "GET" || method === "HEAD" ? undefined : "{}" }, opts.timeoutMs ?? 15000, opts.fetch);
+    const probe = (m: string) => timedFetch(url, { method: m, headers: { accept: "application/json", ...(m === "GET" || m === "HEAD" ? {} : { "content-type": "application/json" }) }, body: m === "GET" || m === "HEAD" ? undefined : "{}" }, opts.timeoutMs ?? 15000, opts.fetch);
+    res = await probe(method);
+    // A POST-only route answers GET with 404/405/415; in a survey of 2,492 Bazaar hosts, 570 did. Try POST once before judging.
+    if (!opts.method && [404, 405, 415].includes(res.status)) {
+      const retry = await probe("POST").catch(() => null);
+      if (retry && retry.status === 402) res = retry;
+    }
     body = await res.text().catch(() => "");
   } catch (e) {
     if (u.protocol !== "https:" && !local) checks.push({ id: "tls", status: "fail", label: "Not HTTPS: the 402 and its payTo can be rewritten in transit" });
