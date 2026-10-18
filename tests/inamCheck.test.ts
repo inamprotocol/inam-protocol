@@ -18,6 +18,7 @@ interface World {
   erc8004Owned?: number;
   feedback?: { clients: string[]; total: number; receiptBacked: number };
   status?: number;
+  postOnly?: boolean; // GET answers 405, POST answers the 402
   directory?: boolean;
   registryDown?: boolean;
   agentDown?: boolean; // search works, per-agent lookups 503
@@ -35,6 +36,7 @@ function stub(w: World) {
   const reputation = { trustScore: 40, evidenceLevel: "countersigned", components: { finalizedReceipts: 3, attestedReceipts: 0 }, flags: [] };
   vi.stubGlobal("fetch", async (input: string | URL | Request, init?: RequestInit) => {
     const url = String(input instanceof Request ? input.url : input);
+    if (url === "https://seller.example/api" && w.postOnly && (init?.method ?? "GET") === "GET") return new Response("method not allowed", { status: 405 });
     if (url === "https://seller.example/api") return new Response("{}", { status: w.status ?? 402, headers: { "payment-required": Buffer.from(JSON.stringify(required)).toString("base64") } });
     if (url.endsWith("/.well-known/http-message-signatures-directory")) {
       if (!w.directory) return new Response("not found", { status: 404 });
@@ -147,6 +149,12 @@ describe("inam check", () => {
     stub({ status: 200 });
     expect((await run("https://seller.example/api")).checks.find((c) => c.id === "x402.response")).toMatchObject({ status: "fail" });
     expect(status(await run("http://seller.example/api"), "tls")).toEqual(["fail"]);
+  });
+
+  it("retries POST when GET is refused and reads the 402 there", async () => {
+    stub({ status: 402, postOnly: true });
+    const r = await run("https://seller.example/api");
+    expect(status(r, "x402.response")).toEqual(["pass"]);
   });
 
   it("warns, not fails, when GET is refused with 405 (POST-only / MCP endpoint)", async () => {
