@@ -379,7 +379,9 @@ export async function checkUrl(url: string, opts: CheckOptions = {}): Promise<Ch
   else if (!local) checks.push({ id: "tls", status: "fail", label: "Not HTTPS: the 402 and its payTo can be rewritten in transit" });
   const required = res.status === 402 ? parsePaymentRequired(res.headers, body) : null;
   const accepts = paymentOptions(required);
-  if (res.status !== 402) checks.push({ id: "x402.response", status: "fail", label: `Not an x402 paywall: HTTP ${res.status}${method === "GET" ? " (try --method POST)" : ""}` });
+  // 405/415 on GET means a POST-only route (MCP servers emit their 402 only inside a session): the paywall is unread, not absent.
+  if (res.status !== 402 && method === "GET" && (res.status === 405 || res.status === 415)) checks.push({ id: "x402.response", status: "warn", label: `Could not read a paywall: HTTP ${res.status} on GET (POST-only or MCP endpoint?)`, detail: "Retry with method=POST. An MCP server returns its 402 only when a session calls a paid tool, so a URL probe cannot see it." });
+  else if (res.status !== 402) checks.push({ id: "x402.response", status: "fail", label: `Not an x402 paywall: HTTP ${res.status}${method === "GET" ? " (try --method POST)" : ""}` });
   else if (!accepts.length) checks.push({ id: "x402.response", status: "fail", label: "402 without readable payment requirements (no PAYMENT-REQUIRED header or accepts[].payTo)" });
   else checks.push({ id: "x402.response", status: "pass", label: `402 with ${accepts.length} payment option${accepts.length > 1 ? "s" : ""} (x402 v${required.x402Version ?? "?"})` });
   if (accepts.length && accepts.every((a) => a.testnet)) checks.push({ id: "x402.testnet", status: "info", label: "Testnet-only payment options" });

@@ -149,6 +149,13 @@ describe("inam check", () => {
     expect(status(await run("http://seller.example/api"), "tls")).toEqual(["fail"]);
   });
 
+  it("warns, not fails, when GET is refused with 405 (POST-only / MCP endpoint)", async () => {
+    stub({ status: 405 });
+    const r = await run("https://seller.example/api");
+    expect(status(r, "x402.response")).toEqual(["warn"]);
+    expect(r.verdict).not.toBe("fail");
+  });
+
   it("checks a did: unknown is fail, known shows evidence and its wallet", async () => {
     stub({ linked: PAYTO });
     const r = await run(DID);
