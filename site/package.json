@@ -11,6 +11,6 @@
   },
   "devDependencies": {
     "marked": "^18.1.1",
-    "wrangler": "^4.147.0"
+    "wrangler": "^4.152.0"
   }
 }
