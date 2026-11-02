@@ -16,5 +16,5 @@ verificationsRouter.post("/", requireSignedRequest, rateLimitWriteByAgent, requi
 });
 
 verificationsRouter.get("/:id", optionalSignedRequest, (req, res) => {
-  res.json(verificationService.getVisibleVerification(req.params.id, req.agentDid));
+  res.json(verificationService.getVisibleVerification(String(req.params.id), req.agentDid));
 });

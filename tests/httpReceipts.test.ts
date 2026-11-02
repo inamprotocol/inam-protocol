@@ -14,7 +14,7 @@ let requester: InamClient;
 beforeAll(async () => {
   const app = createServer();
   await new Promise<void>((resolve) => {
-    server = app.listen(0, resolve);
+    server = app.listen(0, () => resolve());
   });
   const baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   worker = new InamClient(baseUrl, generateKeypair());

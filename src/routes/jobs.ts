@@ -48,7 +48,7 @@ jobsRouter.get("/search", optionalSignedRequest, rateLimitReadByIp, (req, res) =
 });
 
 jobsRouter.get("/:id", optionalSignedRequest, (req, res) => {
-  const job = jobService.getJob(req.params.id);
+  const job = jobService.getJob(String(req.params.id));
   if (!isJobVisible(job, req.agentDid)) {
     throw forbidden("JOB_NOT_VISIBLE", "This job's receipt is participants_only; the caller is not a party to it or a verifier who has attested it");
   }
@@ -58,29 +58,29 @@ jobsRouter.get("/:id", optionalSignedRequest, (req, res) => {
 jobsRouter.post("/:id/offers", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = offerSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
-  const job = jobService.submitOffer(req.params.id, req.agentDid!, parsed.data.message);
+  const job = jobService.submitOffer(String(req.params.id), req.agentDid!, parsed.data.message);
   res.status(201).json(job);
 });
 
 jobsRouter.get("/:id/offers", (req, res) => {
-  res.json({ offers: jobService.getJob(req.params.id).offers });
+  res.json({ offers: jobService.getJob(String(req.params.id)).offers });
 });
 
 jobsRouter.post("/:id/accept", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = acceptOfferSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
-  const job = jobService.acceptOffer(req.params.id, req.agentDid!, parsed.data.agentId);
+  const job = jobService.acceptOffer(String(req.params.id), req.agentDid!, parsed.data.agentId);
   res.json(job);
 });
 
 jobsRouter.post("/:id/cancel", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
-  const job = jobService.cancelJob(req.params.id, req.agentDid!);
+  const job = jobService.cancelJob(String(req.params.id), req.agentDid!);
   res.json(job);
 });
 
 jobsRouter.post("/:id/report-nonperformance", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = reportNonPerformanceSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
-  const job = jobService.reportNonPerformance(req.params.id, req.agentDid!, parsed.data.reason);
+  const job = jobService.reportNonPerformance(String(req.params.id), req.agentDid!, parsed.data.reason);
   res.json(job);
 });

@@ -12,7 +12,7 @@ let baseUrl: string;
 
 beforeAll(async () => {
   await new Promise<void>((resolve) => {
-    server = createServer().listen(0, resolve);
+    server = createServer().listen(0, () => resolve());
   });
   baseUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });

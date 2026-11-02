@@ -27,7 +27,7 @@ agentsRouter.post("/", rateLimitRegistrationByIp, requireSignedRequest, requireI
 agentsRouter.post("/:id/verifier-status", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = setVerifierStatusSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
-  const record = agentService.setVerifierStatus(req.agentDid!, req.params.id, parsed.data.authorized);
+  const record = agentService.setVerifierStatus(req.agentDid!, String(req.params.id), parsed.data.authorized);
   res.json(record);
 });
 
@@ -51,16 +51,16 @@ agentsRouter.get("/search", rateLimitReadByIp, (req, res) => {
 });
 
 agentsRouter.get("/:id", (req, res) => {
-  res.json(agentService.getAgent(req.params.id));
+  res.json(agentService.getAgent(String(req.params.id)));
 });
 
 agentsRouter.get("/:id/protocols", (req, res) => {
-  const agent = agentService.getAgent(req.params.id);
+  const agent = agentService.getAgent(String(req.params.id));
   res.json({ linked: agent.linked, linkedProof: agent.linkedProof });
 });
 
 agentsRouter.get("/:id/reputation", rateLimitReadByIp, (req, res) => {
-  res.json(computeReputation(req.params.id));
+  res.json(computeReputation(String(req.params.id)));
 });
 
 // Read-only, unsigned, public badge rendering — a sibling of /reputation, not
@@ -79,7 +79,7 @@ function badgeDataForAgent(id: string) {
 }
 
 agentsRouter.get("/:id/badge.svg", rateLimitReadByIp, (req, res) => {
-  const data = badgeDataForAgent(req.params.id);
+  const data = badgeDataForAgent(String(req.params.id));
   res.set("Content-Type", "image/svg+xml; charset=utf-8");
   // Short-lived but cacheable: badges get embedded in other projects' READMEs
   // and hit repeatedly by viewers/crawlers, but are meant to reflect live
@@ -89,13 +89,13 @@ agentsRouter.get("/:id/badge.svg", rateLimitReadByIp, (req, res) => {
 });
 
 agentsRouter.get("/:id/badge.json", rateLimitReadByIp, (req, res) => {
-  const data = badgeDataForAgent(req.params.id);
+  const data = badgeDataForAgent(String(req.params.id));
   res.set("Cache-Control", "public, max-age=120");
   res.status(200).json(badgeDataToJson(data));
 });
 
 agentsRouter.post("/:id/link/challenge", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
-  agentService.requireSelf(req.agentDid, req.params.id);
+  agentService.requireSelf(req.agentDid, String(req.params.id));
   const parsed = linkChallengeSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const challenge = agentService.requestLinkChallenge(req.agentDid!, parsed.data.protocol, parsed.data.externalPublicKey, parsed.data.keyType);
@@ -103,7 +103,7 @@ agentsRouter.post("/:id/link/challenge", requireSignedRequest, rateLimitWriteByA
 });
 
 agentsRouter.post("/:id/link", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
-  agentService.requireSelf(req.agentDid, req.params.id);
+  agentService.requireSelf(req.agentDid, String(req.params.id));
   const parsed = linkSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   const { protocol, value, challengeId, proofSignature } = parsed.data;
@@ -121,7 +121,7 @@ agentsRouter.post("/:id/link", requireSignedRequest, rateLimitWriteByAgent, requ
 // gates it to the ID being revoked; requireSignedRequest already rejects a
 // call from an *already* revoked ID before this handler runs.
 agentsRouter.post("/:id/revoke", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
-  agentService.requireSelf(req.agentDid, req.params.id);
+  agentService.requireSelf(req.agentDid, String(req.params.id));
   const parsed = revokeAgentSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   res.json(agentService.revokeAgent(req.agentDid!, parsed.data.reason));
@@ -131,7 +131,7 @@ agentsRouter.post("/:id/revoke", requireSignedRequest, rateLimitWriteByAgent, re
 // body carries both keys' signatures over the succession statement. 202:
 // the succession is pending until its window closes.
 agentsRouter.post("/:id/succeed", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
-  agentService.requireSelf(req.agentDid, req.params.id);
+  agentService.requireSelf(req.agentDid, String(req.params.id));
   const parsed = succeedAgentSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
   res.status(202).json(agentService.requestSuccession(req.agentDid!, parsed.data));
@@ -143,7 +143,7 @@ agentsRouter.post("/:id/succeed", requireSignedRequest, rateLimitWriteByAgent, r
 // whose :id this is always sees its own full list (it's a party to every
 // receipt where it's :id, so isReceiptVisible always passes for it).
 agentsRouter.get("/:id/receipts", optionalSignedRequest, (req, res) => {
-  const all = listByAgent(req.params.id);
+  const all = listByAgent(String(req.params.id));
   const visible = all.filter((r) => {
     const isVerifier = r.visibility === "participants_only" && !!req.agentDid && verificationService.listByReceipt(r.receiptId).some((v) => v.verifier === req.agentDid);
     return isReceiptVisible(r, req.agentDid, isVerifier);
