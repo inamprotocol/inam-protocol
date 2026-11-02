@@ -3407,6 +3407,21 @@ describe("hosted pre-payment check (GET /v1/check)", () => {
     expect(seen.length).toBe(calls);
   });
 
+  it("with no method given, retries a GET 404 as POST like the CLI (a POST-only seller is read, not failed)", async () => {
+    vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
+      if (String(input).startsWith("https://postonly.example/api")) return (init.method ?? "GET") === "POST" ? new Response("{}", { status: 402, headers: { "payment-required": btoa(JSON.stringify(required)) } }) : new Response("not found", { status: 404 });
+      if (String(input).startsWith("https://api.8004scan.io/")) return Response.json({ items: [] });
+      if (String(input) === "https://mainnet.base.org") return Response.json({ jsonrpc: "2.0", id: 1, result: "0x" + "0".repeat(64) });
+      return new Response("not found", { status: 404 });
+    });
+    const res = await check(`target=${encodeURIComponent(`https://postonly.example/api?n=${crypto.randomUUID()}`)}&rdap=0`);
+    expect(res.json.payment).toMatchObject({ status: 402, accepts: [{ payTo: PAYTO }] });
+    expect(res.json.checks.find((c: { id: string }) => c.id === "x402.response").status).toBe("pass");
+    // An explicit method=GET still means GET only.
+    const explicit = await check(`target=${encodeURIComponent(`https://postonly.example/api?n=${crypto.randomUUID()}`)}&rdap=0&method=GET`);
+    expect(explicit.json.checks.find((c: { id: string }) => c.id === "x402.response").status).toBe("fail");
+  });
+
   it("serves an SVG badge with the check verdict, grey unknown for a bad target", async () => {
     stubOutbound();
     const get = async (q: string) => {
