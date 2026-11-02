@@ -42,6 +42,20 @@ describe("examples/agent-receipts-adapter", () => {
     expect(() => countersign(draft, requester, { ...SAMPLE_JOB, output: { summary: "something else" } })).toThrow(/not countersigning/);
   });
 
+  it("verifies Webaes's real v2 receipt, and refuses any field change or a wrong key_id", () => {
+    const real: AgentReceiptsSample = JSON.parse(readFileSync(new URL("../examples/agent-receipts-webaes-v2.json", import.meta.url), "utf8"));
+    expect(real.receipt.sig_version).toBe(2);
+    expect(verifyAgentReceipt(real)).toBe(true);
+    // v2 signs every field, metadata included (v1 would not catch this one).
+    const meta = real.receipt.metadata as Record<string, unknown>;
+    expect(verifyAgentReceipt({ ...real, receipt: { ...real.receipt, metadata: { ...meta, recipe: "other" } } })).toBe(false);
+    expect(verifyAgentReceipt({ ...real, receipt: { ...real.receipt, key_id: "key_0000000000000000" } })).toBe(false);
+    // verify_url is outside the v2 signature, as in their verifier.
+    expect(verifyAgentReceipt({ ...real, receipt: { ...real.receipt, verify_url: "local://elsewhere" } })).toBe(true);
+    // Drafting needs the signer's private key, which only Webaes holds.
+    expect(() => draftFromAgentReceipt(real, workerKey, requester.did)).toThrow(/not the key/);
+  });
+
   it("refuses a worker key other than the one that signed the Agent Receipts receipt", () => {
     expect(() => draftFromAgentReceipt(sample, toHex(testKey("someone else")), requester.did)).toThrow(/not the key/);
   });
