@@ -26,23 +26,38 @@ import { sha256 } from "@noble/hashes/sha256";
  * cost_usd is NOT mapped: it is what the agent spent (model cost), not a payment between the
  * two agents, which is what settlement means in INAM (§4.1).
  *
- * examples/agent-receipts-sample.json has their receipt shape and was signed with their exact
- * algorithm, but with a TEST key (derived below from a public string). Their repo publishes no
- * real signed sample; its demo data carries placeholder signatures. */
+ * Two samples:
+ * - examples/agent-receipts-webaes-v2.json: a REAL v2 receipt issued by Webaes (their
+ *   apps/site/content/webaes-receipt.json at d332e3b), with the public key published at
+ *   https://verify.webaes.com/.well-known/agent-receipts.json. Only its signature can be checked
+ *   here: drafting an INAM receipt from it needs Webaes's private key, which only Webaes holds.
+ * - examples/agent-receipts-sample.json: their v1 receipt shape, signed with their exact
+ *   algorithm but with a TEST key (derived below from a public string), so the whole
+ *   draft -> countersign flow can run offline. */
 
 export type AgentReceiptsSample = { public_key: string; receipt: Record<string, unknown> & {
   receipt_id: string; action: string; input_hash: string; output_hash: string | null;
   status: string; receipt_type: string; timestamp: string; completed_at: string | null; signature: string;
+  sig_version?: number; key_id?: string;
 } };
 
-// Their getSignablePayload() fields, and their flat canonicalize(): JSON.stringify with sorted keys.
+// v1 (their sign.ts): these 12 fields, flat JSON.stringify with sorted keys.
 const SIGNED_FIELDS = ["receipt_id", "chain_id", "receipt_type", "agent_id", "org_id", "action", "input_hash", "output_hash", "status", "timestamp", "completed_at", "environment"];
 const HASH = /^sha256:[0-9a-f]{64}$/;
 
 export function verifyAgentReceipt({ public_key, receipt }: AgentReceiptsSample): boolean {
   if (!receipt.signature.startsWith("ed25519:")) return false;
-  const payload = Object.fromEntries(SIGNED_FIELDS.map((k) => [k, receipt[k]]));
-  const message = new TextEncoder().encode(JSON.stringify(payload, Object.keys(payload).sort()));
+  let message: Uint8Array;
+  if (receipt.sig_version === 2) {
+    // v2 (their v2.ts): every field except signature and verify_url, deep-sorted JSON. For JSON
+    // values their canonicalizeDeep and INAM's canonicalize() produce the same bytes.
+    // key_id, when present, must name this key: "key_" + first 16 hex of sha256(raw public key).
+    if (receipt.key_id !== undefined && receipt.key_id !== `key_${sha256Hex(fromHex(public_key)).slice(0, 16)}`) return false;
+    message = new TextEncoder().encode(canonicalize({ ...receipt, signature: undefined, verify_url: undefined }));
+  } else {
+    const payload = Object.fromEntries(SIGNED_FIELDS.map((k) => [k, receipt[k]]));
+    message = new TextEncoder().encode(JSON.stringify(payload, Object.keys(payload).sort()));
+  }
   return verifyRawEd25519(fromBase64(receipt.signature.slice(8)), message, fromHex(public_key));
 }
 
@@ -87,6 +102,8 @@ export const testKey = (label: string) => sha256(new TextEncoder().encode(`INAM 
 export const SAMPLE_JOB = { input: { text: "INAM receipts are signed by both parties.", instruction: "summarize in five words" }, output: { summary: "Both sides sign each receipt." } };
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const real: AgentReceiptsSample = JSON.parse(readFileSync(new URL("agent-receipts-webaes-v2.json", import.meta.url), "utf8"));
+  console.log(`Webaes real v2 receipt ${real.receipt.receipt_id}:`, verifyAgentReceipt(real) ? "valid" : "INVALID");
   const sample: AgentReceiptsSample = JSON.parse(readFileSync(new URL("agent-receipts-sample.json", import.meta.url), "utf8"));
   const requester = keypairFromPrivateKey(testKey("agent-receipts requester"));
   const workerKey = process.env.RECEIPT_SIGNING_PRIVATE_KEY ?? toHex(testKey("agent-receipts worker"));
