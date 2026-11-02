@@ -137,6 +137,53 @@ export function paymentOptions(required: any): PaymentOption[] {
     });
 }
 
+// ---------- MCP ----------
+
+/** x402 over MCP (x402 transports-v2/mcp.md): a paid tool answers an unpaid `tools/call` with
+ *  PaymentRequired, either as a tool result (`isError` + `structuredContent` / `content[0].text`)
+ *  or, on some servers, as an HTTP 402. Only a tool the server itself marks as paid in `tools/list`
+ *  (a `_meta` key starting with "x402") is called, and never with a payment: calling an unmarked
+ *  tool could run it. Returns null when the URL does not speak MCP. */
+export type McpPaywall = { required: any; tool: string; httpStatus: number } | { note: string; detail?: string };
+export async function mcpPaywall(url: string, timeoutMs = 15000, f?: Fetch): Promise<McpPaywall | null> {
+  let session: string | null = null;
+  const rpc = async (method: string, params?: unknown, id?: number) => {
+    const res = await timedFetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", ...(session ? { "mcp-session-id": session, "mcp-protocol-version": "2025-06-18" } : {}) },
+      body: JSON.stringify({ jsonrpc: "2.0", method, ...(params === undefined ? {} : { params }), ...(id === undefined ? {} : { id }) }),
+    }, timeoutMs, f);
+    session ??= res.headers.get("mcp-session-id");
+    const text = await res.text().catch(() => "");
+    // Streamable HTTP may answer with SSE: the message is in a `data:` line.
+    const payloads = (res.headers.get("content-type") ?? "").includes("event-stream") ? text.split("\n").filter((l) => l.startsWith("data:")).map((l) => l.slice(5).trim()) : [text];
+    let msg: any = null;
+    for (const p of payloads) try { const j = JSON.parse(p); if (id === undefined || j?.id === id) msg = j; } catch {}
+    return { res, text, msg };
+  };
+  const init = await rpc("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "inam-check", version: "1" } }, 1).catch(() => null);
+  if (!init?.msg?.result?.protocolVersion && !init?.msg?.result?.serverInfo) return null;
+  await rpc("notifications/initialized").catch(() => null);
+  const list = await rpc("tools/list", {}, 2).catch(() => null);
+  const tools: any[] = Array.isArray(list?.msg?.result?.tools) ? list!.msg.result.tools : [];
+  const isPaid = (t: any) => Object.keys(t?._meta ?? {}).some((k) => /^x402/i.test(k));
+  const paid = tools.filter(isPaid).sort((a, b) => (a.inputSchema?.required?.length ?? 0) - (b.inputSchema?.required?.length ?? 0));
+  if (!paid.length) return { note: `MCP server with ${tools.length} tool${tools.length === 1 ? "" : "s"}, none marked paid in tools/list, so no tool was called`, detail: "INAM only calls a tool the server marks as paid (a _meta key starting with \"x402\"), because calling an unmarked tool could run it. Read the price from the server's docs before paying." };
+  const tool = paid[0];
+  // Placeholder arguments for the required fields only. An unpaid call must not run, so they are never used.
+  const placeholder = (s: any): unknown => (Array.isArray(s?.enum) ? s.enum[0] : ({ string: "x", number: 0, integer: 0, boolean: false, array: [], object: {} } as Record<string, unknown>)[Array.isArray(s?.type) ? s.type[0] : s?.type] ?? "x");
+  const args = Object.fromEntries((tool.inputSchema?.required ?? []).map((k: string) => [k, placeholder(tool.inputSchema?.properties?.[k])]));
+  const call = await rpc("tools/call", { name: tool.name, arguments: args }, 3).catch(() => null);
+  if (!call) return { note: `MCP tool ${tool.name} is marked paid, but the unpaid tools/call failed` };
+  const fromHttp = call.res.status === 402 ? parsePaymentRequired(call.res.headers, call.text) : null;
+  const r = call.msg?.result;
+  let fromResult: any = r?.isError && Array.isArray(r?.structuredContent?.accepts) ? r.structuredContent : null;
+  if (!fromResult && r?.isError) try { const j = JSON.parse(r?.content?.[0]?.text ?? ""); if (Array.isArray(j?.accepts)) fromResult = j; } catch {}
+  const required = fromHttp ?? fromResult;
+  if (required) return { required, tool: tool.name, httpStatus: call.res.status };
+  return { note: `MCP tool ${tool.name} is marked paid, but an unpaid tools/call returned no payment requirements (HTTP ${call.res.status}${call.msg?.error?.message ? `, ${call.msg.error.message}` : ""})` };
+}
+
 // ---------- ERC-8004 ----------
 
 const word = (hex: string) => hex.replace(/^0x/, "").toLowerCase().padStart(64, "0");
@@ -383,10 +430,17 @@ export async function checkUrl(url: string, opts: CheckOptions = {}): Promise<Ch
   const final = new URL(res.url || url);
   if (final.protocol === "https:") checks.push(u.protocol === "https:" ? { id: "tls", status: "pass", label: "HTTPS, certificate accepted" } : { id: "tls", status: "warn", label: `Listed as http; redirects to ${final.origin}`, detail: "The first request is unprotected; use the https URL." });
   else if (!local) checks.push({ id: "tls", status: "fail", label: "Not HTTPS: the 402 and its payTo can be rewritten in transit" });
-  const required = res.status === 402 ? parsePaymentRequired(res.headers, body) : null;
+  // No 402 from GET 404/405/406/415, or from an explicit POST: it may be an MCP server, whose paywall is per tool.
+  const mcp = res.status !== 402 && (opts.method ? method === "POST" : [404, 405, 406, 415].includes(res.status)) ? await mcpPaywall(url, opts.timeoutMs ?? 15000, opts.fetch).catch(() => null) : null;
+  const mcpRequired = mcp && "required" in mcp ? mcp : null;
+  const required = res.status === 402 ? parsePaymentRequired(res.headers, body) : (mcpRequired?.required ?? null);
   const accepts = paymentOptions(required);
+  if (mcpRequired) checks.push(accepts.length
+    ? { id: "x402.response", status: "pass", label: `Paid MCP tool ${mcpRequired.tool}: an unpaid tools/call returned ${accepts.length} payment option${accepts.length > 1 ? "s" : ""} (x402 v${required.x402Version ?? "?"})`, detail: "Read over an MCP session (initialize, tools/list, one unpaid tools/call on a tool the server marks as paid). Other tools may have other prices or payees." }
+    : { id: "x402.response", status: "fail", label: `Paid MCP tool ${mcpRequired.tool}: payment requirements without a readable accepts[].payTo` });
+  else if (mcp && "note" in mcp) checks.push({ id: "x402.response", status: "warn", label: `Could not read a paywall: ${mcp.note}`, detail: mcp.detail });
   // 405/415 on GET means a POST-only route (MCP servers emit their 402 only inside a session): the paywall is unread, not absent.
-  if (res.status !== 402 && method === "GET" && (res.status === 405 || res.status === 415)) checks.push({ id: "x402.response", status: "warn", label: `Could not read a paywall: HTTP ${res.status} on GET (POST-only or MCP endpoint?)`, detail: "Retry with method=POST. An MCP server returns its 402 only when a session calls a paid tool, so a URL probe cannot see it." });
+  else if (res.status !== 402 && method === "GET" && (res.status === 405 || res.status === 415)) checks.push({ id: "x402.response", status: "warn", label: `Could not read a paywall: HTTP ${res.status} on GET (POST-only or MCP endpoint?)`, detail: "Retry with method=POST. An MCP server returns its 402 only when a session calls a paid tool, so a URL probe cannot see it." });
   else if (res.status !== 402) checks.push({ id: "x402.response", status: "fail", label: `Not an x402 paywall: HTTP ${res.status}${method === "GET" ? " (try --method POST)" : ""}` });
   else if (!accepts.length) checks.push({ id: "x402.response", status: "fail", label: "402 without readable payment requirements (no PAYMENT-REQUIRED header or accepts[].payTo)" });
   else checks.push({ id: "x402.response", status: "pass", label: `402 with ${accepts.length} payment option${accepts.length > 1 ? "s" : ""} (x402 v${required.x402Version ?? "?"})` });
@@ -394,7 +448,7 @@ export async function checkUrl(url: string, opts: CheckOptions = {}): Promise<Ch
 
   const inamDid = typeof required?.extensions?.[INAM_X402_EXTENSION]?.info?.did === "string" ? (required.extensions[INAM_X402_EXTENSION].info.did as string) : undefined;
   const payment = required
-    ? { x402Version: required.x402Version, status: res.status, resource: required.resource?.url ?? required.resource ?? required.accepts?.[0]?.resource, description: required.resource?.description ?? required.accepts?.[0]?.description, accepts, ...(inamDid ? { inamDid } : {}) }
+    ? { x402Version: required.x402Version, status: mcpRequired?.httpStatus ?? res.status, resource: required.resource?.url ?? required.resource ?? required.accepts?.[0]?.resource, description: required.resource?.description ?? required.accepts?.[0]?.description, accepts, ...(inamDid ? { inamDid } : {}) }
     : { status: res.status, accepts };
 
   const registry = opts.registryUrl ?? "https://api.inamprotocol.org";
