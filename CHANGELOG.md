@@ -225,6 +225,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.23.0 — 2026-11-02
+- **The check reads MCP paywalls.** When a URL gives no 402 (GET 404/405/406/415, or an explicit POST), `check` tries an MCP session: `initialize`, `tools/list`, then one unpaid `tools/call` on a tool that the server marks as paid in `tools/list` (a `_meta` key starting with `x402`). It reads `PaymentRequired` from the tool result (`isError` + `structuredContent` or `content[0].text`, as in x402's MCP transport) or from an HTTP 402. The payee then goes through the same wallet checks as any 402. A tool that is not marked is never called, because calling it could run it. An MCP server with no marked tool is `warn` ("none marked paid"), never `fail`. `mcpPaywall(url)` is exported. Raised by imokokok in ACP discussion #317.
+- A GET answered with 405/415 is `warn` ("paywall unread"), not `fail` (#147). A GET answered with 404/405/415 is retried once as POST before judging (#149).
+
 ### 0.22.1 — 2026-10-17
 - `inam link-wallet --help` (and any unknown flag) no longer starts the wallet flow: help prints usage and exits 0, an unexpected argument exits 2. Before, `--help` created a key, registered an ID and opened the local signing page.
 
