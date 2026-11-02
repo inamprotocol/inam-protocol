@@ -20,7 +20,10 @@ node interop/emilia/verify.mjs     # Node built-ins only, no INAM server, no npm
 | `receipt.json` | A finalized INAM receipt: worker and requester signatures over the same canonical content (§4.2–4.3). |
 | `negative-action.json` | The admitted action with one byte changed (`amount` `"50.00"` → `"50.01"`). |
 | `verify.mjs` | The independent check. Prints PASS/FAIL per case. |
-| `generate.ts` | Rebuilds `receipt.json` and `negative-action.json` byte-for-byte with the INAM SDK (`npx tsx interop/emilia/generate.ts`). |
+| `caid-verify-valid.vector.json` | The `verify-valid` entry of EMILIA's [`caid/conformance/vectors.json`](https://github.com/emiliaprotocol/emilia-protocol/blob/3f712d28b2cf624342bd98c4172e1a574b39644b/caid/conformance/vectors.json) (CAID-CORE-VECTORS version 6, file SHA-256 `f87ab5f3…74655cb`) at the same commit, extracted unchanged, with its definition and `definition_sha256` pin. Apache-2.0, © the EMILIA Protocol authors. |
+| `receipt-caid.json` | A finalized INAM receipt binding that CAID-valid `payment.release.1` action. |
+| `negative-caid-action.json` | That action with the amount changed (`"250.00"` → `"250.01"`). |
+| `generate.ts` | Rebuilds `receipt.json`, `negative-action.json`, `receipt-caid.json` and `negative-caid-action.json` byte-for-byte with the INAM SDK (`npx tsx interop/emilia/generate.ts`). |
 
 **Test keys.** Both DIDs in `receipt.json` come from private keys derived from
 public strings in `generate.ts`. Anyone can sign as them. They exist only for
@@ -54,6 +57,18 @@ party can join on either. This `base_action` has no CAID: CAID registry v5's
 `provider_operation` instead. Binding raw bytes is also what this suite's own
 admission check compares.
 
+**The typed case.** At EMILIA's suggestion, the CAID `verify-valid` vector adds
+an action that is valid under CAID: `payment.release.1` with
+`beneficiary_account` and `payment_instruction_id`. Its CAID is
+`canactid:1:payment.release.1:jcs-sha256:liLG9pKgkLt3silrjf1wa0xIHz5YFrBB9HI-arxrO1Y`.
+`receipt-caid.json`'s `specHash` is the same 32 octets in hex
+(`sha256:9622c6f6…`), so a relying party can join on the CAID or on
+`specHash`. `verify.mjs` recomputes the digest from the action and checks that
+the CAID's `action_type` is the receipt's `task.capability`. It does **not**
+re-run CAID verification (field types, the ISO 4217 snapshot) or recompute
+`definition_sha256`. It relies on EMILIA's vector saying the object is valid,
+and keeps the vector's full CAID and definition pins unchanged.
+
 ## Cases
 
 1. The copied EMILIA file is byte-identical to upstream (SHA-256 pin).
@@ -63,6 +78,14 @@ admission check compares.
 4. The negative action differs from the admitted one by exactly one byte.
 5. Negative: the same receipt checked against the one-byte-changed action is
    rejected. The signatures still verify, but the binding no longer matches.
+6. The CAID vector is EMILIA's `verify-valid` entry, unchanged (SHA-256 pin over
+   its canonical bytes), with `expect.valid: true` and its `definition_sha256`.
+7. The CAID digest recomputes from the action and is the same 32 octets as
+   `receipt-caid.json`'s `specHash`. The CAID `action_type` is `task.capability`.
+8. Positive (typed): `receipt-caid.json` binds the CAID-valid action and both
+   signatures verify.
+9. Negative (typed): the same receipt against the changed-amount action is
+   rejected.
 
 ## What this does not show
 

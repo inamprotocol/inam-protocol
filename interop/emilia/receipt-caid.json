@@ -1,0 +1,40 @@
+{
+  "receiptVersion": "1.0",
+  "receiptId": "sha256:762c2e2d86521e94046a735e8cbcd7af3d0628293b199d5d9ea2e16ae362e413",
+  "jobId": "emilia:caid-core-vectors-6:verify-valid",
+  "agentA": {
+    "id": "did:key:z6MkkU9REcbGwMw6cyPF7XQs8E9uJKPSqQ72KrtVAJ81yXLz",
+    "role": "requester"
+  },
+  "agentB": {
+    "id": "did:key:z6Mkh2E9MnQbM7Vg3YGZdKGLTpKRqZqje6kN8jAqiv5Cskp5",
+    "role": "worker"
+  },
+  "task": {
+    "capability": "payment.release.1",
+    "specHash": "sha256:9622c6f692a090bb77b2296b8dfd706b4c481f3e5816b041f4723e6abc6b3b56",
+    "createdAt": "2026-11-02T12:00:00Z"
+  },
+  "result": {
+    "outputHash": "sha256:245a40cce9ee9c8f5fcecd33e236dbfa2cb68befc09238a8387542086c21a273",
+    "completedAt": "2026-11-02T12:00:01Z"
+  },
+  "settlement": {
+    "amount": "250.00",
+    "currency": "EUR"
+  },
+  "verification": {
+    "method": "payer_confirmation",
+    "outcome": "success"
+  },
+  "dispute": {
+    "status": "none",
+    "windowClosesAt": "2026-11-05T12:00:01Z"
+  },
+  "signatures": {
+    "agentB": "1KbrqcdcibCHeMcvBAyzdPWmbbGBR8avYJ5EvyW1g1LLoluj33pUiCXJOuh9q+203PzP+DFjHJbLX89cFNqMDg==",
+    "agentA": "PkUeVqBAMTLBDj7thRe0ieT++C+tCLvlV5NSyRInXJTcTDTW0kpSSIxTjTrmaTD8u4vska7Xx7+AHYeYz6+6CQ=="
+  },
+  "status": "finalized",
+  "visibility": "public"
+}

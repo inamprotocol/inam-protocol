@@ -1,0 +1,54 @@
+{
+  "id": "verify-valid",
+  "kind": "verify",
+  "description": "object matches its caid; valid with empty reasons Version 6 uses canactid: for current issuance; the immutable caid: form remains in the frozen corpus and verifies only through the explicit legacy-v04 profile.",
+  "definitions": [
+    {
+      "action_type": "payment.release.1",
+      "status": "active",
+      "risk_class": "irreversible-financial",
+      "summary": "Release of a payment instruction to settlement.",
+      "required_fields": [
+        {
+          "name": "amount",
+          "type": "amount-string",
+          "notes": "decimal string, no exponent, no leading '+', no thousands separators"
+        },
+        {
+          "name": "currency",
+          "type": "enum",
+          "values_ref": "ISO 4217 alpha-3",
+          "values_snapshot": "SIX ISO 4217 List One published 2026-09-17",
+          "values_sha256": "sha256:27f824317e9f271b956123fb77608daece5106e1ee8253a17769390855ade270"
+        },
+        {
+          "name": "beneficiary_account",
+          "type": "digest",
+          "notes": "sha256:<lowercase hex> of the normalized account identifier; normalization stated by the issuing system of record"
+        },
+        {
+          "name": "payment_instruction_id",
+          "type": "string"
+        }
+      ],
+      "optional_fields": [
+        {
+          "name": "memo",
+          "type": "string"
+        }
+      ],
+      "digest_notes": "amounts never renormalized after signing; the system of record's form is canonical",
+      "references": []
+    }
+  ],
+  "input": {
+    "json": "{\"action_type\":\"payment.release.1\",\"amount\":\"250.00\",\"currency\":\"EUR\",\"beneficiary_account\":\"sha256:9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08\",\"payment_instruction_id\":\"pi-2026-000117\",\"memo\":\"invoice 4471\"}",
+    "caid": "canactid:1:payment.release.1:jcs-sha256:liLG9pKgkLt3silrjf1wa0xIHz5YFrBB9HI-arxrO1Y"
+  },
+  "expect": {
+    "valid": true,
+    "reasons": [],
+    "details": [],
+    "definition_sha256": "sha256:3a5ad4c0a3a8dbf7eb9ea5f4c3b2ceb07ba1972fac49acc6006dcac64726ff12"
+  }
+}
