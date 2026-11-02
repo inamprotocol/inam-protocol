@@ -19,7 +19,7 @@ let host: string;
 
 beforeAll(async () => {
   await new Promise<void>((resolve) => {
-    server = createServer().listen(0, resolve);
+    server = createServer().listen(0, () => resolve());
   });
   port = (server.address() as AddressInfo).port;
   baseUrl = `http://127.0.0.1:${port}`;

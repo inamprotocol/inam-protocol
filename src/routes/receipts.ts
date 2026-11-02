@@ -26,14 +26,14 @@ receiptsRouter.post("/", requireSignedRequest, rateLimitWriteByAgent, requireIde
 });
 
 receiptsRouter.get("/:id", optionalSignedRequest, (req, res) => {
-  const receipt = receiptService.getReceipt(req.params.id);
+  const receipt = receiptService.getReceipt(String(req.params.id));
   receiptService.assertReceiptVisible(receipt, req.agentDid, callerIsVerifierOf(receipt.receiptId, req.agentDid));
   res.json(receipt);
 });
 
 receiptsRouter.get("/:id/verifications", optionalSignedRequest, (req, res) => {
-  const receipt = receiptService.getReceipt(req.params.id);
-  const records = verificationService.listByReceipt(req.params.id);
+  const receipt = receiptService.getReceipt(String(req.params.id));
+  const records = verificationService.listByReceipt(String(req.params.id));
   const isVerifier = req.agentDid ? records.some((v) => v.verifier === req.agentDid) : false;
   receiptService.assertReceiptVisible(receipt, req.agentDid, isVerifier);
   res.json({ verifications: records });
@@ -42,14 +42,14 @@ receiptsRouter.get("/:id/verifications", optionalSignedRequest, (req, res) => {
 receiptsRouter.post("/:id/countersign", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = countersignSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
-  const receipt = receiptService.countersign(req.params.id, req.agentDid!, parsed.data.signature);
+  const receipt = receiptService.countersign(String(req.params.id), req.agentDid!, parsed.data.signature);
   res.json(receipt);
 });
 
 receiptsRouter.post("/:id/dispute", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = disputeSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
-  const receipt = receiptService.openDispute(req.params.id, req.agentDid!, parsed.data.reason);
+  const receipt = receiptService.openDispute(String(req.params.id), req.agentDid!, parsed.data.reason);
   res.json(receipt);
 });
 
@@ -57,5 +57,5 @@ receiptsRouter.post("/:id/dispute", requireSignedRequest, rateLimitWriteByAgent,
 receiptsRouter.post("/:id/dispute/resolve", requireSignedRequest, rateLimitWriteByAgent, requireIdempotencyKey, (req, res) => {
   const parsed = resolveDisputeSchema.safeParse(req.body);
   if (!parsed.success) throw badRequest("VALIDATION_ERROR", parsed.error.message);
-  res.json(receiptService.resolveDispute(req.params.id, req.agentDid!, parsed.data.note));
+  res.json(receiptService.resolveDispute(String(req.params.id), req.agentDid!, parsed.data.note));
 });
