@@ -256,8 +256,8 @@ for (const f of readdirSync(bundleDir)) {
 }
 
 
-const apiBody = `<redoc spec-url="/api/openapi.yaml"></redoc>
-<script src="/api/redoc.standalone.js"></script>`;
+const apiBody = `<redoc spec-url="/api/openapi.yaml" disable-telemetry="true"></redoc>
+<script type="module" src="/api/redoc.standalone.js"></script>`;
 
 writeFileSync(
   path.join(DIST, "api", "index.html"),

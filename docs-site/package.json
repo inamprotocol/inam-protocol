@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "marked": "^18.1.1",
-    "redoc": "^2.5.4"
+    "redoc": "^3.0.1"
   },
   "devDependencies": {
     "wrangler": "^4.147.0"
