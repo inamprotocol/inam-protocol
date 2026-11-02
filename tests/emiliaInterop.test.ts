@@ -11,7 +11,7 @@ const dir = new URL("../interop/emilia/", import.meta.url);
 describe("interop/emilia", () => {
   it("verify.mjs passes every case and exits 0", () => {
     const out = execFileSync(process.execPath, [fileURLToPath(new URL("verify.mjs", dir))], { encoding: "utf8" });
-    expect(out.match(/^PASS/gm)).toHaveLength(5);
+    expect(out.match(/^PASS/gm)).toHaveLength(9);
     expect(out).not.toMatch(/^FAIL/m);
   });
 

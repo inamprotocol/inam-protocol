@@ -9,6 +9,11 @@ const dir = fileURLToPath(new URL(".", import.meta.url));
 // Git blob of conformance/composition/consequence-admission-lifecycle-v0.1/vectors.json
 // at emiliaprotocol/emilia-protocol@3f712d28b2cf624342bd98c4172e1a574b39644b.
 const UPSTREAM_SHA256 = "be2b85188ea3b7b855dc92d9c8a813fffff8a4da5efd0d9ef56d16f7b9409380";
+// caid-verify-valid.vector.json is the "verify-valid" entry of caid/conformance/vectors.json
+// (CAID-CORE-VECTORS version 6, file sha256 f87ab5f3827a3b3072c84918ad2d299e5d637096affe4b68e2524efb074655cb)
+// at the same commit, extracted unchanged. Pin: sha256 of that entry's canonical bytes.
+const CAID_VECTOR_SHA256 = "07496c28bf958df2ba822b5cc37ce979d0f305b2641de8f48ada42088eae038b";
+const CAID_DEFINITION_SHA256 = "sha256:3a5ad4c0a3a8dbf7eb9ea5f4c3b2ceb07ba1972fac49acc6006dcac64726ff12";
 
 const sha256 = (b) => createHash("sha256").update(b).digest("hex");
 // Sorted keys, no whitespace: INAM canonical() (SPEC §4.2) and EMILIA run.mjs canonicalize();
@@ -60,6 +65,28 @@ export function runCases() {
     { name: "positive: receipt binds the admitted action, both signatures valid", expected: true, actual: verifyBinding(receipt, corpus.base_action).accepted, detail: verifyBinding(receipt, corpus.base_action).checks },
     { name: "negative fixture differs from the admitted action by exactly one byte", expected: true, actual: diffBytes === 1 && canonical(negative).length === canonical(corpus.base_action).length },
     { name: "negative: same receipt against the one-byte-changed action is rejected", expected: false, actual: verifyBinding(receipt, negative).accepted, detail: verifyBinding(receipt, negative).checks },
+    ...caidCases(),
+  ];
+}
+
+/** Typed case: a CAID-valid action. specHash and the CAID digest are the same 32 octets. */
+function caidCases() {
+  const vector = JSON.parse(readFileSync(dir + "caid-verify-valid.vector.json", "utf8"));
+  const receipt = JSON.parse(readFileSync(dir + "receipt-caid.json", "utf8"));
+  const negative = JSON.parse(readFileSync(dir + "negative-caid-action.json", "utf8"));
+  const action = JSON.parse(vector.input.json);
+  // canactid:1:<action_type>:jcs-sha256:<base64url digest>. JCS = canonical() here: every value is a string.
+  const [scheme, ver, actionType, suite, digest] = vector.input.caid.split(":");
+  const specDigest = Buffer.from(receipt.task.specHash.slice(7), "hex");
+  return [
+    { name: "CAID vector is EMILIA's verify-valid, unchanged, with its definition pin", expected: true,
+      actual: sha256(canonical(vector)) === CAID_VECTOR_SHA256 && vector.id === "verify-valid" && vector.expect.valid === true && vector.expect.definition_sha256 === CAID_DEFINITION_SHA256 },
+    { name: "CAID digest recomputes from the action, and equals the receipt's specHash", expected: true,
+      actual: scheme === "canactid" && ver === "1" && suite === "jcs-sha256" && actionType === action.action_type
+        && createHash("sha256").update(canonical(action)).digest("base64url") === digest && specDigest.toString("base64url") === digest
+        && receipt.task.capability === actionType },
+    { name: "positive (typed): receipt binds the CAID-valid action, both signatures valid", expected: true, actual: verifyBinding(receipt, action).accepted, detail: verifyBinding(receipt, action).checks },
+    { name: "negative (typed): same receipt against the changed-amount action is rejected", expected: false, actual: verifyBinding(receipt, negative).accepted, detail: verifyBinding(receipt, negative).checks },
   ];
 }
 
