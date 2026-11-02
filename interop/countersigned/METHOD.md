@@ -47,7 +47,7 @@ node interop/countersigned/verify.mjs
 
 It prints PASS or FAIL per case and exits 1 on any mismatch. `vectors.json` holds five cases (`POSITIVE`, `WRONG-WALLET-COPY`, `TAMPERED-OUTPUT-HASH`, `OUTPUT-NOT-WHAT-WAS-SERVED`, `INFLATED-VALUE`), the observed request and response bytes, the parties, and for each case `expected.accepted` and `expected.failedChecks`. To rebuild the vectors with the INAM SDK: `npx tsx interop/countersigned/generate.ts`.
 
-A second implementation in another language reads `vectors.json`, runs the checks above for each case, and compares `accepted` and the exact list of failed check names to `expected`. The parts that need care are: the canonical serializer (sorted keys by UTF-16 code unit, no whitespace; shared vectors in `interop/canonical/vectors.json`; this is a subset of RFC 8785, §4.2), Ed25519 verification from a `did:key`, and Keccak-256 (Ethereum's padding, not NIST SHA3-256). `verify.mjs` is about 100 lines and is the reference for each.
+A second implementation in another language reads `vectors.json`, runs the checks above for each case, and compares `accepted` and the exact list of failed check names to `expected`. The parts that need care are: the canonical serializer (sorted keys by UTF-16 code unit, no whitespace; shared vectors in `interop/canonical/vectors.json`; for I-JSON input this is byte-identical to RFC 8785, §4.2), Ed25519 verification from a `did:key`, and Keccak-256 (Ethereum's padding, not NIST SHA3-256). `verify.mjs` is about 100 lines and is the reference for each.
 
 ## Known limits
 
