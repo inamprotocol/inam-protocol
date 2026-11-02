@@ -1,9 +1,9 @@
 /**
  * Minimal canonical JSON serializer: recursively sorts object keys and emits
- * whitespace-free JSON. This is a practical subset of RFC 8785 (JCS) — it does
- * not handle every JCS number-formatting edge case, but it is deterministic
- * for the plain string/number/boolean/array/object shapes used by Inam Protocol's own
- * schemas, which is all that's required for our signer and verifier to agree.
+ * whitespace-free JSON. For I-JSON input (RFC 7493: no lone surrogates, finite
+ * numbers) the output is byte-identical to RFC 8785 (JCS); SPEC.md section 4.2,
+ * checked by tests/jcsEquivalence.test.ts against erdtman/canonicalize. Outside
+ * I-JSON it escapes a lone surrogate where RFC 8785 rejects it.
  *
  * Number formatting here (via native `JSON.stringify`) already follows the
  * ECMA-262 `Number::toString` algorithm, which is what

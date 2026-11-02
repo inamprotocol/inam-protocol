@@ -1,4 +1,4 @@
-// Regenerates vectors.json: canonical-JSON cases with non-ASCII and non-BMP content.
+// Regenerates vectors.json: canonical-JSON cases with non-ASCII and non-BMP content, plus RFC 8785 numbers.
 //   npx tsx interop/canonical/generate.ts
 // sdk-js/src/crypto/canonical.ts is the reference. Every SDK must reproduce `canonical` exactly
 // (tests/canonicalVectors.test.ts, sdk-python/tests/test_canonical_vectors.py).
@@ -19,6 +19,13 @@ const cases: Array<[string, unknown]> = [
   ["lone-surrogates-escaped", { hi: "\uD800", lo: "\uDC00", rev: "\uDC00\uD800", "\uD83D": "key" }],
   ["control-and-special-chars", { c: "\u0000\u0008\u0009\u000A\u000C\u000D\u001F", q: "\"\/", del: "\u007F", ls: "  " }],
   ["key-order-digits-case-accents", { b: 1, B: 2, 10: 3, 9: 4, "é": 5, e: 6, "": 7 }],
+  // RFC 8785 Appendix B number samples inside I-JSON (RFC 7493): without -0, which JSON text cannot
+  // carry (canonical() gives "0"), and without the five that parse as integers beyond +/-(2^53-1),
+  // which I-JSON excludes and the Python SDK refuses. tests/jcsEquivalence.test.ts checks all of them.
+  ["rfc8785-appendix-b-numbers", ["0000000000000000", "0000000000000001", "8000000000000001", "7fefffffffffffff", "ffefffffffffffff",
+    "44b52d02c7e14af5", "44b52d02c7e14af6", "44b52d02c7e14af7", "444b1ae4d6e2ef50", "3eb0c6f7a0b5ed8c", "3eb0c6f7a0b5ed8d", "41b3de4355555553",
+    "41b3de4355555554", "41b3de4355555555", "41b3de4355555556", "41b3de4355555557", "becbf647612f3696", "43143ff3c1cb0959",
+  ].map((h) => Buffer.from(h, "hex").readDoubleBE(0))],
 ];
 
 const vectors = cases.map(([name, input]) => {

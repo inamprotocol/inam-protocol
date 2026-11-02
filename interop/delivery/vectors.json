@@ -1,0 +1,163 @@
+{
+  "suite": "inam-delivery-receipt-v0.1",
+  "canonicalization": "RFC 8785 (JCS) over the receipt content without signatures, status, dispute, visibility (SPEC §4.2)",
+  "note": "Test keys only. A reader checks receiptId, the seller (agentB) and buyer (agentA) Ed25519 signatures from their did:key, and specHash/outputHash against the bytes the buyer observed. A verdict says which bytes arrived and that the buyer accepted them, never whether they met the agreed criteria.",
+  "parties": {
+    "seller": "did:key:z6MkhvLDmzdNCg22otgbnjMbusr3ucqBCbeBSzaki4UdhWcE",
+    "buyer": "did:key:z6MkwcbXPxo9gmn88X9PnM7gUTMyp98Ebp4f417CdZxFdvjs"
+  },
+  "observed": {
+    "request": {
+      "method": "POST",
+      "url": "https://api.seller.example/v1/report?id=42",
+      "body": "{\"ticker\":\"ACME\",\"period\":\"2026-Q3\"}"
+    },
+    "response": {
+      "status": 200,
+      "body": "{\"ticker\":\"ACME\",\"revenue\":\"1204.50\",\"currency\":\"USD\"}"
+    },
+    "derivation": "specHash = sha256(METHOD + ' ' + path?query + '\\n' + request body bytes); outputHash = sha256(response body bytes) (SPEC §15)"
+  },
+  "verdicts": {
+    "weighs-against-claim": "countersigned by the buyer, both signatures valid, hashes match what the buyer observed: weighs against a non-delivery or wrong-content claim",
+    "decides-nothing": "seller-only draft: the seller's own statement, no buyer countersignature; decides nothing on its own",
+    "not-these-bytes": "signatures valid but a hash does not match what the buyer observed: not evidence that these bytes arrived"
+  },
+  "cases": [
+    {
+      "id": "VALID-COUNTERSIGNED",
+      "description": "Seller signed the hashes of the bytes it served; the buyer recomputed both from what it observed and countersigned.",
+      "receipt": {
+        "receiptVersion": "1.0",
+        "receiptId": "sha256:deefefdfa153c702a1738c8cdc774fc5c1f97a5deb088b38fef1039c1015a7dc",
+        "jobId": "http:delivery-vectors-v0.1",
+        "agentA": {
+          "id": "did:key:z6MkwcbXPxo9gmn88X9PnM7gUTMyp98Ebp4f417CdZxFdvjs",
+          "role": "requester"
+        },
+        "agentB": {
+          "id": "did:key:z6MkhvLDmzdNCg22otgbnjMbusr3ucqBCbeBSzaki4UdhWcE",
+          "role": "worker"
+        },
+        "task": {
+          "capability": "data.report",
+          "specHash": "sha256:4680038fbbb59f8edfbc7f2ef56aef694eda81c4860fbb9457a25e494c1841ba",
+          "createdAt": "2026-11-02T10:00:00.000Z"
+        },
+        "result": {
+          "outputHash": "sha256:75ad9260c65fec9db83f9ed259064f90350995842a4bb56b4af06206bfd1b29d",
+          "completedAt": "2026-11-02T10:00:01.000Z"
+        },
+        "verification": {
+          "method": "payer_confirmation",
+          "outcome": "success"
+        },
+        "dispute": {
+          "status": "none",
+          "windowClosesAt": "2026-11-05T10:00:01.000Z"
+        },
+        "signatures": {
+          "agentB": "gvW/sE93kxVwKXtkSxyVNiwqOl3dd8YdIUVK0faCWMX0rTuS2xDnkAPP2UI8YJG95LfU2xCtcaYOLDBxL2GoCA==",
+          "agentA": "CzFiey+EHbcvHLCRw6PpCIqO9w/E3wUZbBGt05fPUmweLnPkm6NsmQQTFnRix61kofgqojFbjK+E0b90UzqCBw=="
+        },
+        "status": "finalized",
+        "visibility": "public"
+      },
+      "expected": {
+        "verdict": "weighs-against-claim",
+        "failedChecks": []
+      }
+    },
+    {
+      "id": "HASH-MISMATCH",
+      "description": "Both signatures valid, but outputHash commits to bytes the buyer never received. A buyer that recomputes (SPEC §15 step 3) refuses to countersign this; one that signed anyway produced it.",
+      "receipt": {
+        "receiptVersion": "1.0",
+        "receiptId": "sha256:cc12d0f58eeebe782acebd205004eeaee5475e3a4da09ffa3b141480a20aa63a",
+        "jobId": "http:delivery-vectors-v0.1",
+        "agentA": {
+          "id": "did:key:z6MkwcbXPxo9gmn88X9PnM7gUTMyp98Ebp4f417CdZxFdvjs",
+          "role": "requester"
+        },
+        "agentB": {
+          "id": "did:key:z6MkhvLDmzdNCg22otgbnjMbusr3ucqBCbeBSzaki4UdhWcE",
+          "role": "worker"
+        },
+        "task": {
+          "capability": "data.report",
+          "specHash": "sha256:4680038fbbb59f8edfbc7f2ef56aef694eda81c4860fbb9457a25e494c1841ba",
+          "createdAt": "2026-11-02T10:00:00.000Z"
+        },
+        "result": {
+          "outputHash": "sha256:900657a78bcda704c17e787e044baa1b85ba8b581effa6a0234806458525ca8c",
+          "completedAt": "2026-11-02T10:00:01.000Z"
+        },
+        "verification": {
+          "method": "payer_confirmation",
+          "outcome": "success"
+        },
+        "dispute": {
+          "status": "none",
+          "windowClosesAt": "2026-11-05T10:00:01.000Z"
+        },
+        "signatures": {
+          "agentB": "18kcP8ASbvaFaVKInxjouEfwiUGrrAa9MQieTFNmTm+mJOt0y7jlARTX4s60L9BjJW9GIM5lJ1Pfp1ho5qJLCg==",
+          "agentA": "zzpt4NwkeUjonHLA9AWDqWFEACzcPtgY0G1lWxOBluH0s97uHKSO9+VmB4eo1Uel+XeDWiS1ujEX+4HJegEmDA=="
+        },
+        "status": "finalized",
+        "visibility": "public"
+      },
+      "expected": {
+        "verdict": "not-these-bytes",
+        "failedChecks": [
+          "outputHashMatchesObserved"
+        ]
+      }
+    },
+    {
+      "id": "SELLER-ONLY-DRAFT",
+      "description": "The seller's draft over the right bytes, never countersigned by the buyer.",
+      "receipt": {
+        "receiptVersion": "1.0",
+        "receiptId": "sha256:deefefdfa153c702a1738c8cdc774fc5c1f97a5deb088b38fef1039c1015a7dc",
+        "jobId": "http:delivery-vectors-v0.1",
+        "agentA": {
+          "id": "did:key:z6MkwcbXPxo9gmn88X9PnM7gUTMyp98Ebp4f417CdZxFdvjs",
+          "role": "requester"
+        },
+        "agentB": {
+          "id": "did:key:z6MkhvLDmzdNCg22otgbnjMbusr3ucqBCbeBSzaki4UdhWcE",
+          "role": "worker"
+        },
+        "task": {
+          "capability": "data.report",
+          "specHash": "sha256:4680038fbbb59f8edfbc7f2ef56aef694eda81c4860fbb9457a25e494c1841ba",
+          "createdAt": "2026-11-02T10:00:00.000Z"
+        },
+        "result": {
+          "outputHash": "sha256:75ad9260c65fec9db83f9ed259064f90350995842a4bb56b4af06206bfd1b29d",
+          "completedAt": "2026-11-02T10:00:01.000Z"
+        },
+        "verification": {
+          "method": "payer_confirmation",
+          "outcome": "success"
+        },
+        "dispute": {
+          "status": "none",
+          "windowClosesAt": null
+        },
+        "signatures": {
+          "agentB": "gvW/sE93kxVwKXtkSxyVNiwqOl3dd8YdIUVK0faCWMX0rTuS2xDnkAPP2UI8YJG95LfU2xCtcaYOLDBxL2GoCA=="
+        },
+        "status": "draft",
+        "visibility": "public"
+      },
+      "expected": {
+        "verdict": "decides-nothing",
+        "failedChecks": [
+          "buyerSignature"
+        ]
+      }
+    }
+  ]
+}
