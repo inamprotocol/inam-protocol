@@ -57,7 +57,9 @@ export function checkHandler(app: Hono<AppEnv>) {
 
     let report;
     try {
-      report = await checkTarget(target, { registryUrl: self.origin, method, noRdap, fetch: f });
+      // Pass method only when the caller gave one: with none, the engine retries a GET 404/405/415 as POST
+      // and tries an MCP session, which an explicit "GET" turns off.
+      report = await checkTarget(target, { registryUrl: self.origin, method: c.req.query("method") ? method : undefined, noRdap, fetch: f });
     } catch (e) {
       return bad(c, `${(e as Error).message}. ${USAGE}`);
     }
