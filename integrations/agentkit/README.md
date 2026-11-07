@@ -22,6 +22,8 @@ const pay = wrapFetchWithPayment(inamGuardedFetch(fetch, { block: ["fail"] }), c
 
 Guard options: `block` (verdicts that stop the request, default `["fail"]`, add `"caution"` to be strict), `onError` (`"block"` by default: if the check itself cannot run, the request stops; `"allow"` lets it through), `cacheMs` (default 5 minutes per URL and method).
 
+The guard stacks with other fetch wrappers. [402xAgent's docs](https://402xagent.com/docs#payee-guard) show it composed with their route-and-price check: payee first, route and price second, payment last. 402xAgent is a separate project; INAM does not run or vouch for it.
+
 ## What the verdict does and does not mean
 
 - `fail`: a key check failed (for example not an x402 paywall, or a certificate problem). Do not pay.
