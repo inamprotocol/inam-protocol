@@ -13,15 +13,15 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.32.0",
-    "hono": "^4.13.12",
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "hono": "^4.13.16",
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@cloudflare/vitest-plugin": "^1.4.4",
+    "@cloudflare/vitest-plugin": "^1.6.0",
     "@cloudflare/workers-types": "^5.20260820.1",
     "typescript": "^5.5.4",
-    "vitest": "^5.0.5",
-    "wrangler": "^4.147.0"
+    "vitest": "^5.1.0",
+    "wrangler": "^4.158.0"
   }
 }
