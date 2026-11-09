@@ -47,7 +47,7 @@ def main():
             "verification": {"method": "payer_confirmation", "outcome": "success"},
         },
     )
-    finalized = poster.accept_work(draft)
+    finalized = poster.accept_work(draft, {"outputHash": "sha256:6c2abf326f95631425e5697c1d4088b28be55f4c0f4d079ef2175f591ecccac2"})
     print(f"[job_demo] receipt finalized: {finalized['receiptId']}")
     assert finalized["status"] == "finalized"
 

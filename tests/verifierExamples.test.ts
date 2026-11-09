@@ -28,7 +28,7 @@ it("offline receipt verification passes on a registry-finalized receipt and fail
       settlement: { paymentRef: "stripe:pi_demo", amount: "1.00", currency: "USD" },
       verification: { method: "payer_confirmation", outcome: "success" },
     });
-    const receipt = await buyer.acceptWork(draft);
+    const receipt = await buyer.acceptWork(draft, { outputHash: `sha256:${sha256Hex("out")}` });
     expect(verifyReceiptOffline(await buyer.getReceipt(receipt.receiptId), "out")).toEqual({ receiptId: true, workerSig: true, requesterSig: true, outputHash: true });
     expect(verifyReceiptOffline({ ...receipt, settlement: { ...receipt.settlement!, amount: "9.00" } }).receiptId).toBe(false);
   } finally {

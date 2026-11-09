@@ -1,6 +1,6 @@
 import http from "node:http";
 import { pathToFileURL } from "node:url";
-import { InamClient, generateKeypair, checkTrust, type TrustDecisionKind } from "../../sdk-js/src/index.js";
+import { InamClient, generateKeypair, checkTrust, sha256Hex, type TrustDecisionKind } from "../../sdk-js/src/index.js";
 import { acp, ucp, visaTap, mastercardAgentPay, ap2, writeReceipt, mockMerchant, type Rail } from "./rails.js";
 
 /** One buyer agent shops at five merchants, one per rail: check trust, pay on the
@@ -18,7 +18,7 @@ export async function runDemo(inamUrl: string, log: (line: string) => void = () 
   const established = new InamClient(inamUrl, generateKeypair());
   await established.registerAgent(["research.report"], { name: "rails demo merchant", demo: true });
   const first = await writeReceipt(established, buyer.did, "research.report", "earlier order", "earlier report", { paymentRef: "acp:order_prior", amount: "10.00", currency: "USD" });
-  await buyer.acceptWork(first, { amount: "10.00", currency: "USD" });
+  await buyer.acceptWork(first, { outputHash: `sha256:${sha256Hex("earlier report")}`, amount: "10.00", currency: "USD" });
   const newcomer = new InamClient(inamUrl, generateKeypair());
   await newcomer.registerAgent(["research.report"], { name: "rails demo newcomer", demo: true });
   const unknown = new InamClient(inamUrl, generateKeypair());
@@ -49,7 +49,7 @@ export async function runDemo(inamUrl: string, log: (line: string) => void = () 
 
     // 2. After delivery.
     const draft = await writeReceipt(merchant, buyer.did, "research.report", "market report, EU", `report for ${settlement.paymentRef}`, settlement);
-    const receipt = await buyer.acceptWork(draft, { amount: settlement.amount, currency: settlement.currency });
+    const receipt = await buyer.acceptWork(draft, { outputHash: `sha256:${sha256Hex(`report for ${settlement.paymentRef}`)}`, amount: settlement.amount, currency: settlement.currency });
     log(`   receipt ${receipt.receiptId} ${receipt.status}, settlement.paymentRef ${receipt.settlement?.paymentRef}`);
     results.push({ rail, decision: trust.decision, paymentRef: receipt.settlement?.paymentRef, status: receipt.status });
   }

@@ -87,8 +87,8 @@ export const ap2: Rail = async (merchant) => {
 };
 
 /** Step 2, merchant side: after delivering, draft a receipt naming the rail's id. The buyer
- * countersigns it with `buyer.acceptWork(draft, { amount, currency })`, which refuses a
- * receipt that names a different amount or currency than the one it paid. */
+ * countersigns it with `buyer.acceptWork(draft, { outputHash, amount, currency })`, which refuses a
+ * receipt that names a different output, amount or currency than the one it got and paid. */
 export function writeReceipt(merchant: InamClient, buyerDid: string, capability: string, request: string, output: string, settlement: Settlement): Promise<ExecutionReceipt> {
   const now = new Date().toISOString();
   return merchant.submitWork(buyerDid, {

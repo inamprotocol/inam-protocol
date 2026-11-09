@@ -21,6 +21,11 @@ from .receipt import build_signable_content
 from .succession import succession_signing_bytes
 from .verification import build_signable_verification_content
 
+
+class NotCompared(ValueError):
+    """accept_work refused because no comparison could be made (not a mismatch)."""
+
+
 try:
     _SDK_VERSION = version("inamprotocol")
 except PackageNotFoundError:
@@ -268,7 +273,7 @@ class InamClient:
     def accept_work(
         self,
         receipt: Dict[str, Any],
-        expected: Optional[Dict[str, Any]] = None,
+        expected: Dict[str, Any],
     ) -> Dict[str, Any]:
         """Called by the requester (agent_a) to accept the worker's submitted result.
 
@@ -276,27 +281,33 @@ class InamClient:
         -- an external review found blindly trusting it and signing without
         checking anything let a caller be tricked (e.g. via prompt injection
         reaching an LLM-driven agent through job/dispute free text) into
-        countersigning content it never actually reviewed. Two guards (v0.26,
-        matching sdk-js's `acceptWork`), both cheap and backward compatible:
-        always refuses to sign a receipt this client isn't the named
-        `agentA` on, and when `expected` (any of jobId/outputHash/amount/
-        currency, sourced from the caller's own knowledge, not from `receipt`
-        itself) is passed, a mismatch on any field raises before signing.
+        countersigning content it never actually reviewed. So it refuses to
+        sign a receipt this client isn't the named `agentA` on, and checks
+        `expected` (jobId/outputHash/amount/currency, sourced from the caller's
+        own knowledge, not from `receipt` itself) before signing.
+
+        `expected["outputHash"]` is required (0.15.0): a countersign that
+        compared nothing is not a check. Two refusals, told apart by the
+        exception type: NotCompared (no expected hash, or the draft has none)
+        and ValueError for a mismatch.
         """
         if receipt["agentA"]["id"] != self.did:
             raise ValueError(f"accept_work: this client ({self.did}) is not the receipt's agentA ({receipt['agentA']['id']})")
-        if expected:
-            result = receipt.get("result", {})
-            settlement = receipt.get("settlement") or {}
-            checks = {
-                "jobId": receipt.get("jobId"),
-                "outputHash": result.get("outputHash"),
-                "amount": settlement.get("amount"),
-                "currency": settlement.get("currency"),
-            }
-            for field, expected_value in expected.items():
-                if expected_value is not None and expected_value != checks.get(field):
-                    raise ValueError(f"accept_work: expected {field} {expected_value!r}, receipt has {checks.get(field)!r}")
+        result = receipt.get("result") or {}
+        if not (expected or {}).get("outputHash"):
+            raise NotCompared("accept_work: not compared: expected['outputHash'] was not given; refusing to sign")
+        if not result.get("outputHash"):
+            raise NotCompared("accept_work: not compared: the draft has no result.outputHash; refusing to sign")
+        settlement = receipt.get("settlement") or {}
+        checks = {
+            "jobId": receipt.get("jobId"),
+            "outputHash": result.get("outputHash"),
+            "amount": settlement.get("amount"),
+            "currency": settlement.get("currency"),
+        }
+        for field, expected_value in expected.items():
+            if expected_value is not None and expected_value != checks.get(field):
+                raise ValueError(f"accept_work: expected {field} {expected_value!r}, receipt has {checks.get(field)!r}")
 
         # `visibility` (v0.19) is operational metadata, excluded from the
         # signed content the same way `dispute`/`status` already are — the

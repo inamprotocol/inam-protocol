@@ -13,7 +13,7 @@ from .keys import (
 )
 from .p256 import P256Keypair, generate_p256_keypair, p256_sign, p256_verify
 from .canonical import canonicalize
-from .client import InamClient
+from .client import InamClient, NotCompared
 from .check import check, format_report
 from .merkle_log import verify_inclusion, verify_consistency
 from .receipt import dispute_window_closes_at, is_dispute_window_open
@@ -45,6 +45,7 @@ __all__ = [
     "succession_signing_bytes",
     "verify_succession",
     "InamClient",
+    "NotCompared",
     "verify_inclusion",
     "verify_consistency",
     "dispute_window_closes_at",

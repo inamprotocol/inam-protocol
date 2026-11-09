@@ -75,7 +75,7 @@ async function seedFinalizedReceipt(): Promise<ExecutionReceipt> {
     result: { outputHash: `sha256:${sha256Hex(WORK_OUTPUT)}`, completedAt: now },
     verification: { method: "test_suite_pass", outcome: "success" },
   });
-  return requester.acceptWork(draft);
+  return requester.acceptWork(draft, { outputHash: `sha256:${sha256Hex(WORK_OUTPUT)}` });
 }
 
 function loadOperator() {

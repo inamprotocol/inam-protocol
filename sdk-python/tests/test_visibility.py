@@ -39,9 +39,9 @@ def test_accept_work_countersign_content_ignores_visibility():
 
     client._request = fake_request
 
-    client.accept_work(base_receipt)
+    client.accept_work(base_receipt, {"outputHash": base_receipt["result"]["outputHash"]})
     signature_without = captured["signature"]
-    client.accept_work(receipt_with_visibility)
+    client.accept_work(receipt_with_visibility, {"outputHash": base_receipt["result"]["outputHash"]})
     signature_with = captured["signature"]
 
     assert signature_with == signature_without
