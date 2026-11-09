@@ -137,7 +137,7 @@ async function runRound(
   // The requester countersigns on faith, same as most agent-to-agent coding
   // handoffs do today. This alone is what "finalized" means -- both parties
   // agreed it happened, not that it was independently checked.
-  const finalized: ExecutionReceipt = await orchestrator.acceptWork(draft);
+  const finalized: ExecutionReceipt = await orchestrator.acceptWork(draft, { outputHash: `sha256:${sha256Hex(code)}` });
   console.log(`Requester finalizes receipt ${finalized.receiptId} (status: ${finalized.status})`);
 
   // The independent check -- verification compute happens HERE, in the

@@ -243,29 +243,36 @@ export class InamClient {
    *    requester on (`receipt.agentA.id !== this.did`) — the server would
    *    reject the submission anyway, but a real Ed25519 signature over
    *    arbitrary content would already have been produced by then.
-   *  - When `expected` is passed: the caller states what it believes it's
-   *    approving (sourced from its own job knowledge, not from `receipt`
-   *    itself — checking a fetched object against itself proves nothing),
-   *    and a mismatch on any field throws before signing.
+   *  - The caller states what it believes it's approving in `expected`
+   *    (sourced from its own job knowledge, not from `receipt` itself —
+   *    checking a fetched object against itself proves nothing), and a
+   *    mismatch on any field throws before signing.
+   *
+   * `expected.outputHash` is required (0.24.0): a countersign that compared
+   * nothing is not a check. Two refusals, told apart by `err.code`:
+   * `NOT_COMPARED` (no expected hash, or the draft has none) and `MISMATCH`.
    */
   async acceptWork(
     receipt: ExecutionReceipt,
-    expected?: { jobId?: string; outputHash?: string; amount?: string; currency?: string },
+    expected: { outputHash: string; jobId?: string; amount?: string; currency?: string },
   ): Promise<ExecutionReceipt> {
     if (receipt.agentA.id !== this.did) {
       throw new Error(`acceptWork: this client (${this.did}) is not the receipt's agentA (${receipt.agentA.id})`);
     }
-    if (expected?.jobId !== undefined && expected.jobId !== receipt.jobId) {
-      throw new Error(`acceptWork: expected jobId ${expected.jobId}, receipt has ${receipt.jobId}`);
+    const refuse = (code: "NOT_COMPARED" | "MISMATCH", msg: string) => Object.assign(new Error(`acceptWork: ${msg}`), { code });
+    if (!expected?.outputHash) throw refuse("NOT_COMPARED", "not compared: expected.outputHash was not given; refusing to sign");
+    if (!receipt.result?.outputHash) throw refuse("NOT_COMPARED", "not compared: the draft has no result.outputHash; refusing to sign");
+    if (expected.jobId !== undefined && expected.jobId !== receipt.jobId) {
+      throw refuse("MISMATCH", `expected jobId ${expected.jobId}, receipt has ${receipt.jobId}`);
     }
-    if (expected?.outputHash !== undefined && expected.outputHash !== receipt.result.outputHash) {
-      throw new Error(`acceptWork: expected result.outputHash ${expected.outputHash}, receipt has ${receipt.result.outputHash}`);
+    if (expected.outputHash !== receipt.result.outputHash) {
+      throw refuse("MISMATCH", `expected result.outputHash ${expected.outputHash}, receipt has ${receipt.result.outputHash}`);
     }
-    if (expected?.amount !== undefined && expected.amount !== receipt.settlement?.amount) {
-      throw new Error(`acceptWork: expected settlement.amount ${expected.amount}, receipt has ${receipt.settlement?.amount}`);
+    if (expected.amount !== undefined && expected.amount !== receipt.settlement?.amount) {
+      throw refuse("MISMATCH", `expected settlement.amount ${expected.amount}, receipt has ${receipt.settlement?.amount}`);
     }
-    if (expected?.currency !== undefined && expected.currency !== receipt.settlement?.currency) {
-      throw new Error(`acceptWork: expected settlement.currency ${expected.currency}, receipt has ${receipt.settlement?.currency}`);
+    if (expected.currency !== undefined && expected.currency !== receipt.settlement?.currency) {
+      throw refuse("MISMATCH", `expected settlement.currency ${expected.currency}, receipt has ${receipt.settlement?.currency}`);
     }
 
     // `visibility` (v0.19) is operational metadata, excluded from the

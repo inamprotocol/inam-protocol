@@ -79,7 +79,8 @@ const receipt = await worker.submitWork(poster.did, {
   result: { outputHash: "sha256:...", completedAt: new Date().toISOString() },
   verification: { method: "payer_confirmation", outcome: "success" },
 });
-await poster.acceptWork(receipt); // finalizes the receipt and auto-completes the job
+// The poster states the output it received; acceptWork refuses to sign without it.
+await poster.acceptWork(receipt, { outputHash: "sha256:..." }); // finalizes the receipt and auto-completes the job
 ```
 
 `poster.cancelJob(job.jobId)` cancels a not-yet-completed job (poster only); `client.getJob(id)` / `client.searchJobs({ capability, status })` / `client.listOffers(jobId)` round out discovery.

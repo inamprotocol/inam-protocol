@@ -188,7 +188,7 @@ describe("countersign-blind-signing guard (sdk-js InamClient.acceptWork)", () =>
     const requester = generateKeypair();
     const client = new InamClient("http://127.0.0.1:1", requester);
     const receipt = fixtureReceipt({ agentA: { id: "did:key:zSomeoneElse", role: "requester" } });
-    await expect(client.acceptWork(receipt)).rejects.toThrow(/not the receipt's agentA/);
+    await expect(client.acceptWork(receipt, { outputHash: receipt.result.outputHash })).rejects.toThrow(/not the receipt's agentA/);
   });
 
   it("refuses to sign when the caller's expected jobId/outputHash don't match the fetched draft", async () => {
@@ -196,8 +196,22 @@ describe("countersign-blind-signing guard (sdk-js InamClient.acceptWork)", () =>
     const client = new InamClient("http://127.0.0.1:1", requester);
     const receipt = fixtureReceipt({ agentA: { id: requester.did, role: "requester" } });
 
-    await expect(client.acceptWork(receipt, { jobId: "job_other" })).rejects.toThrow(/expected jobId/);
-    await expect(client.acceptWork(receipt, { outputHash: "sha256:9d6f965ac832e40a5df6c06afe983e3b449c07b843ff51ce76204de05c690d11" })).rejects.toThrow(/expected result.outputHash/);
+    await expect(client.acceptWork(receipt, { outputHash: receipt.result.outputHash, jobId: "job_other" })).rejects.toThrow(/expected jobId/);
+    await expect(client.acceptWork(receipt, { outputHash: "sha256:9d6f965ac832e40a5df6c06afe983e3b449c07b843ff51ce76204de05c690d11" })).rejects.toMatchObject({ code: "MISMATCH", message: expect.stringMatching(/expected result.outputHash/) });
+  });
+
+  // x402 §5.5 (PR #3776): "absence is not difference" — a countersign that compared nothing
+  // must refuse, and say it could not compare rather than that the values differ.
+  it("refuses to sign without an expected outputHash, or when the draft has none, as NOT_COMPARED", async () => {
+    const requester = generateKeypair();
+    const client = new InamClient("http://127.0.0.1:1", requester);
+    const receipt = fixtureReceipt({ agentA: { id: requester.did, role: "requester" } });
+    const noHash = { ...receipt, result: { ...receipt.result, outputHash: "" } };
+
+    // @ts-expect-error -- a JS caller can still omit it; the runtime must refuse
+    await expect(client.acceptWork(receipt)).rejects.toMatchObject({ code: "NOT_COMPARED" });
+    await expect(client.acceptWork(receipt, { amount: "1", currency: "USD" } as never)).rejects.toMatchObject({ code: "NOT_COMPARED" });
+    await expect(client.acceptWork(noHash, { outputHash: receipt.result.outputHash })).rejects.toMatchObject({ code: "NOT_COMPARED" });
   });
 });
 

@@ -225,6 +225,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.24.0 — 2026-11-09
+- **Breaking: `acceptWork(receipt, expected)` requires `expected.outputHash`.** Before, `expected` was optional, and without it the requester countersigned without comparing anything. Now it refuses to sign in that case. Each refusal says which kind it is in `err.code`: `NOT_COMPARED` (no expected hash given, or the draft has no `result.outputHash`) or `MISMATCH` (a value differs). This follows the "absence is not difference" rule in x402 PR #3776 §5.5: a counterparty that cannot make the comparison must not sign, and must report that it could not compare rather than that the values differ. Migration: pass the hash of the output you actually received, e.g. ``acceptWork(draft, { outputHash: `sha256:${sha256Hex(output)}` })``. The MCP tool `inam_countersign_receipt` already required it.
+
 ### 0.23.0 — 2026-11-02
 - **The check reads MCP paywalls.** When a URL gives no 402 (GET 404/405/406/415, or an explicit POST), `check` tries an MCP session: `initialize`, `tools/list`, then one unpaid `tools/call` on a tool that the server marks as paid in `tools/list` (a `_meta` key starting with `x402`). It reads `PaymentRequired` from the tool result (`isError` + `structuredContent` or `content[0].text`, as in x402's MCP transport) or from an HTTP 402. The payee then goes through the same wallet checks as any 402. A tool that is not marked is never called, because calling it could run it. An MCP server with no marked tool is `warn` ("none marked paid"), never `fail`. `mcpPaywall(url)` is exported. Raised by imokokok in ACP discussion #317.
 - A GET answered with 405/415 is `warn` ("paywall unread"), not `fail` (#147). A GET answered with 404/405/415 is retried once as POST before judging (#149).
@@ -579,6 +582,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 - Initial reference implementation: `did:key` identity, content-addressed Execution Receipts (draft → countersign → finalized → disputed), sybil-resistance-informed reputation engine, `InamClient` SDK, Cloudflare Workers deployment (D1 + KV).
 
 ## Python SDK (`sdk-python`)
+
+### 0.15.0 — 2026-11-09
+- **Breaking: `accept_work(receipt, expected)` requires `expected["outputHash"]`**, same as sdk-js 0.24.0. With no expected hash, or a draft with no `result.outputHash`, it raises the new `NotCompared` (a `ValueError` subclass, exported from `inamprotocol`). A value that differs still raises plain `ValueError`.
 
 ### 0.14.0 — 2026-10-17
 - `python -m inamprotocol check <url | 0x wallet | did:key>` and `inamprotocol.check()` / `format_report()`: the pre-payment check from the free hosted `/v1/check`, same report layout and exit codes as `npx inamprotocol check` (`--json`, `--strict`). Stdlib only; mocked-HTTP tests in `tests/test_check.py`. Not yet published to PyPI.

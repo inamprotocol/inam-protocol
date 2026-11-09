@@ -4,7 +4,7 @@ worker/tests/api.test.ts."""
 
 import pytest
 
-from inamprotocol.client import InamClient
+from inamprotocol.client import InamClient, NotCompared
 from inamprotocol.keys import generate_keypair, public_key_to_did, verify, verify_raw_ed25519
 
 
@@ -43,7 +43,7 @@ def test_accept_work_refuses_to_sign_when_not_the_receipts_agent_a():
     client = InamClient("http://127.0.0.1:1", requester)
     receipt = _fixture_receipt(agentA={"id": "did:key:zSomeoneElse", "role": "requester"})
     with pytest.raises(ValueError, match="not the receipt's agentA"):
-        client.accept_work(receipt)
+        client.accept_work(receipt, {"outputHash": receipt["result"]["outputHash"]})
 
 
 def test_accept_work_refuses_to_sign_on_expected_mismatch():
@@ -52,9 +52,24 @@ def test_accept_work_refuses_to_sign_on_expected_mismatch():
     receipt = _fixture_receipt(agentA={"id": requester.did, "role": "requester"})
 
     with pytest.raises(ValueError, match="expected jobId"):
-        client.accept_work(receipt, expected={"jobId": "job_other"})
+        client.accept_work(receipt, expected={"outputHash": receipt["result"]["outputHash"], "jobId": "job_other"})
     with pytest.raises(ValueError, match="expected outputHash"):
         client.accept_work(receipt, expected={"outputHash": "sha256:9d6f965ac832e40a5df6c06afe983e3b449c07b843ff51ce76204de05c690d11"})
+
+
+def test_accept_work_refuses_when_nothing_was_compared():
+    # x402 §5.5 (PR #3776): absence is not difference -- refuse, and say it could not compare.
+    requester = generate_keypair()
+    client = InamClient("http://127.0.0.1:1", requester)
+    receipt = _fixture_receipt(agentA={"id": requester.did, "role": "requester"})
+    no_hash = {**receipt, "result": {**receipt["result"], "outputHash": ""}}
+
+    with pytest.raises(NotCompared):
+        client.accept_work(receipt, None)
+    with pytest.raises(NotCompared):
+        client.accept_work(receipt, {"amount": "1", "currency": "USD"})
+    with pytest.raises(NotCompared):
+        client.accept_work(no_hash, {"outputHash": receipt["result"]["outputHash"]})
 
 
 def test_client_without_keypair_reads_unsigned_and_refuses_to_sign(monkeypatch):

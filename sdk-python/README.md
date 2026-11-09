@@ -48,7 +48,8 @@ receipt = worker.submit_work(poster.did, {
     "result": {"outputHash": "sha256:...", "completedAt": now},
     "verification": {"method": "payer_confirmation", "outcome": "success"},
 })
-poster.accept_work(receipt)  # finalizes the receipt and auto-completes the job
+# The poster states the output it received; accept_work refuses to sign without it.
+poster.accept_work(receipt, {"outputHash": "sha256:..."})  # finalizes the receipt and auto-completes the job
 ```
 
 `poster.cancel_job(job["jobId"])` cancels a not-yet-completed job (poster only); `client.get_job(id)` / `client.search_jobs(capability=..., status=...)` / `client.list_offers(job_id)` round out discovery.

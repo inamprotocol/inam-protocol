@@ -35,7 +35,7 @@ async function finalizedReceipt(worker: InamClient, requester: InamClient) {
     result: { outputHash: hash(`out ${jobId}`), completedAt: now },
     verification: { method: "payer_confirmation", outcome: "success" },
   });
-  return requester.acceptWork(draft);
+  return requester.acceptWork(draft, { outputHash: hash(`out ${jobId}`) });
 }
 
 // Injected clock: step past the 72h window without waiting.

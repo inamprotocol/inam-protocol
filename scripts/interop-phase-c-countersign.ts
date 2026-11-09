@@ -1,4 +1,5 @@
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { keypairFromPrivateKey } from "../sdk-js/src/crypto/keys.js";
 import { InamClient } from "../sdk-js/src/client.js";
 
@@ -24,8 +25,11 @@ async function main() {
   const drafts = receipts.filter((r) => r.status === "draft" && r.agentA.id === keypair.did);
   console.log(`[phase C / TypeScript] Found ${drafts.length} Python-submitted draft receipt(s) to countersign`);
 
+  // The requester knows what it asked for: interop_worker.py delivers "out_<i>".
+  const known = new Set([1, 2].map((i) => `sha256:${createHash("sha256").update(`out_${i}`).digest("hex")}`));
   for (const draft of drafts) {
-    const finalized = await client.acceptWork(draft);
+    if (!known.has(draft.result.outputHash)) throw new Error(`unexpected output in ${draft.receiptId}`);
+    const finalized = await client.acceptWork(draft, { outputHash: draft.result.outputHash });
     console.log(`[phase C / TypeScript] Countersigned ${finalized.receiptId} -> status=${finalized.status}`);
   }
 

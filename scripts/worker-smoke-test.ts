@@ -110,7 +110,7 @@ async function main() {
     })(),
   );
 
-  const finalized = await a.acceptWork(draft);
+  const finalized = await a.acceptWork(draft, { outputHash: "sha256:2352da7280f1decc3acf1ba84eb945c9fc2b7b541094e1d0992dbffd1b6664cc" });
   check("countersigned -> finalized", finalized.status === "finalized");
 
   // Idempotency: repeat the exact same register call for a brand-new agent
@@ -153,7 +153,7 @@ async function main() {
     result: { outputHash: "sha256:ea7e3b800106a00fb9fa7ac123dcc511396979215d6baf1da47f25723e33a787", completedAt: new Date().toISOString() },
     verification: { method: "payer_confirmation", outcome: "success" },
   });
-  const jobFinalized = await jobPoster.acceptWork(jobDraft);
+  const jobFinalized = await jobPoster.acceptWork(jobDraft, { outputHash: "sha256:ea7e3b800106a00fb9fa7ac123dcc511396979215d6baf1da47f25723e33a787" });
   check("receipt against accepted job finalizes", jobFinalized.status === "finalized");
 
   const jobAfter = await jobPoster.getJob(postedJob.jobId);

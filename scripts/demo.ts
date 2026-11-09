@@ -48,7 +48,7 @@ async function main() {
     });
     log(`Worker submits draft receipt (job ${i})`, draft);
 
-    const finalized = await requester.acceptWork(draft);
+    const finalized = await requester.acceptWork(draft, { outputHash: `sha256:${createHash("sha256").update(`out_${i}`).digest("hex")}` });
     log(`Requester countersigns (job ${i})`, finalized);
   }
 

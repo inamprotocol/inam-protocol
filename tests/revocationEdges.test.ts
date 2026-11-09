@@ -4,6 +4,7 @@ import type { AddressInfo } from "node:net";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createServer } from "../src/server.js";
 import { InamClient } from "../sdk-js/src/client.js";
+import type { ExecutionReceipt } from "../sdk-js/src/types.js";
 import { generateKeypair, sha256Hex, sign, toBase64 } from "../sdk-js/src/crypto/keys.js";
 import { SUCCESSION_WINDOW_MS, successionClock } from "../sdk-js/src/core/succession.js";
 
@@ -25,6 +26,9 @@ const hash = (s: string) => `sha256:${createHash("sha256").update(s).digest("hex
 const client = () => new InamClient(baseUrl, generateKeypair());
 const errCode = (p: Promise<unknown>) => p.then(() => "ok", (e: Error) => e.message);
 
+// The requester knows the output it asked for: hash(`out ${jobId}`).
+const acceptOwn = (c: InamClient, d: ExecutionReceipt) => c.acceptWork(d, { outputHash: hash(`out ${d.jobId}`) });
+
 function draftFor(worker: InamClient, requester: InamClient) {
   const jobId = `job_${Math.random().toString(36).slice(2)}`;
   const now = new Date().toISOString();
@@ -42,7 +46,7 @@ describe("revocation edge cases (SPEC.md §2.2)", () => {
     const requester = client();
     await worker.registerAgent(["translation.tr-en"]);
     await requester.registerAgent(["job.posting"]);
-    const receipt = await requester.acceptWork(await draftFor(worker, requester));
+    const receipt = await acceptOwn(requester, await draftFor(worker, requester));
     const before = await worker.getReputation(worker.did);
     expect(before.components.finalizedReceipts).toBe(1);
 
@@ -63,7 +67,7 @@ describe("revocation edge cases (SPEC.md §2.2)", () => {
     const draft = await draftFor(worker, requester);
     await requester.revoke("lost key");
 
-    expect(await errCode(requester.acceptWork(draft))).toMatch(/AGENT_REVOKED/);
+    expect(await errCode(acceptOwn(requester, draft))).toMatch(/AGENT_REVOKED/);
     expect((await worker.getReceipt(draft.receiptId)).status).toBe("draft");
     expect((await worker.getReputation(worker.did)).components.finalizedReceipts).toBe(0);
   });
@@ -81,8 +85,8 @@ describe("succession edge cases (SPEC.md §2.3)", () => {
     await old.succeed(nextKeys);
     successionClock.now = () => Date.now() + SUCCESSION_WINDOW_MS + 1000;
 
-    expect(await errCode(old.acceptWork(draft))).toMatch(/AGENT_SUCCEEDED/);
-    expect(await errCode(new InamClient(baseUrl, nextKeys).acceptWork(draft))).toMatch(/not the receipt's agentA/);
+    expect(await errCode(acceptOwn(old, draft))).toMatch(/AGENT_SUCCEEDED/);
+    expect(await errCode(acceptOwn(new InamClient(baseUrl, nextKeys), draft))).toMatch(/not the receipt's agentA/);
     expect((await worker.getReceipt(draft.receiptId)).status).toBe("draft");
     expect((await worker.getReputation(worker.did)).components.finalizedReceipts).toBe(0);
   });
