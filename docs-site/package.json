@@ -10,10 +10,10 @@
     "deploy": "npm run build && npx wrangler deploy"
   },
   "dependencies": {
-    "marked": "^18.1.2",
-    "redoc": "^3.0.1"
+    "marked": "^18.1.3",
+    "redoc": "^3.1.0"
   },
   "devDependencies": {
-    "wrangler": "^4.156.0"
+    "wrangler": "^4.158.0"
   }
 }
