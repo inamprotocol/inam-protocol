@@ -36,6 +36,7 @@ const SCHEMA_STATEMENTS = [
   "CREATE TABLE IF NOT EXISTS verifications (verification_id TEXT PRIMARY KEY, receipt_id TEXT NOT NULL REFERENCES receipts(receipt_id), provider TEXT NOT NULL, verifier TEXT NOT NULL, result TEXT NOT NULL, data TEXT NOT NULL)",
   "CREATE INDEX IF NOT EXISTS idx_verifications_receipt ON verifications(receipt_id)",
   "CREATE TABLE IF NOT EXISTS api_keys (key_id TEXT PRIMARY KEY, key_hash TEXT NOT NULL UNIQUE, agent_id TEXT NOT NULL REFERENCES agents(id), created_at TEXT NOT NULL, revoked_at TEXT, calls INTEGER NOT NULL DEFAULT 0)",
+  "CREATE TABLE IF NOT EXISTS mcp_usage (day TEXT NOT NULL, metric TEXT NOT NULL, client TEXT NOT NULL, count INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (day, metric, client))",
   "CREATE TABLE IF NOT EXISTS transparency_log (leaf_index INTEGER PRIMARY KEY, entry_type TEXT NOT NULL, ref_id TEXT NOT NULL, created_at TEXT NOT NULL, data TEXT NOT NULL, leaf_hash TEXT NOT NULL, payload TEXT)",
 ];
 
@@ -2724,6 +2725,63 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     const res = await mcp("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
     expect(res.status).toBe(200);
     expect(res.json.result.serverInfo.name).toBe("inam-mcp");
+  });
+
+  // Claude clients open with a 2026-07-28 request; before @modelcontextprotocol/server v2 that was a 400
+  // and they fell back to initialize. Now the modern era is served directly.
+  it("serves a 2026-07-28 client (per-request envelope) without the initialize fallback", async () => {
+    const ctx = createExecutionContext();
+    const res = await worker.fetch(
+      new Request("http://worker.test/mcp", {
+        method: "POST",
+        headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2026-07-28", "mcp-method": "tools/list", "cf-connecting-ip": crypto.randomUUID() },
+        body: JSON.stringify({
+          jsonrpc: "2.0",
+          id: 1,
+          method: "tools/list",
+          params: { _meta: { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "test", version: "0" }, "io.modelcontextprotocol/clientCapabilities": {} } },
+        }),
+      }),
+      env,
+      ctx,
+    );
+    await waitOnExecutionContext(ctx);
+    const text = await res.text();
+    expect(res.status, text).toBe(200);
+    expect((JSON.parse(text).result.tools as { name: string }[]).map((t) => t.name)).toContain("inam_check");
+  });
+
+  it("counts connects and tool calls per day and client family, storing no IP or arguments", async () => {
+    const send = async (method: string, params: Record<string, unknown>, ua: string) => {
+      const ctx = createExecutionContext();
+      await worker.fetch(
+        new Request("http://worker.test/mcp", {
+          method: "POST",
+          headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "user-agent": ua, "cf-connecting-ip": "203.0.113.9" },
+          body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
+        }),
+        env,
+        ctx,
+      );
+      await waitOnExecutionContext(ctx);
+    };
+    const before = (await (await worker.fetch(new Request("http://worker.test/v1/usage/mcp?days=1"), env, createExecutionContext())).json()) as any;
+    await send("tools/list", {}, "claude-code/2.1.317 (claude-desktop, agent-sdk/0.3.317)");
+    await send("tools/call", { name: "inam_hash_content", arguments: { content: "secret text" } }, "Claude-User");
+    await send("tools/call", { name: "not_ours", arguments: {} }, "Claude-User");
+    const after = (await (await worker.fetch(new Request("http://worker.test/v1/usage/mcp?days=1"), env, createExecutionContext())).json()) as any;
+    expect(after.days).toHaveLength(1);
+    expect(after.days[0].connects - before.days[0].connects).toBe(1);
+    expect(after.days[0].toolCalls - before.days[0].toolCalls).toBe(1);
+    expect(after.byTool.inam_hash_content - (before.byTool.inam_hash_content ?? 0)).toBe(1);
+    expect(after.byClient["claude-desktop"] - (before.byClient["claude-desktop"] ?? 0)).toBe(1);
+    const rows = JSON.stringify((await env.DB.prepare("SELECT * FROM mcp_usage").all()).results);
+    expect(rows).not.toContain("203.0.113.9");
+    expect(rows).not.toContain("secret text");
+    expect(rows).not.toContain("not_ours");
+    const svg = await worker.fetch(new Request("http://worker.test/v1/usage/mcp.svg"), env, createExecutionContext());
+    expect(svg.headers.get("content-type")).toContain("image/svg+xml");
+    expect(await svg.text()).toMatch(/^<svg[\s\S]*connects[\s\S]*<\/svg>$/);
   });
 
   it("lists only the read tools -- no tool that would need the caller's private key", async () => {

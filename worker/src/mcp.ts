@@ -1,12 +1,18 @@
 import type { Context, Hono } from "hono";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { McpServer, WebStandardStreamableHTTPServerTransport, createMcpHandler, isLegacyRequest } from "@modelcontextprotocol/server";
+import { z } from "zod";
 import { readTools, READ_ONLY, type RegistryReader } from "../../mcp/src/readTools.js";
 import type { AppEnv } from "./types.js";
 import mcpPkg from "../../mcp/package.json";
+import { countMcpUsage } from "./mcpUsage.js";
 
 /**
- * Hosted, read-only MCP endpoint (`POST /mcp`, Streamable HTTP, stateless).
+ * Hosted, read-only MCP endpoint (`POST /mcp`, stateless).
+ *
+ * Serves the 2026-07-28 protocol revision and, for 2025-era clients, the
+ * stateless legacy fallback (both from @modelcontextprotocol/server v2, one
+ * server factory for both). Before v2 a 2026-07-28 client got a 400 on its
+ * first request and had to fall back to `initialize`.
  *
  * Exposes the same read tools as the `inam-mcp` stdio package (shared from
  * mcp/src/readTools.ts). Write tools are deliberately absent: they sign with
@@ -42,11 +48,27 @@ export function mcpHandler(app: Hono<AppEnv>) {
       check: ({ target, method }) => get(`/v1/check?${new URLSearchParams({ target, ...(method ? { method } : {}) })}`),
     };
 
-    // Stateless: a fresh server + transport per request, no session ids.
-    const server = new McpServer({ name: "inam-mcp", version: mcpPkg.version });
-    for (const t of readTools(reader)) server.tool(t.name, t.description, t.shape, { ...READ_ONLY, ...t.annotations, title: t.title }, t.handler);
-    const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
-    await server.connect(transport);
-    return transport.handleRequest(c.req.raw);
+    const makeServer = () => {
+      const server = new McpServer({ name: "inam-mcp", version: mcpPkg.version });
+      for (const t of readTools(reader)) {
+        server.registerTool(t.name, { title: t.title, description: t.description, inputSchema: z.object(t.shape as z.ZodRawShape), annotations: { ...READ_ONLY, ...t.annotations, title: t.title } }, t.handler);
+      }
+      return server;
+    };
+
+    const req = c.req.raw;
+    // Aggregate counts only (no IP, no arguments): see mcpUsage.ts.
+    if (req.method === "POST") c.executionCtx.waitUntil(countMcpUsage(c.env, req.clone()));
+
+    // 2025-era clients: the same stateless JSON transport as before v2.
+    if (await isLegacyRequest(req)) {
+      const server = makeServer();
+      const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
+      await server.connect(transport);
+      return transport.handleRequest(req);
+    }
+    // 2026-07-28 clients: per-request envelope, plain JSON answers.
+    const handler = createMcpHandler(makeServer, { legacy: "reject", responseMode: "json" });
+    return handler.fetch(req);
   };
 }

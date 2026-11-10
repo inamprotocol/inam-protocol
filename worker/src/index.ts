@@ -36,6 +36,7 @@ import {
 import { parsePageParams, paginate } from "../../sdk-js/src/core/pagination.js";
 import type { AppEnv } from "./types.js";
 import { mcpHandler } from "./mcp.js";
+import { readMcpUsage, renderMcpUsageSvg } from "./mcpUsage.js";
 import { a2aHandler, agentCard } from "./a2a.js";
 import * as demo from "./demo.js";
 import { checkReceipt } from "./receiptCheck.js";
@@ -72,6 +73,8 @@ function parseBody<T>(schema: ZodType<T>, body: unknown): T {
 const PUBLIC_READ_PATHS = [
   "/v1/health",
   "/v1/stats",
+  "/v1/usage/mcp",
+  "/v1/usage/mcp.svg",
   "/v1/agents/search",
   "/v1/agents/:id",
   "/v1/agents/:id/protocols",
@@ -131,6 +134,19 @@ app.get("/v1/health", (c) =>
 app.get("/v1/stats", rateLimitReadByIp, async (c) => {
   c.header("Cache-Control", "public, max-age=300");
   return c.json(await computeStats(c.env));
+});
+
+// Aggregate hosted-MCP usage (mcpUsage.ts): daily connects and tool calls, no IPs.
+app.get("/v1/usage/mcp", rateLimitReadByIp, async (c) => {
+  const days = Math.min(90, Math.max(1, Number(c.req.query("days")) || 30));
+  c.header("Cache-Control", "public, max-age=300");
+  return c.json(await readMcpUsage(c.env, days));
+});
+app.get("/v1/usage/mcp.svg", rateLimitReadByIp, async (c) => {
+  return c.body(renderMcpUsageSvg(await readMcpUsage(c.env, 30)), 200, {
+    "Content-Type": "image/svg+xml; charset=utf-8",
+    "Cache-Control": "public, max-age=600",
+  });
 });
 
 // ---- Hosted demo counterparty (SPEC.md §14) ----

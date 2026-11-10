@@ -376,6 +376,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Node reference server & Cloudflare Worker
 
+### Unreleased (Worker) — 2026-11-10
+- **Hosted MCP serves the 2026-07-28 protocol revision.** `/mcp` moved from `@modelcontextprotocol/sdk` 1.x to `@modelcontextprotocol/server` 2.4.0. Claude clients open every session with a 2026-07-28 request; 1.x answered it with 400 (about 3,600 a day on 9 Nov) and the client fell back to `initialize`. 2026-07-28 requests now go to `createMcpHandler` (JSON responses), and 2025-era requests keep the same stateless JSON transport as before.
+- **`GET /v1/usage/mcp` and `/v1/usage/mcp.svg`**: aggregate hosted-MCP usage per UTC day (connects = `tools/list`, tool calls of `inam_*` tools, by tool and coarse client family). Counts only: no IP, tool argument or raw User-Agent is stored. Needs `worker/migration-add-mcp-usage.sql` on prod; until it runs, counting is skipped silently and the endpoints return zeros. The chart is on the README and inamprotocol.org.
+
 ### 0.14.0 (Node) / 0.14.0 (Worker) — 2026-10-17
 - Verifier grants and revokes are appended to the transparency log (SPEC v0.44). No migration: the log table already stores any `entry_type`.
 - Tests: a refused call adds no leaf; a grant and a revoke add one each with the expected payload (`tests/transparencyFlow.test.ts`, `worker/tests/api.test.ts`).
