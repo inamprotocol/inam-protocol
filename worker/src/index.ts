@@ -143,7 +143,8 @@ app.get("/v1/usage/mcp", rateLimitReadByIp, async (c) => {
   return c.json(await readMcpUsage(c.env, days));
 });
 app.get("/v1/usage/mcp.svg", rateLimitReadByIp, async (c) => {
-  return c.body(renderMcpUsageSvg(await readMcpUsage(c.env, 30)), 200, {
+  const days = Math.min(90, Math.max(7, Number(c.req.query("days")) || 60));
+  return c.body(renderMcpUsageSvg(await readMcpUsage(c.env, days)), 200, {
     "Content-Type": "image/svg+xml; charset=utf-8",
     "Cache-Control": "public, max-age=600",
   });
