@@ -1,6 +1,8 @@
 # Pay on proof
 
-An AI agent may move money only against a verified INAM receipt. PayPal (fiat) or USDC via x402 (crypto), same receipt, same reputation.
+An AI agent may move money only against a verified INAM receipt. PayPal or Braintree (fiat) or USDC via x402 (crypto), same receipt, same reputation.
+
+**Verified live on the Braintree sandbox (2026-11-10):** the honest run authorized 12.00 EUR and captured it against a finalized receipt; the swapped-delivery and overcharging runs authorized and then voided (MISMATCH); the unknown seller was refused before Braintree was called. A first run with the wrong currency configured authorized EUR against a USD job and was voided by the hold check (`HOLD_MISMATCH`), which is the guard doing its job.
 
 An agent that pays up front can be paid for nothing: the seller takes the money and delivers less, something else, or nothing. The usual fix, giving the agent payment credentials and hoping its judgment holds, puts those credentials in the model's context. This demo is for developers wiring agents to real payment rails and for owners who want a budget that an agent can spend but cannot lose. The owner approves a hold once. The money moves only when the seller's signed receipt matches what the buyer actually received and what the rail actually holds. Anything else releases the hold. The receipt is a signed, content-addressed INAM record, so it is portable: anyone can verify it offline, and it becomes part of the seller's reputation, whichever rail carried the money.
 
@@ -8,14 +10,15 @@ An agent that pays up front can be paid for nothing: the seller takes the money 
  1. checkTrust(seller)            INAM: allow / escrow / deny
         | deny -> stop. No PayPal or x402 call is made.
         v
- 2. Hold                          PayPal: Orders v2, intent AUTHORIZE, owner approves once
-        |                         USDC:   signed EIP-3009 authorization, kept, not submitted
+ 2. Hold                          PayPal:    Orders v2, intent AUTHORIZE, owner approves once
+        |                         Braintree: authorizePaymentMethod (PayPal wallet test nonce)
+        |                         USDC:      signed EIP-3009 authorization, kept, not submitted
         v
  3. Seller delivers + signs       INAM receipt naming the delivery hash and the hold
         v
  4. Buyer acceptWork(receipt, { outputHash of what arrived, amount and currency held })
-        match                   -> countersign, then capture   (PayPal capture / x402 /settle)
-        MISMATCH or NOT_COMPARED -> void                      (PayPal void / discard authorization)
+        match                   -> countersign, then capture   (PayPal capture / Braintree captureTransaction / x402 /settle)
+        MISMATCH or NOT_COMPARED -> void                      (PayPal void / Braintree reverseTransaction / discard authorization)
                                    The payer is never charged.
 ```
 
@@ -31,7 +34,9 @@ npx tsx examples/pay-on-proof/server.ts
 
 Open http://localhost:8787. With no keys set, a PayPal stand-in answers with the documented response shapes and every order counts as approved, an in-process INAM registry is started in a temp directory, and the AI notes fall back to fixed text. Nothing touches the production registry or real money.
 
-To pick the rail, open http://localhost:8787/?rail=paypal (default) or http://localhost:8787/?rail=usdc.
+Pick the rail with the PayPal / USDC (x402) / Braintree toggle above the scenario buttons (the API takes `POST /api/run?scenario=...&rail=paypal|usdc|braintree`).
+
+Keys go in `examples/pay-on-proof/.env` (gitignored; copy `.env.example`). The server loads it at start.
 
 ## Environment variables
 
@@ -47,6 +52,19 @@ To pick the rail, open http://localhost:8787/?rail=paypal (default) or http://lo
 | `X402_BUYER_PRIVATE_KEY` | unset | USDC rail: the buyer wallet's key, used to sign the EIP-3009 authorization. Testnet wallet only. |
 | `X402_SELLER_ADDRESS` | unset | USDC rail: the seller's `payTo` address. |
 | `X402_FACILITATOR_URL` | unset | USDC rail: the x402 facilitator that verifies and settles the authorization. |
+| `BRAINTREE_PUBLIC_KEY` / `BRAINTREE_PRIVATE_KEY` | unset | Braintree sandbox API keys. Set both to use the real sandbox instead of the stand-in. |
+| `BRAINTREE_CURRENCY` | `USD` | The sandbox merchant account's currency. A hold in another currency is voided (`HOLD_MISMATCH`). |
+| `BRAINTREE_MERCHANT_ACCOUNT_ID` | unset | Merchant account to charge (picks the currency). Default: the account's default. |
+| `BRAINTREE_NONCE` | `fake-paypal-one-time-nonce` | Sandbox test nonce for the payment method. The default simulates a PayPal wallet payment. |
+
+## Braintree sandbox credentials
+
+Braintree is a PayPal service, and its sandbox signup asks for no tax ID, so it is the PayPal-family sandbox open to developers in countries PayPal does not serve.
+
+1. Sign up at https://apply.braintreegateway.com/signup/sandbox and activate the account from the email.
+2. Settings > API > API Keys: generate a key and copy the Public Key and Private Key into `.env`.
+3. Settings > Business > Merchant Accounts: note the currency and set `BRAINTREE_CURRENCY` to it.
+4. Start the server, pick Braintree, run a scenario. There is no payer redirect: the test nonce stands in for the PayPal wallet, so hold, capture and void run server-side. Transactions appear under Transactions in the Braintree sandbox dashboard.
 
 ## PayPal sandbox credentials
 
@@ -104,6 +122,7 @@ INAM (sdk-js): `checkTrust`, `registerAgent`, `submitWork` (seller drafts and si
 
 - The PayPal client was built against PayPal's documented Orders v2 and Payments v2 APIs and has run only against the stand-in in `paypal.ts`, which returns the documented response shapes. It has not been run against the live PayPal sandbox. A sandbox run needs `PAYPAL_CLIENT_ID` and `PAYPAL_CLIENT_SECRET` from a PayPal developer sandbox app.
 - PayPal authorizations expire. A job that outlives the authorization would need reauthorization, which the demo does not do.
+- The Braintree rail has run against the live Braintree sandbox (see the top of this file). Its payment method is a sandbox test nonce that simulates a PayPal wallet, not a real payer approval.
 - The stand-in treats every order as approved. Approval, cancel and payer-side errors are only exercised with real sandbox credentials.
 - State lives in memory. Restarting the server loses runs and the in-process registry.
 - New sellers get `escrow` from `checkTrust`, not `allow`. Both go through the hold, so the demo never pays up front.
