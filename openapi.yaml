@@ -985,7 +985,9 @@ paths:
       description: >-
         Aggregate counts for the hosted MCP endpoint (/mcp): connects (tools/list, once per client session) and tool
         calls of inam_* tools, per UTC day, by tool and by coarse client family from the User-Agent. No IP, tool
-        argument or raw User-Agent is stored. A connect is a session, not a person. Cached up to 5 minutes.
+        argument or raw User-Agent is stored. A connect is a session, not a person. Days marked estimated predate the
+        counter: their connects are sessions estimated from request logs, and tool calls were not recorded. Cached up
+        to 5 minutes.
       security: []
       parameters:
         - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 90, default: 30 } }
@@ -1006,8 +1008,10 @@ paths:
   /usage/mcp.svg:
     get:
       operationId: mcpUsageChart
-      summary: Hosted MCP usage, 30-day bar chart (optional)
+      summary: Hosted MCP usage, bar chart by client family (optional)
       security: []
+      parameters:
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 7, maximum: 90, default: 60 } }
       responses:
         "200":
           description: SVG chart

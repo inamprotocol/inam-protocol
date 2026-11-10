@@ -2784,6 +2784,20 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     expect(await svg.text()).toMatch(/^<svg[\s\S]*connects[\s\S]*<\/svg>$/);
   });
 
+  it("marks backfilled (connect_est) days as estimated and draws them with the Claude share", async () => {
+    const day = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+    await env.DB.batch([
+      env.DB.prepare("INSERT INTO mcp_usage (day, metric, client, count) VALUES (?, 'connect_est', 'claude-desktop', 30)").bind(day),
+      env.DB.prepare("INSERT INTO mcp_usage (day, metric, client, count) VALUES (?, 'connect_est', 'other', 10)").bind(day),
+    ]);
+    const u = (await (await worker.fetch(new Request("http://worker.test/v1/usage/mcp?days=7"), env, createExecutionContext())).json()) as any;
+    const d = u.days.find((x: any) => x.day === day);
+    expect(d).toMatchObject({ connects: 40, estimated: true, byClient: { "claude-desktop": 30, other: 10 } });
+    const svg = await (await worker.fetch(new Request("http://worker.test/v1/usage/mcp.svg?days=7"), env, createExecutionContext())).text();
+    expect(svg).toContain("estimated from Cloudflare logs");
+    expect(svg).toContain("Claude Desktop");
+  });
+
   it("lists only the read tools -- no tool that would need the caller's private key", async () => {
     const res = await mcp("tools/list");
     const names = (res.json.result.tools as { name: string }[]).map((t) => t.name).sort();

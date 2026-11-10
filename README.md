@@ -156,9 +156,9 @@ Currently live at `https://api.inamprotocol.org` (custom domain, bound via `work
 
 ### Hosted MCP usage (live)
 
-![Hosted MCP usage, last 30 days](https://api.inamprotocol.org/v1/usage/mcp.svg)
+![Hosted MCP usage by client: Claude Desktop, Claude Code, Claude remote, claude.ai and other](https://api.inamprotocol.org/v1/usage/mcp.svg)
 
-Daily connects (a client listing the tools, once per session) and tool calls on `https://api.inamprotocol.org/mcp`, rendered live by the Worker. Counts are aggregated per UTC day and coarse client family (`claude-desktop`, `claude-remote`, `claude-code`, `claude-ai`, `other`); no IP, tool argument or raw User-Agent is stored (`worker/src/mcpUsage.ts`). A connect is a session, not a person. JSON: `GET /v1/usage/mcp?days=30`.
+Daily connects (a client listing the tools, once per session) on `https://api.inamprotocol.org/mcp`, stacked by client (Claude Desktop, Claude Code, Claude remote sessions, claude.ai, other), and tool calls, rendered live by the Worker. Most traffic comes from Claude clients. Days before 2026-11-10 (lighter bars) are estimated from Cloudflare request logs (one `notifications/initialized` per session; `worker/migration-backfill-mcp-usage.sql`), and tool calls were not recorded then. Counts are aggregated per UTC day and coarse client family (`claude-desktop`, `claude-remote`, `claude-code`, `claude-ai`, `other`); no IP, tool argument or raw User-Agent is stored (`worker/src/mcpUsage.ts`). A connect is a session, not a person. JSON: `GET /v1/usage/mcp?days=30`.
 
 The Worker also serves `GET /.well-known/http-message-signatures-directory`, the Web Bot Auth key directory for [Cloudflare signed agents](https://developers.cloudflare.com/bots/concepts/bot/signed-agents/): a JWKS with the key the INAM agent signs requests with (`inamFetch(client, { webBotAuth })`), signed per response. Set the key with `npx wrangler secret put WEB_BOT_AUTH_KEY` (hex Ed25519 private key); unset, the route answers 404.
 
@@ -250,7 +250,7 @@ GET  /agents/:id/protocols
 GET  /agents/:id/reputation
 GET  /agents/:id/badge.svg        embeddable shields.io-style trust-score badge (unsigned, public)
 GET  /usage/mcp                   hosted MCP usage per day: connects, tool calls, by tool and client family (counts only)
-GET  /usage/mcp.svg               the same as a 30-day bar chart
+GET  /usage/mcp.svg               the same as a bar chart by client family (?days=7..90, default 60)
 GET  /agents/:id/badge.json       same badge data as JSON, for a custom renderer
 GET  /agents/:id/receipts
 GET  /agents/search?capability=&min_reputation=&supports=&include_revoked=&include_demo=&limit=&offset=
