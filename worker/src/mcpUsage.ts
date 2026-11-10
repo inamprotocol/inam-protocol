@@ -118,11 +118,13 @@ export function renderMcpUsageSvg(u: McpUsage): string {
   const first = u.days[0]?.day ?? "", last = u.days[n - 1]?.day ?? "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="INAM hosted MCP: ${total} connects and ${calls} tool calls in the last ${n} days">
 <style>
-text{font:12px -apple-system,Segoe UI,Helvetica,Arial,sans-serif;fill:#57534e}.h{font-weight:600;fill:#1c1917}
-.c{fill:#d6b4b4}.t{fill:#7a2e2e}.g{stroke:#e7e5e4}
-@media (prefers-color-scheme:dark){text{fill:#a8a29e}.h{fill:#f5f5f4}.c{fill:#6b3a3a}.t{fill:#e8a0a0}.g{stroke:#3f3b39}}
+text{font:11px "IBM Plex Mono",ui-monospace,"SF Mono",Consolas,monospace;fill:#7b8290}.h{font:600 13px "Public Sans",-apple-system,"Segoe UI",system-ui,sans-serif;fill:#14161b}
+.c{fill:#ead3d3}.t{fill:#7a2e2e}.g{stroke:#dde1e7}
+@media (prefers-color-scheme:dark){text{fill:#6b7280}.h{fill:#e6e8ec}.c{fill:#3a2222}.t{fill:#d98686}.g{stroke:#262a32}}
 </style>
 <text class="h" x="${padL}" y="18">Hosted MCP, last ${n} days: ${total.toLocaleString("en-US")} connects, ${calls.toLocaleString("en-US")} tool calls</text>
+<rect class="c" x="${W - padR - 150}" y="9" width="9" height="9" rx="1.5"/><text x="${W - padR - 137}" y="17">connects</text>
+<rect class="t" x="${W - padR - 69}" y="9" width="9" height="9" rx="1.5"/><text x="${W - padR - 56}" y="17">tool calls</text>
 <line class="g" x1="${padL}" x2="${W - padR}" y1="${y(max)}" y2="${y(max)}"/><line class="g" x1="${padL}" x2="${W - padR}" y1="${H - padB}" y2="${H - padB}"/>
 <text x="${padL - 6}" y="${y(max) + 4}" text-anchor="end">${max}</text><text x="${padL - 6}" y="${H - padB + 4}" text-anchor="end">0</text>
 ${bars}
