@@ -171,3 +171,12 @@ CREATE TABLE IF NOT EXISTS api_keys (
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_keys_agent ON api_keys(agent_id);
+
+-- Aggregate hosted-MCP usage counter (mcpUsage.ts); see migration-add-mcp-usage.sql.
+CREATE TABLE IF NOT EXISTS mcp_usage (
+  day TEXT NOT NULL,
+  metric TEXT NOT NULL,
+  client TEXT NOT NULL,
+  count INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (day, metric, client)
+);

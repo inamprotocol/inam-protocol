@@ -978,6 +978,42 @@ paths:
         "403": { $ref: "#/components/responses/Error" }
         "409": { $ref: "#/components/responses/Error" }
 
+  /usage/mcp:
+    get:
+      operationId: mcpUsage
+      summary: Hosted MCP usage per day (optional)
+      description: >-
+        Aggregate counts for the hosted MCP endpoint (/mcp): connects (tools/list, once per client session) and tool
+        calls of inam_* tools, per UTC day, by tool and by coarse client family from the User-Agent. No IP, tool
+        argument or raw User-Agent is stored. A connect is a session, not a person. Cached up to 5 minutes.
+      security: []
+      parameters:
+        - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 90, default: 30 } }
+      responses:
+        "200":
+          description: Daily usage, oldest first, gaps filled with zeros
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  days:
+                    type: array
+                    items: { type: object, properties: { day: { type: string, format: date }, connects: { type: integer }, toolCalls: { type: integer } } }
+                  byTool: { type: object, additionalProperties: { type: integer } }
+                  byClient: { type: object, additionalProperties: { type: integer } }
+                  definitions: { type: object, additionalProperties: { type: string } }
+  /usage/mcp.svg:
+    get:
+      operationId: mcpUsageChart
+      summary: Hosted MCP usage, 30-day bar chart (optional)
+      security: []
+      responses:
+        "200":
+          description: SVG chart
+          content:
+            image/svg+xml:
+              schema: { type: string }
   /stats:
     get:
       operationId: registryStats
