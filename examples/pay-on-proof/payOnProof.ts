@@ -1,15 +1,16 @@
 import { checkTrust, sha256Hex, type InamClient, type ExecutionReceipt, type TrustPolicy, type TrustDecision } from "../../sdk-js/src/index.js";
-import type { PayPal } from "./paypal.js";
 
-/** Pay on proof: an agent may move PayPal money only against a verified INAM receipt.
+/** Pay on proof: an agent may move money only against a verified INAM receipt.
+ * The rail is PayPal (fiat) or USDC over x402 (crypto); the receipt and the
+ * reputation it builds are the same on both.
  *
- *   1. checkTrust(seller)          deny  -> stop, PayPal is never called
- *   2. PayPal order, AUTHORIZE      the owner approves once; money is held, not moved
- *   3. seller delivers + drafts an INAM receipt naming the PayPal authorization
+ *   1. checkTrust(seller)          deny  -> stop, no rail is ever called
+ *   2. rail.hold + confirm          PayPal AUTHORIZE / a signed, unsubmitted x402 payload; nothing moves
+ *   3. seller delivers + drafts an INAM receipt naming the hold (settlement.paymentRef)
  *   4. buyer.acceptWork(receipt, { outputHash of what was delivered, amount, currency })
- *        match           -> countersign, then PayPal capture
+ *        match           -> countersign, then rail.capture
  *        MISMATCH /
- *        NOT_COMPARED    -> PayPal void; the payer is never charged
+ *        NOT_COMPARED    -> rail.void; the payer is never charged
  *
  * These gates are plain code. An AI agent can choose sellers, write the job and
  * explain decisions, but it cannot change a gate: capture is only reachable
@@ -18,8 +19,8 @@ import type { PayPal } from "./paypal.js";
 export type Step =
   | { kind: "trust"; decision: TrustDecision["decision"]; reasons: string[] }
   | { kind: "refused"; reason: string }
-  | { kind: "hold_created"; orderId: string; approveUrl: string }
-  | { kind: "held"; authorizationId: string; amount: string; currency: string }
+  | { kind: "hold_created"; rail: string; holdRef: string; approveUrl?: string }
+  | { kind: "held"; ref: string; amount: string; currency: string; expiresAt?: string }
   | { kind: "delivered"; outputHash: string; receiptClaims: { outputHash?: string; amount?: string; currency?: string } }
   | { kind: "verified"; receiptId: string; status: string }
   | { kind: "captured"; captureId: string; status: string }
@@ -41,17 +42,26 @@ export interface Delivery {
   receipt: ExecutionReceipt; // the seller's draft, signed by the seller
 }
 
+/** A payment rail that can hold, then capture or release. `name` prefixes settlement.paymentRef. */
+export interface Rail {
+  name: string;
+  hold(job: Job, urls: { returnUrl: string; cancelUrl: string }): Promise<{ holdRef: string; approveUrl?: string }>;
+  confirm(holdRef: string): Promise<{ ref: string; amount: string; currency: string; expiresAt?: string }>;
+  capture(ref: string, note: string): Promise<{ captureId: string; status: string }>;
+  void(ref: string): Promise<{ status: string }>;
+}
+
 export interface Ctx {
   buyer: InamClient;
-  paypal: PayPal;
+  rail: Rail;
   policy?: TrustPolicy;
   returnUrl: string;
   cancelUrl: string;
   emit?: (s: Step) => void;
 }
 
-/** Steps 1-2. Returns the approval link, or null when the seller is refused before any PayPal call. */
-export async function openJob(job: Job, ctx: Ctx): Promise<{ orderId: string; approveUrl: string } | null> {
+/** Steps 1-2. Returns the hold (and approval link, if the rail has one), or null when the seller is refused before any rail call. */
+export async function openJob(job: Job, ctx: Ctx): Promise<{ holdRef: string; approveUrl?: string } | null> {
   const emit = ctx.emit ?? (() => {});
   const trust = await checkTrust(job.seller, ctx.buyer, ctx.policy);
   emit({ kind: "trust", decision: trust.decision, reasons: trust.reasons });
@@ -60,30 +70,30 @@ export async function openJob(job: Job, ctx: Ctx): Promise<{ orderId: string; ap
     return null;
   }
   // allow and escrow both go through the hold: pay-on-proof never pays up front.
-  const hold = await ctx.paypal.createHold({ jobId: job.jobId, description: `${job.capability}: ${job.request}`, amount: job.amount, currency: job.currency, payeeEmail: job.payeeEmail, returnUrl: ctx.returnUrl, cancelUrl: ctx.cancelUrl });
-  emit({ kind: "hold_created", ...hold });
+  const hold = await ctx.rail.hold(job, { returnUrl: ctx.returnUrl, cancelUrl: ctx.cancelUrl });
+  emit({ kind: "hold_created", rail: ctx.rail.name, ...hold });
   return hold;
 }
 
-/** Steps 2-4, after the owner approved the order. `deliver` is the seller doing the work. */
-export async function settleJob(job: Job, orderId: string, deliver: (job: Job, paymentRef: string) => Promise<Delivery>, ctx: Ctx): Promise<"captured" | "voided"> {
+/** Steps 2-4, after the owner approved the hold. `deliver` is the seller doing the work. */
+export async function settleJob(job: Job, holdRef: string, deliver: (job: Job, paymentRef: string) => Promise<Delivery>, ctx: Ctx): Promise<"captured" | "voided"> {
   const emit = ctx.emit ?? (() => {});
-  const held = await ctx.paypal.authorize(orderId);
+  const held = await ctx.rail.confirm(holdRef);
   emit({ kind: "held", ...held });
   if (held.amount !== job.amount || held.currency !== job.currency) {
-    // PayPal held something other than what the job says: never capture it.
+    // The rail held something other than what the job says: never capture it.
     emit({ kind: "rejected", code: "HOLD_MISMATCH", reason: `held ${held.amount} ${held.currency}, job is ${job.amount} ${job.currency}` });
-    emit({ kind: "voided", ...(await ctx.paypal.void(held.authorizationId)) });
+    emit({ kind: "voided", ...(await ctx.rail.void(held.ref)) });
     return "voided";
   }
 
-  const paymentRef = `paypal:${held.authorizationId}`;
+  const paymentRef = `${ctx.rail.name}:${held.ref}`;
   let d: Delivery;
   try {
     d = await deliver(job, paymentRef);
   } catch (e) {
     emit({ kind: "rejected", code: "NOT_DELIVERED", reason: (e as Error).message });
-    emit({ kind: "voided", ...(await ctx.paypal.void(held.authorizationId)) });
+    emit({ kind: "voided", ...(await ctx.rail.void(held.ref)) });
     return "voided";
   }
   const outputHash = `sha256:${sha256Hex(d.output)}`;
@@ -96,16 +106,16 @@ export async function settleJob(job: Job, orderId: string, deliver: (job: Job, p
   } catch (e) {
     const err = e as Error & { code?: string };
     emit({ kind: "rejected", code: err.code ?? "REFUSED", reason: err.message });
-    emit({ kind: "voided", ...(await ctx.paypal.void(held.authorizationId)) });
+    emit({ kind: "voided", ...(await ctx.rail.void(held.ref)) });
     return "voided";
   }
   emit({ kind: "verified", receiptId: receipt.receiptId, status: receipt.status });
-  const cap = await ctx.paypal.capture(held.authorizationId, `Paid on verified INAM receipt ${receipt.receiptId}`);
+  const cap = await ctx.rail.capture(held.ref, `Paid on verified INAM receipt ${receipt.receiptId}`);
   emit({ kind: "captured", ...cap });
   return "captured";
 }
 
-/** Seller side: do the work, then draft the receipt naming the PayPal authorization. */
+/** Seller side: do the work, then draft the receipt naming the hold. */
 export async function sellerDeliver(seller: InamClient, buyerDid: string, job: Job, paymentRef: string, output: string, claim: { output?: string; amount?: string } = {}): Promise<Delivery> {
   const now = new Date().toISOString();
   const receipt = await seller.submitWork(buyerDid, {

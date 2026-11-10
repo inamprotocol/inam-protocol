@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Pay on Proof · INAM × PayPal</title>
+<title>Pay on Proof · INAM × PayPal / USDC</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/dist/ag-grid-community.min.js"></script>
 <style>
-/* INAM site palette: cool neutrals, oxblood accent; PayPal states in semantic colors */
+/* INAM site palette: cool neutrals, oxblood accent; payment states in semantic colors */
 :root {
   --bg: #ffffff; --bg-2: #f4f5f7; --ink: #14161b; --ink-dim: #4a505c; --ink-faint: #7b8290; --line: #dde1e7;
   --accent: #7a2e2e; --accent-soft: #f5e8e8; --ok: #1f7a4d; --ok-soft: #e4f3ea; --bad: #a3261e; --bad-soft: #fbe9e7; --hold: #8a5a00; --hold-soft: #fbf1dc;
@@ -50,6 +50,11 @@ h2 { margin: 0 0 10px; font-size: 17px; }
 .pill.captured { background: var(--ok-soft); color: var(--ok); }
 .pill.voided, .pill.refused { background: var(--bad-soft); color: var(--bad); }
 .pill.pending { background: var(--hold-soft); color: var(--hold); }
+.rail { display: inline-flex; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin-bottom: 12px; }
+.rail button { font: 600 13px var(--sans); color: var(--ink-dim); background: var(--bg); border: 0; padding: 8px 16px; cursor: pointer; }
+.rail button + button { border-left: 1px solid var(--line); }
+.rail button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.rail button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .approve { display: inline-block; margin-top: 6px; background: var(--accent); color: #fff; padding: 7px 14px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; }
 #grid { height: 330px; }
 .ag-theme-quartz, .ag-theme-quartz-dark { --ag-font-family: var(--sans); --ag-font-size: 13px; --ag-background-color: var(--bg); --ag-foreground-color: var(--ink); --ag-header-background-color: var(--bg-2); --ag-border-color: var(--line); --ag-row-border-color: var(--line); }
@@ -64,26 +69,27 @@ a { color: var(--accent); }
 <body>
 <div class="wrap">
   <header>
-    <span class="eyebrow">INAM × PayPal · pay on proof</span>
-    <h1>An AI agent can pay through PayPal only against a verified receipt.</h1>
-    <p class="lede">The owner approves a budget once. PayPal holds it. The buyer agent captures only when the seller's signed INAM receipt matches what was actually delivered and held; anything else voids the hold and the owner is never charged.</p>
+    <span class="eyebrow">INAM × PayPal / USDC · pay on proof</span>
+    <h1>An AI agent can pay, in PayPal or USDC, only against a verified receipt.</h1>
+    <p class="lede">The payment is held first: a PayPal authorization, or a signed USDC transfer (x402) the buyer keeps unsent. The buyer agent captures only when the seller's signed INAM receipt matches what was actually delivered and held; anything else releases the hold and the owner is never charged. Same receipt, same reputation on either rail.</p>
     <div class="meta" id="meta"></div>
   </header>
 
   <section class="how" aria-label="How it works">
-    <div><b>Check the seller.</b> INAM identity and track record before any PayPal call. Unknown or revoked: refused.</div>
-    <div><b>Hold, don't pay.</b> PayPal order with intent AUTHORIZE. The owner approves; money is held, not moved.</div>
-    <div><b>Deliver with a receipt.</b> The seller signs an INAM receipt naming the delivery hash and the PayPal authorization.</div>
-    <div><b>Capture on proof.</b> Match: countersign, then capture. Mismatch: void. Code decides, the AI explains.</div>
+    <div><b>Check the seller.</b> INAM identity and track record before any payment call. Unknown or revoked: refused.</div>
+    <div><b>Hold, don't pay.</b> PayPal: an AUTHORIZE order the owner approves. USDC: an EIP-3009 authorization signed and kept. Nothing moves.</div>
+    <div><b>Deliver with a receipt.</b> The seller signs an INAM receipt naming the delivery hash and the hold.</div>
+    <div><b>Capture on proof.</b> Match: countersign, then capture (PayPal) or settle (x402). Mismatch: void or discard. Code decides, the AI explains.</div>
   </section>
 
   <section aria-label="Run a scenario">
     <h2>Run a scenario</h2>
+    <div class="rail" role="group" aria-label="Payment rail"><button data-rail="paypal" aria-pressed="true">PayPal</button><button data-rail="usdc" aria-pressed="false">USDC (x402)</button></div>
     <div class="runs">
       <button data-s="honest"><b>Honest seller</b><span>Delivers what it signs for. Expect: captured.</span></button>
       <button data-s="swap"><b>Swapped delivery</b><span>Delivers less than its receipt claims. Expect: voided.</span></button>
-      <button data-s="overclaim"><b>Overcharging receipt</b><span>Receipt claims $120 on a $12 hold. Expect: voided.</span></button>
-      <button data-s="unknown"><b>Unknown seller</b><span>No INAM record. Expect: refused, PayPal never called.</span></button>
+      <button data-s="overclaim"><b>Overcharging receipt</b><span>Receipt claims 120 on a 12 hold. Expect: voided.</span></button>
+      <button data-s="unknown"><b>Unknown seller</b><span>No INAM record. Expect: refused, no rail called.</span></button>
     </div>
   </section>
 
@@ -98,28 +104,29 @@ a { color: var(--accent); }
     </section>
   </div>
 
-  <footer>Open source (Apache-2.0): <a href="https://github.com/inamprotocol/inam-protocol/tree/main/examples/pay-on-proof">examples/paypal</a> · Receipts verify offline with the INAM SDK · PayPal sandbox only.</footer>
+  <footer>Open source (Apache-2.0): <a href="https://github.com/inamprotocol/inam-protocol/tree/main/examples/pay-on-proof">examples/paypal</a> · Receipts verify offline with the INAM SDK · PayPal sandbox and Base Sepolia only.</footer>
 </div>
 <script>
+const X = (r) => r.rail === "usdc";
 const TITLES = {
   trust: (s) => `INAM check: ${s.decision}`,
-  refused: () => "Refused before PayPal",
-  hold_created: () => "PayPal order created (AUTHORIZE)",
-  held: (s) => `Held ${s.amount} ${s.currency} in PayPal`,
+  refused: () => "Refused before any payment",
+  hold_created: (s, r) => X(r) ? "USDC transfer signed and kept (x402)" : "PayPal order created (AUTHORIZE)",
+  held: (s, r) => `Held ${s.amount} ${s.currency} ${X(r) ? "as an unsent x402 payload" : "in PayPal"}`,
   delivered: () => "Work delivered, receipt drafted",
   verified: () => "Receipt verified and countersigned",
-  captured: () => "PayPal capture",
+  captured: (s, r) => X(r) ? "USDC settled on-chain (x402)" : "PayPal capture",
   rejected: (s) => `Refused to countersign: ${s.code}`,
-  voided: () => "PayPal authorization voided",
+  voided: (s, r) => X(r) ? "x402 payload discarded" : "PayPal authorization voided",
 };
 const DETAIL = {
   trust: (s) => s.reasons.join("; "),
   refused: (s) => s.reason,
-  hold_created: (s) => `order ${s.orderId}`,
-  held: (s) => `authorization ${s.authorizationId}${s.expiresAt ? `, expires ${s.expiresAt.slice(0, 10)}` : ""}`,
+  hold_created: (s) => `hold ${s.holdRef}`,
+  held: (s) => `${s.ref}${s.expiresAt ? `, expires ${s.expiresAt.slice(0, 16).replace("T", " ")}` : ""}`,
   delivered: (s) => `received ${s.outputHash.slice(0, 23)}… · receipt claims ${String(s.receiptClaims.outputHash).slice(0, 23)}…, ${s.receiptClaims.amount} ${s.receiptClaims.currency}`,
   verified: (s) => `receipt ${s.receiptId.slice(0, 22)}… ${s.status}`,
-  captured: (s) => `capture ${s.captureId} ${s.status}`,
+  captured: (s, r) => `${X(r) ? "tx" : "capture"} ${s.captureId} ${s.status}`,
   rejected: (s) => s.reason,
   voided: (s) => s.status,
 };
@@ -131,14 +138,15 @@ gridEl.className = isDark ? "ag-theme-quartz-dark" : "ag-theme-quartz";
 const status = (r) => r.result === "captured" ? "captured" : r.result === "voided" ? "voided" : r.result === "refused" ? "refused" : r.result ?? "pending";
 const row = (r) => {
   const f = (k) => r.steps.find((s) => s.kind === k);
-  return { job: r.id, scenario: r.scenario, inam: f("trust")?.decision ?? "", amount: `${r.job.amount} ${r.job.currency}`, paypal: f("held")?.authorizationId ?? (f("hold_created")?.orderId ?? "—"), receipt: f("verified")?.receiptId?.slice(0, 18) ?? (f("rejected")?.code ?? "—"), result: status(r) };
+  return { job: r.id, scenario: r.scenario, rail: X(r) ? "USDC" : "PayPal", inam: f("trust")?.decision ?? "", amount: `${r.job.amount} ${r.job.currency}`, ref: f("held")?.ref ?? (f("hold_created")?.holdRef ?? "—"), receipt: f("verified")?.receiptId?.slice(0, 18) ?? (f("rejected")?.code ?? "—"), result: status(r) };
 };
 const grid = agGrid.createGrid(gridEl, {
   columnDefs: [
     { field: "scenario", width: 110 },
+    { field: "rail", width: 90 },
     { field: "inam", headerName: "INAM", width: 90 },
     { field: "amount", width: 100 },
-    { field: "paypal", headerName: "PayPal ref", flex: 1, minWidth: 120 },
+    { field: "ref", headerName: "Payment ref", flex: 1, minWidth: 120 },
     { field: "receipt", headerName: "Receipt / refusal", flex: 1, minWidth: 120 },
     { field: "result", width: 105, cellRenderer: (p) => `<span class="pill ${p.value}">${p.value}</span>` },
   ],
@@ -154,10 +162,10 @@ function render() {
     const li = document.createElement("li");
     li.className = s.kind === "trust" && s.decision === "deny" ? "k-refused" : s.kind === "trust" && s.decision === "escrow" ? "k-held" : `k-${s.kind}`;
     li.innerHTML = `<span class="dot"></span><div><div class="step-title"></div><div class="step-detail"></div>${s.note ? '<div class="note"></div>' : ""}</div>`;
-    li.querySelector(".step-title").textContent = TITLES[s.kind](s);
-    li.querySelector(".step-detail").textContent = DETAIL[s.kind](s);
+    li.querySelector(".step-title").textContent = TITLES[s.kind](s, r);
+    li.querySelector(".step-detail").textContent = DETAIL[s.kind](s, r);
     if (s.note) li.querySelector(".note").textContent = s.note;
-    if (s.kind === "hold_created" && !r.steps.some((x) => x.kind === "held") && STATE.live) {
+    if (s.kind === "hold_created" && s.approveUrl && !r.steps.some((x) => x.kind === "held") && STATE.live) {
       const a = document.createElement("a"); a.className = "approve"; a.href = s.approveUrl; a.textContent = "Approve the hold in PayPal sandbox";
       li.lastElementChild.appendChild(a);
     }
@@ -167,15 +175,20 @@ function render() {
 let STATE = {};
 fetch("/api/state").then((r) => r.json()).then((s) => {
   STATE = s;
-  document.getElementById("meta").innerHTML = `<span>PayPal <b>${s.live ? "sandbox" : "stand-in (no keys)"}</b></span><span>AI <b>${s.ai}</b></span><span>Registry <b>${s.registry}</b></span>`;
+  document.getElementById("meta").innerHTML = `<span>PayPal <b>${s.live ? "sandbox" : "stand-in (no keys)"}</b></span><span>USDC <b>${s.liveUsdc ? `Base Sepolia (${s.usdcBuyer})` : "stand-in facilitator (no keys)"}</b></span><span>AI <b>${s.ai}</b></span><span>Registry <b>${s.registry}</b></span>`;
   for (const r of s.runs) runs.set(r.id, r);
   latest = location.hash.slice(1) || s.runs.at(-1)?.id || null;
   render();
 });
 new EventSource("/events").onmessage = (e) => { const r = JSON.parse(e.data); runs.set(r.id, r); latest ??= r.id; render(); };
+let RAIL = "paypal";
+document.querySelectorAll(".rail button").forEach((b) => b.addEventListener("click", () => {
+  RAIL = b.dataset.rail;
+  document.querySelectorAll(".rail button").forEach((x) => x.setAttribute("aria-pressed", String(x === b)));
+}));
 document.querySelectorAll(".runs button").forEach((b) => b.addEventListener("click", async () => {
   b.disabled = true;
-  try { const r = await (await fetch(`/api/run?scenario=${b.dataset.s}`, { method: "POST" })).json(); latest = r.id; runs.set(r.id, r); render(); }
+  try { const r = await (await fetch(`/api/run?scenario=${b.dataset.s}&rail=${RAIL}`, { method: "POST" })).json(); latest = r.id; runs.set(r.id, r); render(); }
   finally { b.disabled = false; }
 }));
 </script>

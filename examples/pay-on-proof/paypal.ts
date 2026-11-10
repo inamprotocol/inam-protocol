@@ -4,6 +4,8 @@
  *
  * `fetchImpl` is injectable so tests run against a stand-in (mockPayPal below). */
 
+import type { Job, Rail } from "./payOnProof.js";
+
 export interface PayPalConfig {
   clientId: string;
   clientSecret: string;
@@ -107,6 +109,22 @@ export class PayPal {
   async getOrder(orderId: string): Promise<any> {
     return this.call("GET", `/v2/checkout/orders/${encodeURIComponent(orderId)}`);
   }
+}
+
+/** PayPal as a pay-on-proof rail: hold = AUTHORIZE order, confirm = authorize, then capture or void. */
+export class PayPalRail implements Rail {
+  readonly name = "paypal";
+  constructor(private pp: PayPal) {}
+  async hold(job: Job, urls: { returnUrl: string; cancelUrl: string }) {
+    const h = await this.pp.createHold({ jobId: job.jobId, description: `${job.capability}: ${job.request}`, amount: job.amount, currency: job.currency, payeeEmail: job.payeeEmail, ...urls });
+    return { holdRef: h.orderId, approveUrl: h.approveUrl };
+  }
+  async confirm(orderId: string) {
+    const a = await this.pp.authorize(orderId);
+    return { ref: a.authorizationId, amount: a.amount, currency: a.currency, expiresAt: a.expiresAt };
+  }
+  capture(ref: string, note: string) { return this.pp.capture(ref, note); }
+  void(ref: string) { return this.pp.void(ref); }
 }
 
 /** Stand-in for the sandbox with the documented response shapes, for tests and offline demos.

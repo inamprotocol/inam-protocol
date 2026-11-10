@@ -40,20 +40,20 @@ async function ask(prompt: string, maxTokens = 300): Promise<string | null> {
 export async function summarize(request: string): Promise<string> {
   return (
     (await ask(`${request}\nAnswer in at most 3 short sentences, plain text.`).catch(() => null)) ??
-    "An agent that pays before delivery can be paid for nothing. Holding the PayPal payment until a signed receipt matches what was delivered means a bad delivery costs the payer nothing. The receipt then becomes portable proof of the seller's track record."
+    "An agent that pays before delivery can be paid for nothing. Holding the payment until a signed receipt matches what was delivered means a bad delivery costs the payer nothing. The receipt then becomes portable proof of the seller's track record."
   );
 }
 
 const FALLBACK: Record<Step["kind"], (s: any) => string> = {
   trust: (s) => (s.decision === "deny" ? "This seller has no INAM record, so there is nothing to trust yet." : `The seller checks out (${s.decision}); payment will still wait for proof.`),
-  refused: () => "Refused before any PayPal call: no money was requested or held.",
-  hold_created: () => "PayPal order created. The owner approves once; the money is held, not moved.",
-  held: (s) => `${s.amount} ${s.currency} is on hold in PayPal. The seller can see the money exists but cannot take it.`,
+  refused: () => "Refused before any payment call: no money was requested or held.",
+  hold_created: (s) => (s.rail === "x402" ? "The buyer signed a USDC payment and kept it; nothing is sent until the work checks out." : "PayPal order created. The owner approves once; the money is held, not moved."),
+  held: (s) => `${s.amount} ${s.currency} is on hold. The seller can see the money exists but cannot take it.`,
   delivered: () => "Work delivered. Comparing what arrived with what the seller's receipt claims.",
   verified: () => "The receipt matches the delivery, so the buyer countersigned it.",
   captured: () => "Captured: the seller is paid against a verified receipt.",
   rejected: (s) => `Refused to countersign (${s.code}): the receipt does not match what was delivered or held.`,
-  voided: () => "Hold voided. The payer was never charged.",
+  voided: () => "Hold released. The payer was never charged.",
 };
 
 /** One sentence for the owner about a step. */
