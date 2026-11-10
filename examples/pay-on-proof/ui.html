@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Pay on Proof · INAM × PayPal</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Public+Sans:wght@400;500;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/ag-grid-community@32.3.3/dist/ag-grid-community.min.js"></script>
+<style>
+/* INAM site palette: cool neutrals, oxblood accent; PayPal states in semantic colors */
+:root {
+  --bg: #ffffff; --bg-2: #f4f5f7; --ink: #14161b; --ink-dim: #4a505c; --ink-faint: #7b8290; --line: #dde1e7;
+  --accent: #7a2e2e; --accent-soft: #f5e8e8; --ok: #1f7a4d; --ok-soft: #e4f3ea; --bad: #a3261e; --bad-soft: #fbe9e7; --hold: #8a5a00; --hold-soft: #fbf1dc;
+  --sans: "Public Sans", -apple-system, "Segoe UI", system-ui, sans-serif; --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root {
+  --bg: #0d0e11; --bg-2: #16181d; --ink: #e6e8ec; --ink-dim: #a2a8b5; --ink-faint: #6b7280; --line: #262a32;
+  --accent: #d98686; --accent-soft: #241616; --ok: #5cc28d; --ok-soft: #12261b; --bad: #ef8a80; --bad-soft: #2a1513; --hold: #e0b45c; --hold-soft: #2a2110;
+} }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.55 var(--sans); padding: 0 max(16px, env(safe-area-inset-left)); }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 28px 0 60px; display: grid; gap: 28px; }
+header { display: grid; gap: 6px; }
+.eyebrow { font: 600 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 0; font-size: clamp(26px, 4vw, 38px); line-height: 1.15; text-wrap: balance; }
+h2 { margin: 0 0 10px; font-size: 17px; }
+.lede { margin: 0; color: var(--ink-dim); max-width: 70ch; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 18px; font: 12px var(--mono); color: var(--ink-faint); }
+.meta b { color: var(--ink-dim); font-weight: 500; }
+.runs { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.runs button { text-align: left; font: inherit; color: inherit; background: var(--bg-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; cursor: pointer; display: grid; gap: 4px; }
+.runs button:hover, .runs button:focus-visible { border-color: var(--accent); outline: none; }
+.runs button b { font-size: 15px; }
+.runs button span { color: var(--ink-dim); font-size: 13px; }
+.runs button[disabled] { opacity: .5; cursor: progress; }
+.cols { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 28px; align-items: start; }
+@media (max-width: 860px) { .cols { grid-template-columns: 1fr; } }
+.timeline { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.timeline li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.dot { width: 12px; height: 12px; border-radius: 50%; margin-top: 5px; background: var(--ink-faint); }
+.k-trust .dot, .k-verified .dot, .k-captured .dot { background: var(--ok); }
+.k-hold_created .dot, .k-held .dot, .k-delivered .dot { background: var(--hold); }
+.k-refused .dot, .k-rejected .dot, .k-voided .dot { background: var(--bad); }
+.step-title { font-weight: 600; }
+.step-detail { font: 12px/1.5 var(--mono); color: var(--ink-dim); overflow-wrap: anywhere; }
+.note { color: var(--ink); font-size: 14px; margin-top: 2px; }
+.note::before { content: "AI · "; color: var(--accent); font: 600 11px var(--mono); }
+.empty { color: var(--ink-faint); padding: 14px 0; }
+.pill { display: inline-block; font: 600 11px var(--mono); letter-spacing: .04em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; }
+.pill.captured { background: var(--ok-soft); color: var(--ok); }
+.pill.voided, .pill.refused { background: var(--bad-soft); color: var(--bad); }
+.pill.pending { background: var(--hold-soft); color: var(--hold); }
+.approve { display: inline-block; margin-top: 6px; background: var(--accent); color: #fff; padding: 7px 14px; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 14px; }
+#grid { height: 330px; }
+.ag-theme-quartz, .ag-theme-quartz-dark { --ag-font-family: var(--sans); --ag-font-size: 13px; --ag-background-color: var(--bg); --ag-foreground-color: var(--ink); --ag-header-background-color: var(--bg-2); --ag-border-color: var(--line); --ag-row-border-color: var(--line); }
+.how { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; counter-reset: s; }
+.how div { border-top: 2px solid var(--line); padding-top: 8px; font-size: 14px; color: var(--ink-dim); }
+.how div::before { counter-increment: s; content: counter(s); font: 600 12px var(--mono); color: var(--accent); display: block; }
+.how b { color: var(--ink); }
+footer { font-size: 13px; color: var(--ink-faint); }
+a { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="eyebrow">INAM × PayPal · pay on proof</span>
+    <h1>An AI agent can pay through PayPal only against a verified receipt.</h1>
+    <p class="lede">The owner approves a budget once. PayPal holds it. The buyer agent captures only when the seller's signed INAM receipt matches what was actually delivered and held; anything else voids the hold and the owner is never charged.</p>
+    <div class="meta" id="meta"></div>
+  </header>
+
+  <section class="how" aria-label="How it works">
+    <div><b>Check the seller.</b> INAM identity and track record before any PayPal call. Unknown or revoked: refused.</div>
+    <div><b>Hold, don't pay.</b> PayPal order with intent AUTHORIZE. The owner approves; money is held, not moved.</div>
+    <div><b>Deliver with a receipt.</b> The seller signs an INAM receipt naming the delivery hash and the PayPal authorization.</div>
+    <div><b>Capture on proof.</b> Match: countersign, then capture. Mismatch: void. Code decides, the AI explains.</div>
+  </section>
+
+  <section aria-label="Run a scenario">
+    <h2>Run a scenario</h2>
+    <div class="runs">
+      <button data-s="honest"><b>Honest seller</b><span>Delivers what it signs for. Expect: captured.</span></button>
+      <button data-s="swap"><b>Swapped delivery</b><span>Delivers less than its receipt claims. Expect: voided.</span></button>
+      <button data-s="overclaim"><b>Overcharging receipt</b><span>Receipt claims $120 on a $12 hold. Expect: voided.</span></button>
+      <button data-s="unknown"><b>Unknown seller</b><span>No INAM record. Expect: refused, PayPal never called.</span></button>
+    </div>
+  </section>
+
+  <div class="cols">
+    <section aria-label="Latest run">
+      <h2>Latest run <span id="result"></span></h2>
+      <ol class="timeline" id="timeline"><li class="empty">Pick a scenario above.</li></ol>
+    </section>
+    <section aria-label="Ledger">
+      <h2>Ledger</h2>
+      <div id="grid"></div>
+    </section>
+  </div>
+
+  <footer>Open source (Apache-2.0): <a href="https://github.com/inamprotocol/inam-protocol/tree/main/examples/pay-on-proof">examples/paypal</a> · Receipts verify offline with the INAM SDK · PayPal sandbox only.</footer>
+</div>
+<script>
+const TITLES = {
+  trust: (s) => `INAM check: ${s.decision}`,
+  refused: () => "Refused before PayPal",
+  hold_created: () => "PayPal order created (AUTHORIZE)",
+  held: (s) => `Held ${s.amount} ${s.currency} in PayPal`,
+  delivered: () => "Work delivered, receipt drafted",
+  verified: () => "Receipt verified and countersigned",
+  captured: () => "PayPal capture",
+  rejected: (s) => `Refused to countersign: ${s.code}`,
+  voided: () => "PayPal authorization voided",
+};
+const DETAIL = {
+  trust: (s) => s.reasons.join("; "),
+  refused: (s) => s.reason,
+  hold_created: (s) => `order ${s.orderId}`,
+  held: (s) => `authorization ${s.authorizationId}${s.expiresAt ? `, expires ${s.expiresAt.slice(0, 10)}` : ""}`,
+  delivered: (s) => `received ${s.outputHash.slice(0, 23)}… · receipt claims ${String(s.receiptClaims.outputHash).slice(0, 23)}…, ${s.receiptClaims.amount} ${s.receiptClaims.currency}`,
+  verified: (s) => `receipt ${s.receiptId.slice(0, 22)}… ${s.status}`,
+  captured: (s) => `capture ${s.captureId} ${s.status}`,
+  rejected: (s) => s.reason,
+  voided: (s) => s.status,
+};
+const runs = new Map();
+let latest = null;
+const isDark = matchMedia("(prefers-color-scheme: dark)").matches;
+const gridEl = document.getElementById("grid");
+gridEl.className = isDark ? "ag-theme-quartz-dark" : "ag-theme-quartz";
+const status = (r) => r.result === "captured" ? "captured" : r.result === "voided" ? "voided" : r.result === "refused" ? "refused" : r.result ?? "pending";
+const row = (r) => {
+  const f = (k) => r.steps.find((s) => s.kind === k);
+  return { job: r.id, scenario: r.scenario, inam: f("trust")?.decision ?? "", amount: `${r.job.amount} ${r.job.currency}`, paypal: f("held")?.authorizationId ?? (f("hold_created")?.orderId ?? "—"), receipt: f("verified")?.receiptId?.slice(0, 18) ?? (f("rejected")?.code ?? "—"), result: status(r) };
+};
+const grid = agGrid.createGrid(gridEl, {
+  columnDefs: [
+    { field: "scenario", width: 110 },
+    { field: "inam", headerName: "INAM", width: 90 },
+    { field: "amount", width: 100 },
+    { field: "paypal", headerName: "PayPal ref", flex: 1, minWidth: 120 },
+    { field: "receipt", headerName: "Receipt / refusal", flex: 1, minWidth: 120 },
+    { field: "result", width: 105, cellRenderer: (p) => `<span class="pill ${p.value}">${p.value}</span>` },
+  ],
+  rowData: [], getRowId: (p) => p.data.job, defaultColDef: { sortable: true, resizable: true },
+});
+function render() {
+  grid.setGridOption("rowData", [...runs.values()].reverse().map(row));
+  const r = latest && runs.get(latest);
+  const tl = document.getElementById("timeline");
+  if (!r) return;
+  document.getElementById("result").innerHTML = `<span class="pill ${status(r)}">${status(r)}</span>`;
+  tl.replaceChildren(...r.steps.map((s) => {
+    const li = document.createElement("li");
+    li.className = s.kind === "trust" && s.decision === "deny" ? "k-refused" : s.kind === "trust" && s.decision === "escrow" ? "k-held" : `k-${s.kind}`;
+    li.innerHTML = `<span class="dot"></span><div><div class="step-title"></div><div class="step-detail"></div>${s.note ? '<div class="note"></div>' : ""}</div>`;
+    li.querySelector(".step-title").textContent = TITLES[s.kind](s);
+    li.querySelector(".step-detail").textContent = DETAIL[s.kind](s);
+    if (s.note) li.querySelector(".note").textContent = s.note;
+    if (s.kind === "hold_created" && !r.steps.some((x) => x.kind === "held") && STATE.live) {
+      const a = document.createElement("a"); a.className = "approve"; a.href = s.approveUrl; a.textContent = "Approve the hold in PayPal sandbox";
+      li.lastElementChild.appendChild(a);
+    }
+    return li;
+  }));
+}
+let STATE = {};
+fetch("/api/state").then((r) => r.json()).then((s) => {
+  STATE = s;
+  document.getElementById("meta").innerHTML = `<span>PayPal <b>${s.live ? "sandbox" : "stand-in (no keys)"}</b></span><span>AI <b>${s.ai}</b></span><span>Registry <b>${s.registry}</b></span>`;
+  for (const r of s.runs) runs.set(r.id, r);
+  latest = location.hash.slice(1) || s.runs.at(-1)?.id || null;
+  render();
+});
+new EventSource("/events").onmessage = (e) => { const r = JSON.parse(e.data); runs.set(r.id, r); latest ??= r.id; render(); };
+document.querySelectorAll(".runs button").forEach((b) => b.addEventListener("click", async () => {
+  b.disabled = true;
+  try { const r = await (await fetch(`/api/run?scenario=${b.dataset.s}`, { method: "POST" })).json(); latest = r.id; runs.set(r.id, r); render(); }
+  finally { b.disabled = false; }
+}));
+</script>
+</body>
+</html>
