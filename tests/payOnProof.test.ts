@@ -6,11 +6,13 @@ import { InamClient, generateKeypair, generateSecp256k1Keypair } from "../sdk-js
 import { PayPal, PayPalRail, mockPayPal } from "../examples/pay-on-proof/paypal.js";
 import { X402Rail, BASE_SEPOLIA, addressOf, domainSeparator, mockFacilitator } from "../examples/pay-on-proof/x402rail.js";
 import { openJob, settleJob, sellerDeliver, type Job, type Rail, type Step } from "../examples/pay-on-proof/payOnProof.js";
+import { BraintreeRail, mockBraintree } from "../examples/pay-on-proof/braintree.js";
 
 // examples/pay-on-proof: money moves only against a countersigned INAM receipt, on either rail.
 const RAILS = {
   paypal: { currency: "USD", refPrefix: "paypal:", capture: "/capture" },
   usdc: { currency: "USDC", refPrefix: "x402:eip155:84532:0x", capture: "/settle" },
+  braintree: { currency: "USD", refPrefix: "braintree:", capture: "captureTransaction" },
 } as const;
 
 let server: http.Server;
@@ -37,6 +39,10 @@ describe.each(Object.keys(RAILS) as (keyof typeof RAILS)[])("pay-on-proof on %s"
       const mock = mockPayPal();
       calls = mock.calls;
       rail = new PayPalRail(new PayPal({ clientId: "id", clientSecret: "secret", fetchImpl: mock.impl }));
+    } else if (railName === "braintree") {
+      const mock = mockBraintree();
+      calls = mock.calls;
+      rail = new BraintreeRail({ publicKey: "pub", privateKey: "priv", fetchImpl: mock.impl });
     } else {
       const mock = mockFacilitator();
       calls = mock.calls;
@@ -100,9 +106,9 @@ describe.each(Object.keys(RAILS) as (keyof typeof RAILS)[])("pay-on-proof on %s"
   });
 });
 
-it("one reputation across rails: the seller's two honest jobs (USD via PayPal, USDC via x402) both count", async () => {
+it("one reputation across rails: the seller's honest jobs on every rail (PayPal, USDC via x402, Braintree) all count", async () => {
   const rep = await buyer.getReputation(seller.did);
-  expect(rep.components.finalizedReceipts).toBe(2);
+  expect(rep.components.finalizedReceipts).toBe(Object.keys(RAILS).length);
 });
 
 it("x402 EIP-712 domain matches Base Sepolia USDC's on-chain DOMAIN_SEPARATOR()", () => {

@@ -84,7 +84,7 @@ a { color: var(--accent); }
 
   <section aria-label="Run a scenario">
     <h2>Run a scenario</h2>
-    <div class="rail" role="group" aria-label="Payment rail"><button data-rail="paypal" aria-pressed="true">PayPal</button><button data-rail="usdc" aria-pressed="false">USDC (x402)</button></div>
+    <div class="rail" role="group" aria-label="Payment rail"><button data-rail="paypal" aria-pressed="true">PayPal</button><button data-rail="usdc" aria-pressed="false">USDC (x402)</button><button data-rail="braintree" aria-pressed="false">Braintree</button></div>
     <div class="runs">
       <button data-s="honest"><b>Honest seller</b><span>Delivers what it signs for. Expect: captured.</span></button>
       <button data-s="swap"><b>Swapped delivery</b><span>Delivers less than its receipt claims. Expect: voided.</span></button>
@@ -104,20 +104,21 @@ a { color: var(--accent); }
     </section>
   </div>
 
-  <footer>Open source (Apache-2.0): <a href="https://github.com/inamprotocol/inam-protocol/tree/main/examples/pay-on-proof">examples/paypal</a> · Receipts verify offline with the INAM SDK · PayPal sandbox and Base Sepolia only.</footer>
+  <footer>Open source (Apache-2.0): <a href="https://github.com/inamprotocol/inam-protocol/tree/main/examples/pay-on-proof">examples/pay-on-proof</a> · Receipts verify offline with the INAM SDK · PayPal and Braintree sandboxes, Base Sepolia only.</footer>
 </div>
 <script>
 const X = (r) => r.rail === "usdc";
+const B = (r) => r.rail === "braintree";
 const TITLES = {
   trust: (s) => `INAM check: ${s.decision}`,
   refused: () => "Refused before any payment",
-  hold_created: (s, r) => X(r) ? "USDC transfer signed and kept (x402)" : "PayPal order created (AUTHORIZE)",
-  held: (s, r) => `Held ${s.amount} ${s.currency} ${X(r) ? "as an unsent x402 payload" : "in PayPal"}`,
+  hold_created: (s, r) => X(r) ? "USDC transfer signed and kept (x402)" : B(r) ? "Braintree authorization (PayPal wallet)" : "PayPal order created (AUTHORIZE)",
+  held: (s, r) => `Held ${s.amount} ${s.currency} ${X(r) ? "as an unsent x402 payload" : B(r) ? "in Braintree" : "in PayPal"}`,
   delivered: () => "Work delivered, receipt drafted",
   verified: () => "Receipt verified and countersigned",
-  captured: (s, r) => X(r) ? "USDC settled on-chain (x402)" : "PayPal capture",
+  captured: (s, r) => X(r) ? "USDC settled on-chain (x402)" : B(r) ? "Braintree capture (submitted for settlement)" : "PayPal capture",
   rejected: (s) => `Refused to countersign: ${s.code}`,
-  voided: (s, r) => X(r) ? "x402 payload discarded" : "PayPal authorization voided",
+  voided: (s, r) => X(r) ? "x402 payload discarded" : B(r) ? "Braintree authorization voided" : "PayPal authorization voided",
 };
 const DETAIL = {
   trust: (s) => s.reasons.join("; "),
@@ -138,7 +139,7 @@ gridEl.className = isDark ? "ag-theme-quartz-dark" : "ag-theme-quartz";
 const status = (r) => r.result === "captured" ? "captured" : r.result === "voided" ? "voided" : r.result === "refused" ? "refused" : r.result ?? "pending";
 const row = (r) => {
   const f = (k) => r.steps.find((s) => s.kind === k);
-  return { job: r.id, scenario: r.scenario, rail: X(r) ? "USDC" : "PayPal", inam: f("trust")?.decision ?? "", amount: `${r.job.amount} ${r.job.currency}`, ref: f("held")?.ref ?? (f("hold_created")?.holdRef ?? "—"), receipt: f("verified")?.receiptId?.slice(0, 18) ?? (f("rejected")?.code ?? "—"), result: status(r) };
+  return { job: r.id, scenario: r.scenario, rail: X(r) ? "USDC" : B(r) ? "Braintree" : "PayPal", inam: f("trust")?.decision ?? "", amount: `${r.job.amount} ${r.job.currency}`, ref: f("held")?.ref ?? (f("hold_created")?.holdRef ?? "—"), receipt: f("verified")?.receiptId?.slice(0, 18) ?? (f("rejected")?.code ?? "—"), result: status(r) };
 };
 const grid = agGrid.createGrid(gridEl, {
   columnDefs: [
@@ -175,7 +176,7 @@ function render() {
 let STATE = {};
 fetch("/api/state").then((r) => r.json()).then((s) => {
   STATE = s;
-  document.getElementById("meta").innerHTML = `<span>PayPal <b>${s.live ? "sandbox" : "stand-in (no keys)"}</b></span><span>USDC <b>${s.liveUsdc ? `Base Sepolia (${s.usdcBuyer})` : "stand-in facilitator (no keys)"}</b></span><span>AI <b>${s.ai}</b></span><span>Registry <b>${s.registry}</b></span>`;
+  document.getElementById("meta").innerHTML = `<span>PayPal <b>${s.live ? "sandbox" : "stand-in (no keys)"}</b></span><span>USDC <b>${s.liveUsdc ? `Base Sepolia (${s.usdcBuyer})` : "stand-in facilitator (no keys)"}</b></span><span>Braintree <b>${s.liveBraintree ? "sandbox" : "stand-in (no keys)"}</b></span><span>AI <b>${s.ai}</b></span><span>Registry <b>${s.registry}</b></span>`;
   for (const r of s.runs) runs.set(r.id, r);
   latest = location.hash.slice(1) || s.runs.at(-1)?.id || null;
   render();

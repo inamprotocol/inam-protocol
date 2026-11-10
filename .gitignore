@@ -28,3 +28,8 @@ reviews/
 
 # reference-agent private keys written by scripts/seed-reference-agents.ts
 seed-keys*.json
+
+# local secrets (pay-on-proof demo keys etc.)
+.env
+.env.*
+!.env.example

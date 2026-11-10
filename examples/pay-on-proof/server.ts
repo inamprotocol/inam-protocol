@@ -1,3 +1,4 @@
+import "./env.js"; // first: later modules read process.env at import
 import http from "node:http";
 import { readFileSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -6,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { InamClient, generateKeypair, sha256Hex, generateSecp256k1Keypair } from "../../sdk-js/src/index.js";
 import { PayPal, PayPalRail, mockPayPal } from "./paypal.js";
 import { X402Rail, addressOf, mockFacilitator } from "./x402rail.js";
+import { BraintreeRail, mockBraintree } from "./braintree.js";
 import { openJob, settleJob, sellerDeliver, type Job, type Rail, type Step } from "./payOnProof.js";
 import { explain, summarize, aiName } from "./ai.js";
 
@@ -44,8 +46,12 @@ const liveUsdc = !!(process.env.X402_BUYER_PRIVATE_KEY && process.env.X402_SELLE
 const usdc = liveUsdc
   ? new X402Rail({ buyerPrivateKey: process.env.X402_BUYER_PRIVATE_KEY!, payTo: process.env.X402_SELLER_ADDRESS! })
   : new X402Rail({ buyerPrivateKey: Buffer.from(generateSecp256k1Keypair().privateKey).toString("hex"), payTo: addressOf(generateSecp256k1Keypair().privateKey), fetchImpl: mockFacilitator().impl });
-type RailName = "paypal" | "usdc";
-const rails: Record<RailName, Rail> = { paypal: new PayPalRail(paypal), usdc };
+const liveBraintree = !!(process.env.BRAINTREE_PUBLIC_KEY && process.env.BRAINTREE_PRIVATE_KEY);
+const braintree = liveBraintree
+  ? new BraintreeRail({ publicKey: process.env.BRAINTREE_PUBLIC_KEY!, privateKey: process.env.BRAINTREE_PRIVATE_KEY!, merchantAccountId: process.env.BRAINTREE_MERCHANT_ACCOUNT_ID, nonce: process.env.BRAINTREE_NONCE, endpoint: process.env.BRAINTREE_ENDPOINT })
+  : new BraintreeRail({ publicKey: "mock", privateKey: "mock", fetchImpl: mockBraintree().impl });
+type RailName = "paypal" | "usdc" | "braintree";
+const rails: Record<RailName, Rail> = { paypal: new PayPalRail(paypal), usdc, braintree };
 
 type Scenario = "honest" | "swap" | "overclaim" | "unknown";
 interface Run { id: string; scenario: Scenario; rail: RailName; job: Job; holdRef?: string; result?: string; steps: (Step & { at: string; note?: string })[] }
@@ -99,7 +105,10 @@ async function settle(r: Run) {
 async function start(scenario: Scenario, rail: RailName): Promise<Run> {
   const jobId = `job-${Date.now().toString(36)}-${sha256Hex(Math.random().toString()).slice(0, 6)}`;
   const target = scenario === "unknown" ? new InamClient(inamUrl, generateKeypair()).did : seller.did;
-  const money = rail === "usdc" ? { amount: process.env.X402_AMOUNT ?? "12.00", currency: "USDC" } : { amount: "12.00", currency: "USD" };
+  const money =
+    rail === "usdc" ? { amount: process.env.X402_AMOUNT ?? "12.00", currency: "USDC" }
+    : rail === "braintree" ? { amount: "12.00", currency: process.env.BRAINTREE_CURRENCY ?? "USD" } // the sandbox merchant account's currency
+    : { amount: "12.00", currency: "USD" };
   const r: Run = { id: jobId, scenario, rail, job: { jobId, capability: "text.summary", request: REQUEST, ...money, seller: target }, steps: [] };
   runs.set(jobId, r);
   push(r);
@@ -122,7 +131,7 @@ http
     try {
       if (req.method === "GET" && url.pathname === "/") return send(res, 200, readFileSync(path.join(here, "ui.html"), "utf8"), "text/html; charset=utf-8");
       if (req.method === "GET" && url.pathname === "/api/state")
-        return send(res, 200, JSON.stringify({ live, liveUsdc, usdcBuyer: usdc.buyer, ai: aiName(), registry: process.env.INAM_URL ?? "in-process (local)", buyer: buyer.did, seller: seller.did, runs: [...runs.values()] }));
+        return send(res, 200, JSON.stringify({ live, liveUsdc, liveBraintree, usdcBuyer: usdc.buyer, ai: aiName(), registry: process.env.INAM_URL ?? "in-process (local)", buyer: buyer.did, seller: seller.did, runs: [...runs.values()] }));
       if (req.method === "GET" && url.pathname === "/events") {
         res.writeHead(200, { "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive" });
         res.write(": hi\n\n");
@@ -134,7 +143,7 @@ http
         const s = url.searchParams.get("scenario") as Scenario;
         const rail = (url.searchParams.get("rail") ?? "paypal") as RailName;
         if (!["honest", "swap", "overclaim", "unknown"].includes(s)) return send(res, 400, JSON.stringify({ error: "scenario must be honest, swap, overclaim or unknown" }));
-        if (!["paypal", "usdc"].includes(rail)) return send(res, 400, JSON.stringify({ error: "rail must be paypal or usdc" }));
+        if (!["paypal", "usdc", "braintree"].includes(rail)) return send(res, 400, JSON.stringify({ error: "rail must be paypal, usdc or braintree" }));
         const r = await start(s, rail);
         return send(res, 200, JSON.stringify(r));
       }
