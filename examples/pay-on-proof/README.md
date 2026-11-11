@@ -2,6 +2,8 @@
 
 An AI agent may move money only against a verified INAM receipt. PayPal or Braintree (fiat) or USDC via x402 (crypto), same receipt, same reputation.
 
+**Demo video (2:53):** https://www.youtube.com/watch?v=pSwZjMAMQXs
+
 **Verified live on the Braintree sandbox (2026-11-10):** the honest run authorized 12.00 EUR and captured it against a finalized receipt; the swapped-delivery and overcharging runs authorized and then voided (MISMATCH); the unknown seller was refused before Braintree was called. A first run with the wrong currency configured authorized EUR against a USD job and was voided by the hold check (`HOLD_MISMATCH`), which is the guard doing its job.
 
 An agent that pays up front can be paid for nothing: the seller takes the money and delivers less, something else, or nothing. The usual fix, giving the agent payment credentials and hoping its judgment holds, puts those credentials in the model's context. This demo is for developers wiring agents to real payment rails and for owners who want a budget that an agent can spend but cannot lose. The owner approves a hold once. The money moves only when the seller's signed receipt matches what the buyer actually received and what the rail actually holds. Anything else releases the hold. The receipt is a signed, content-addressed INAM record, so it is portable: anyone can verify it offline, and it becomes part of the seller's reputation, whichever rail carried the money.
