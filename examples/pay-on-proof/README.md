@@ -8,7 +8,7 @@ An agent that pays up front can be paid for nothing: the seller takes the money 
 
 ```
  1. checkTrust(seller)            INAM: allow / escrow / deny
-        | deny -> stop. No PayPal or x402 call is made.
+        | deny -> stop. No payment rail is called.
         v
  2. Hold                          PayPal:    Orders v2, intent AUTHORIZE, owner approves once
         |                         Braintree: authorizePaymentMethod (PayPal wallet test nonce)
@@ -24,15 +24,17 @@ An agent that pays up front can be paid for nothing: the seller takes the money 
 
 ## Quick start
 
-From the repo root:
+Needs Node.js 22.13 or newer (the in-process registry uses the built-in `node:sqlite`). From the repo root, in any shell (bash, zsh, PowerShell, cmd):
 
 ```
 npm install
-cd sdk-js && npm install && cd ..        # the demo imports sdk-js/src, which has its own dependencies
+npm install --prefix sdk-js
 npx tsx examples/pay-on-proof/server.ts
 ```
 
-Open http://localhost:8787. With no keys set, a PayPal stand-in answers with the documented response shapes and every order counts as approved, an in-process INAM registry is started in a temp directory, and the AI notes fall back to fixed text. Nothing touches the production registry or real money.
+The second install is needed because the demo imports `sdk-js/src`, which has its own dependencies. Port 8787 taken? Set `PORT` first: `PORT=8790 npx tsx examples/pay-on-proof/server.ts` (macOS/Linux), `$env:PORT=8790; npx tsx examples/pay-on-proof/server.ts` (PowerShell), or `set PORT=8790` then the same command (cmd).
+
+Open http://localhost:8787. With no keys set, PayPal, Braintree and USDC stand-ins answer with the documented response shapes and every order counts as approved, an in-process INAM registry is started in a temp directory, and the AI notes fall back to fixed text. Nothing touches the production registry or real money.
 
 Pick the rail with the PayPal / USDC (x402) / Braintree toggle above the scenario buttons (the API takes `POST /api/run?scenario=...&rail=paypal|usdc|braintree`).
 
@@ -82,7 +84,7 @@ Braintree is a PayPal service, and its sandbox signup asks for no tax ID, so it 
 | Overcharging receipt | Receipt claims 120.00 on a 12.00 hold | `MISMATCH`, voided | The amount and currency are checked against what the rail holds, not what the seller claims. |
 | Unknown seller | Has no INAM record | Refused at step 1 | A deny stops the job before any payment API is called. No hold is created. |
 
-The same four run on either rail.
+The same four run on every rail.
 
 ## Security model
 
@@ -99,7 +101,7 @@ The same four run on either rail.
 npx vitest run tests/payOnProof.test.ts
 ```
 
-Runs the four scenarios against an in-process registry and the PayPal stand-in, and asserts which PayPal endpoints were and were not called.
+Runs the four scenarios on each rail against an in-process registry and the rail stand-ins, and asserts which rail endpoints were and were not called.
 
 ## API calls used
 
