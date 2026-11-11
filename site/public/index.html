@@ -482,6 +482,7 @@ const reputation = await client.getReputation(profile.id);</code></pre>
     </figure>
     <div style="font-size:14px;margin-top:16px;overflow-wrap:anywhere">
       <p><strong>How the numbers are made.</strong> The chart has three kinds of days, each drawn differently so they are never mixed up.</p>
+      <p><strong>Why the days before 10 Nov are estimates.</strong> The Worker had no usage counter before 10 Nov 2026, so nothing counted sessions on those days. The only record is Cloudflare's HTTP analytics for the endpoint, which logs responses, not sessions. Sessions are inferred from one response that each session produces, as the table below describes. That is an indirect measure, so those days are marked estimated in the data and drawn lighter, and they can be off in both directions (see Limits).</p>
       <table class="data">
         <thead><tr><th>Days</th><th>Drawn</th><th>What is counted</th><th>Source</th></tr></thead>
         <tbody>

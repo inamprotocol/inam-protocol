@@ -162,6 +162,8 @@ Daily sessions on `https://api.inamprotocol.org/mcp`, stacked by client (Claude 
 
 **How the numbers are made.** The chart has three kinds of days, and each is drawn differently so they are never mixed up.
 
+**Why the days before 2026-11-10 are estimates.** The Worker had no usage counter before 2026-11-10, so nothing counted sessions on those days. The only record is Cloudflare's HTTP analytics for the endpoint, which logs responses, not sessions. Sessions are inferred from one response that each session produces, as the table describes. That is an indirect measure, so those days are marked estimated in the data and drawn lighter, and they can be off in both directions (see Limits).
+
 | Days | Drawn | What is counted | Source |
 |---|---|---|---|
 | 2026-10-11 to 2026-11-09 | lighter bars, "estimated" | sessions, estimated | Cloudflare HTTP analytics: 202 responses on `/mcp` per UTC day and client family. A 2025-era MCP client sends one `notifications/initialized` per session and gets 202. In this period clients that tried the 2026-07-28 protocol first got 400 and fell back to `initialize`, so they were counted too. |
