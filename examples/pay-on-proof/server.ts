@@ -111,6 +111,7 @@ async function start(scenario: Scenario, rail: RailName): Promise<Run> {
     : { amount: "12.00", currency: "USD" };
   const r: Run = { id: jobId, scenario, rail, job: { jobId, capability: "text.summary", request: REQUEST, ...money, seller: target }, steps: [] };
   runs.set(jobId, r);
+  if (runs.size > 200) runs.delete(runs.keys().next().value!); // ponytail: public demo, keep memory bounded
   push(r);
   const hold = await openJob(r.job, ctxFor(r)).catch((e) => { r.result = `error: ${(e as Error).message}`; push(r); return null; });
   if (!hold) { r.result ??= "refused"; push(r); return r; }
