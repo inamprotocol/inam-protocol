@@ -478,8 +478,21 @@ const reputation = await client.getReputation(profile.id);</code></pre>
     </table>
     <figure style="margin:24px 0 0">
       <img src="https://api.inamprotocol.org/v1/usage/mcp.svg" width="640" height="236" loading="lazy" style="max-width:100%;height:auto" alt="Daily sessions on the hosted INAM MCP endpoint, stacked by client: Claude Desktop, Claude Code, Claude remote, claude.ai and other, with tool calls">
-      <figcaption style="font-size:13px;color:var(--ink-dim);margin-top:6px">Hosted MCP usage, live: daily sessions by client, most of them from Claude, and tool calls. Lighter bars before 10 Nov 2026 are estimated from Cloudflare request logs; dashed bars on 10-11 Nov counted tools/list calls, not sessions, and are left out of the totals. Counts only, no IPs or arguments are stored, and a session is not a person. Data: <a class="mono" href="https://api.inamprotocol.org/v1/usage/mcp">/v1/usage/mcp</a>.</figcaption>
+      <figcaption style="font-size:13px;color:var(--ink-dim);margin-top:6px">Hosted MCP usage, live: daily sessions by client, most of them from Claude, and tool calls. A session is not a person. Data: <a class="mono" href="https://api.inamprotocol.org/v1/usage/mcp?days=90">/v1/usage/mcp</a>.</figcaption>
     </figure>
+    <div style="font-size:14px;margin-top:16px;overflow-wrap:anywhere">
+      <p><strong>How the numbers are made.</strong> The chart has three kinds of days, each drawn differently so they are never mixed up.</p>
+      <table class="data">
+        <thead><tr><th>Days</th><th>Drawn</th><th>What is counted</th><th>Source</th></tr></thead>
+        <tbody>
+          <tr><td>11 Oct to 9 Nov 2026</td><td>lighter bars</td><td>sessions, estimated</td><td>Cloudflare HTTP analytics: 202 responses on /mcp per UTC day and client family. A 2025-era MCP client sends one notifications/initialized per session and gets 202. Clients that tried the 2026-07-28 protocol first got 400 then and fell back to initialize, so they were counted too.</td></tr>
+          <tr><td>10 and 11 Nov 2026</td><td>dashed bars</td><td>tools/list calls, not sessions</td><td>First version of the Worker's counter. A client can list the tools more than once per session, so these bars run higher. Kept in the data (listCounted), left out of totals and client shares.</td></tr>
+          <tr><td>from 12 Nov 2026</td><td>solid bars</td><td>sessions, counted</td><td>The Worker counts the request that opens a session: initialize, or server/discover from 2026-07-28 clients, which send no initialize.</td></tr>
+        </tbody>
+      </table>
+      <p><strong>How to check them.</strong> The <a class="mono" href="https://api.inamprotocol.org/v1/usage/mcp?days=90">JSON</a> returns every day with its estimated and listCounted flags and the definitions. The counting code is <a class="mono" href="https://github.com/inamprotocol/inam-protocol/blob/main/worker/src/mcpUsage.ts">worker/src/mcpUsage.ts</a>; it stores counts per day and coarse client family only, never an IP, a tool argument or a raw User-Agent. Every estimated number is in <a class="mono" href="https://github.com/inamprotocol/inam-protocol/blob/main/worker/migration-backfill-mcp-usage.sql">migration-backfill-mcp-usage.sql</a>, produced from Cloudflare by <a class="mono" href="https://github.com/inamprotocol/inam-protocol/blob/main/scripts/mcp-usage-from-cloudflare.py">mcp-usage-from-cloudflare.py</a>; a re-run on 11 Nov reproduced 2 and 3 Nov exactly.</p>
+      <p><strong>Limits.</strong> Cloudflare keeps these analytics for about 31 days, so the estimate starts on 11 Oct and its oldest days can no longer be re-derived; its analytics can be sampled, so a re-run may differ slightly. The estimate can run slightly high, since any other client notification also gets 202. Tool calls were not recorded before 10 Nov. Client families come from the User-Agent, which a client can set to anything.</p>
+    </div>
   </section>
 
   <section>
