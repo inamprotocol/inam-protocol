@@ -983,11 +983,11 @@ paths:
       operationId: mcpUsage
       summary: Hosted MCP usage per day (optional)
       description: >-
-        Aggregate counts for the hosted MCP endpoint (/mcp): connects (tools/list, once per client session) and tool
+        Aggregate counts for the hosted MCP endpoint (/mcp): connects (sessions: initialize, or server/discover from 2026-07-28 clients) and tool
         calls of inam_* tools, per UTC day, by tool and by coarse client family from the User-Agent. No IP, tool
-        argument or raw User-Agent is stored. A connect is a session, not a person. Days marked estimated predate the
+        argument or raw User-Agent is stored. A session is not a person. Days marked estimated predate the
         counter: their connects are sessions estimated from request logs, and tool calls were not recorded. Cached up
-        to 5 minutes.
+        to 5 minutes. Days marked listCounted (2026-11-10, 2026-11-11) counted tools/list calls, not sessions.
       security: []
       parameters:
         - { name: days, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 90, default: 30 } }

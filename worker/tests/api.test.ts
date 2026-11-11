@@ -2766,12 +2766,16 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
       await waitOnExecutionContext(ctx);
     };
     const before = (await (await worker.fetch(new Request("http://worker.test/v1/usage/mcp?days=1"), env, createExecutionContext())).json()) as any;
-    await send("tools/list", {}, "claude-code/2.1.317 (claude-desktop, agent-sdk/0.3.317)");
+    const desktop = "claude-code/2.1.317 (claude-desktop, agent-sdk/0.3.317)";
+    await send("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } }, desktop);
+    await send("tools/list", {}, desktop); // recorded as "list", not a session
     await send("tools/call", { name: "inam_hash_content", arguments: { content: "secret text" } }, "Claude-User");
     await send("tools/call", { name: "not_ours", arguments: {} }, "Claude-User");
     const after = (await (await worker.fetch(new Request("http://worker.test/v1/usage/mcp?days=1"), env, createExecutionContext())).json()) as any;
     expect(after.days).toHaveLength(1);
     expect(after.days[0].connects - before.days[0].connects).toBe(1);
+    const metrics = (await env.DB.prepare("SELECT DISTINCT metric FROM mcp_usage").all()).results.map((r: any) => r.metric);
+    expect(metrics).toEqual(expect.arrayContaining(["session:init", "list"]));
     expect(after.days[0].toolCalls - before.days[0].toolCalls).toBe(1);
     expect(after.byTool.inam_hash_content - (before.byTool.inam_hash_content ?? 0)).toBe(1);
     expect(after.byClient["claude-desktop"] - (before.byClient["claude-desktop"] ?? 0)).toBe(1);
@@ -2781,7 +2785,17 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     expect(rows).not.toContain("not_ours");
     const svg = await worker.fetch(new Request("http://worker.test/v1/usage/mcp.svg"), env, createExecutionContext());
     expect(svg.headers.get("content-type")).toContain("image/svg+xml");
-    expect(await svg.text()).toMatch(/^<svg[\s\S]*connects[\s\S]*<\/svg>$/);
+    expect(await svg.text()).toMatch(/^<svg[\s\S]*sessions[\s\S]*<\/svg>$/);
+  });
+
+  it("flags tools/list-counted days (connect) and keeps them out of the client totals", async () => {
+    const day = new Date(Date.now() - 4 * 86_400_000).toISOString().slice(0, 10);
+    await env.DB.prepare("INSERT INTO mcp_usage (day, metric, client, count) VALUES (?, 'connect', 'claude-desktop', 500)").bind(day).run();
+    const u = (await (await worker.fetch(new Request("http://worker.test/v1/usage/mcp?days=7"), env, createExecutionContext())).json()) as any;
+    expect(u.days.find((x: any) => x.day === day)).toMatchObject({ connects: 500, listCounted: true });
+    expect(u.byClient["claude-desktop"] ?? 0).toBeLessThan(500);
+    const svg = await (await worker.fetch(new Request("http://worker.test/v1/usage/mcp.svg?days=7"), env, createExecutionContext())).text();
+    expect(svg).toContain("not sessions");
   });
 
   it("marks backfilled (connect_est) days as estimated and draws them with the Claude share", async () => {
