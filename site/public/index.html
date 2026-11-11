@@ -482,7 +482,14 @@ const reputation = await client.getReputation(profile.id);</code></pre>
     </figure>
     <div style="font-size:14px;margin-top:16px;overflow-wrap:anywhere">
       <p><strong>How the numbers are made.</strong> The chart has three kinds of days, each drawn differently so they are never mixed up.</p>
-      <p><strong>Why the days before 10 Nov are estimates.</strong> The Worker had no usage counter before 10 Nov 2026, so nothing counted sessions on those days. The only record is Cloudflare's HTTP analytics for the endpoint, which logs responses, not sessions. Sessions are inferred from one response that each session produces, as the table below describes. That is an indirect measure, so those days are marked estimated in the data and drawn lighter, and they can be off in both directions (see Limits).</p>
+      <p><strong>Why the days before 10 Nov are estimates, and what they are inferred from.</strong> The Worker had no usage counter before 10 Nov 2026, so no system counted sessions on those days. The only record of the traffic is Cloudflare's, which sits in front of the Worker and logs every HTTP request, but it records requests and responses, not sessions. The estimate infers sessions from that log in four steps:</p>
+      <ol>
+        <li><strong>Source.</strong> Cloudflare's GraphQL Analytics API, dataset httpRequestsAdaptiveGroups, for host api.inamprotocol.org and path /mcp, one query per UTC day.</li>
+        <li><strong>The response that marks a session.</strong> In the MCP Streamable HTTP transport, a client opens a session with initialize and then sends exactly one notifications/initialized. A notification gets no JSON-RPC reply, so the server answers it with HTTP 202 Accepted. The initialize itself and every tool call get 200. So the number of 202 responses on /mcp is, to a close approximation, the number of sessions opened.</li>
+        <li><strong>Clients on the newer protocol.</strong> In this period, clients that tried the 2026-07-28 protocol first were answered 400 and then fell back to initialize, so their sessions also produced one 202 each and are included.</li>
+        <li><strong>Client family.</strong> Each row is grouped by User-Agent, mapped to a family (Claude Desktop, Claude remote, Claude Code, claude.ai, other) with the same rules as the live counter. Only the per-family totals are kept.</li>
+      </ol>
+      <p>The result is an indirect measure, so these days are marked estimated in the data and drawn lighter, and the Limits below say how they can be off. From 12 Nov the counter and the Cloudflare log cover the same days, so the estimate can be checked against a direct count for clients that still use initialize.</p>
       <table class="data">
         <thead><tr><th>Days</th><th>Drawn</th><th>What is counted</th><th>Source</th></tr></thead>
         <tbody>

@@ -162,7 +162,14 @@ Daily sessions on `https://api.inamprotocol.org/mcp`, stacked by client (Claude 
 
 **How the numbers are made.** The chart has three kinds of days, and each is drawn differently so they are never mixed up.
 
-**Why the days before 2026-11-10 are estimates.** The Worker had no usage counter before 2026-11-10, so nothing counted sessions on those days. The only record is Cloudflare's HTTP analytics for the endpoint, which logs responses, not sessions. Sessions are inferred from one response that each session produces, as the table describes. That is an indirect measure, so those days are marked estimated in the data and drawn lighter, and they can be off in both directions (see Limits).
+**Why the days before 2026-11-10 are estimates, and what they are inferred from.** The Worker had no usage counter before 2026-11-10, so no system counted sessions on those days. The only record of the traffic is Cloudflare's, which sits in front of the Worker and logs every HTTP request, but it records requests and responses, not sessions. The estimate infers sessions from that log in four steps:
+
+1. **Source.** Cloudflare's GraphQL Analytics API, dataset `httpRequestsAdaptiveGroups`, for host `api.inamprotocol.org` and path `/mcp`, one query per UTC day.
+2. **The response that marks a session.** In the MCP Streamable HTTP transport, a client opens a session with `initialize` and then sends exactly one `notifications/initialized`. A notification gets no JSON-RPC reply, so the server answers it with HTTP `202 Accepted`. The `initialize` itself and every tool call get `200`. So the number of `202` responses on `/mcp` is, to a close approximation, the number of sessions opened.
+3. **Clients on the newer protocol.** In this period, clients that tried the 2026-07-28 protocol first were answered `400` and then fell back to `initialize`, so their sessions also produced one `202` each and are included.
+4. **Client family.** Each row is grouped by User-Agent, which is mapped to a family (`claude-desktop`, `claude-remote`, `claude-code`, `claude-ai`, `other`) with the same rules as the live counter (`clientFamily()` in `worker/src/mcpUsage.ts`). Only the per-family totals are kept.
+
+The result is an indirect measure, so these days are marked `estimated` in the data and drawn lighter, and the Limits below say how they can be off. From 2026-11-12 the counter and the Cloudflare log cover the same days, so the estimate can be checked against a direct count for clients that still use `initialize`.
 
 | Days | Drawn | What is counted | Source |
 |---|---|---|---|
