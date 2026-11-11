@@ -99,6 +99,10 @@ INAM is a receipt layer that works on any payment rail. Every agent checkout tou
 npx tsx examples/payment-rails/demo.ts
 ```
 
+## `pay-on-proof/`
+
+A buyer agent holds the money (PayPal authorize, or a signed but unsubmitted USDC authorization over x402) and captures only when the seller's INAM receipt matches what was delivered and held; anything else voids the hold. Runnable demo with a UI, no keys needed: `npx tsx examples/pay-on-proof/server.ts`. Details in [`pay-on-proof/README.md`](./pay-on-proof/README.md).
+
 ## `verify-receipt-offline.ts`
 
 Checks a receipt's content-addressed id, both Ed25519 signatures and (optionally) an output hash with no registry and no network, in about ten lines (SPEC.md §2, §4.2, §5.4). Walkthrough in [`docs/VERIFIER.md`](../docs/VERIFIER.md). `npx tsx examples/verify-receipt-offline.ts`; test: `tests/verifierExamples.test.ts`, which also runs it against a receipt finalized by an in-process registry.
