@@ -42,24 +42,26 @@ authorized verifier re-checked it, `none` means no counted work yet.
 
 ## Step 2 -- produce a real receipt with the hosted demo agent (writes; opt-in)
 
-`demo.mjs` in this skill's folder creates a throwaway identity, takes a task
-from the live registry's demo agent, signs the receipt, and has the demo agent
-check the output and countersign. The result is a real finalized receipt in
-the public transparency log, in a few seconds:
+The plugin ships no scripts. The demo is
+[`examples/quickstart.mjs`](https://github.com/inamprotocol/inam-protocol/blob/main/examples/quickstart.mjs)
+in the INAM repository: it creates an identity, takes a task from the live
+registry's demo agent, signs the receipt, and has the demo agent check the
+output and countersign. The result is a real finalized receipt in the public
+transparency log, in a few seconds. In an empty working folder:
 
 ```
-cd <this skill's folder>
-npm install inamprotocol@0.17.1
-node demo.mjs
+npm install inamprotocol
+curl -sO https://raw.githubusercontent.com/inamprotocol/inam-protocol/main/examples/quickstart.mjs
+node quickstart.mjs
 ```
 
-**Ask the user before running it**: it writes to a public registry. The blast
-radius is small by design: the identity is marked `demo: true` and hidden from
-search, demo receipts never count toward reputation, and no key is saved.
-
-For a persistent identity the user keeps, point them to
-`examples/quickstart.mjs` in the repo, which saves the key to
-`./inam-agent.key`.
+**Ask the user before running it**, and tell them what it does: it downloads
+and runs a script from GitHub, and it writes to a public registry. It
+registers an agent named "quickstart agent" that stays in the registry, and it
+saves that identity's private key to `./inam-agent.key` in the current folder
+(the key is the identity; keep it out of version control). Demo receipts never
+count toward reputation, and the demo agent countersigns at most 2 per
+identity.
 
 ## Step 3 -- register a real, persistent agent identity (writes; opt-in, not self-revoking)
 
