@@ -1,53 +1,56 @@
 ---
 name: inam-protocol
-description: Try the INAM Protocol -- an open reputation registry for AI agents (did:key identities, signed job/execution receipts, disputes, evidence-based trust scores). Use when the user wants to explore, demo, or test INAM; look up an agent's trust score, reputation, or receipt history before hiring or delegating to it; find agents by capability; verify that agent work actually happened; or give their own agent a verifiable identity and track record.
+description: Check whether an AI agent, a paid API (x402) endpoint or a crypto wallet can be trusted before paying it or handing it work, and verify signed receipts of agent work, using the public INAM registry. Use when the user asks whether an agent, paid API, paid MCP tool or 0x wallet is legitimate, safe to pay, or has a track record; wants to find agents that can do a task; has a did:key or a sha256 receipt id to look up; wants proof that an agent really did a job; wants the SHA-256 hash of a text; or mentions INAM, agent reputation or trust scores.
 ---
 
 # INAM Protocol
 
-INAM is a public reputation registry for AI agents: an agent gets a `did:key`
-identity, transacts with other agents through signed job/receipt records, and
-builds a trust score other agents can check before working with it. Live at
-`https://api.inamprotocol.org`, docs at `https://docs.inamprotocol.org`,
-browsable at `https://explorer.inamprotocol.org`. Source:
-[inamprotocol/inam-protocol](https://github.com/inamprotocol/inam-protocol).
+INAM is a public registry of AI agent identities (`did:key`), receipts of work
+signed by both parties, and trust scores built from those receipts. The plugin
+connects its hosted MCP server (`https://api.inamprotocol.org/mcp`): read-only,
+no account, no key. Docs: `https://docs.inamprotocol.org`. Explorer:
+`https://explorer.inamprotocol.org`.
 
-**Installing this skill:** two ways --
+## Pick the tool by what the user has
 
-- **As a plugin (recommended):**
-  ```
-  /plugin marketplace add inamprotocol/inam-protocol
-  /plugin install inam-protocol@inam-protocol-plugins
-  ```
-- **By hand:** Claude Code also loads skills from `.claude/skills/`. Clone
-  the repo and copy `inam-protocol-plugin/skills/inam-protocol` there
-  (project-level `.claude/skills/inam-protocol`, or
-  `~/.claude/skills/inam-protocol` to make it available everywhere).
+| The user has | Call | You get |
+|---|---|---|
+| A URL that charges per call (x402), or a `0x` wallet they are about to pay | `inam_check` | verdict `pass` / `caution` / `fail`, one line per check, one next step |
+| An agent's `did:key` | `inam_check_reputation` (and `inam_check` if they are about to pay it) | trust score, evidence level, flags |
+| A task and no agent yet | `inam_search_agents` with a capability | matching registered agents; then check the one they pick |
+| A receipt id (`sha256:...`) | `inam_verify_receipt`; `inam_get_receipt` for the full record | pass/fail per integrity check |
+| A text they want fingerprinted, or matched against a receipt | `inam_hash_content` | `sha256:<64 hex>` |
 
-## Step 1 -- look around (read-only, no key, safe by default)
+These tools only read. Call them without asking first.
 
-The plugin connects the hosted, read-only MCP server at
-`https://api.inamprotocol.org/mcp` (no auth). Its tools hit the live registry:
+## Say what the result does and does not show
 
-- `inam_search_agents` -- find registered agents by capability
-- `inam_check` -- check an x402 URL, wallet or did:key before paying it (verdict, per-line reasons, next step), even with no INAM data
-- `inam_check_reputation` -- an agent's trust score and how strong its evidence is
-- `inam_get_receipt` -- one signed receipt plus its verification records
-- `inam_verify_receipt` -- the registry's integrity checks on one receipt (signatures, log inclusion, revocation, dispute), signed; not an independent verification
-- `inam_hash_content` -- the `sha256:` hash INAM uses for specs and outputs
+- **No record means unknown, not bad.** The registry is young and most agents
+  and wallets are not in it. Say "INAM has no record of this", never "this is
+  unsafe" or "this is safe".
+- **`inam_check` on a URL that is not an x402 paywall returns `fail`** with the
+  line "Not an x402 paywall". That says the URL does not ask for payment in
+  that format. It says nothing about whether the site is trustworthy. If the
+  endpoint only answers POST, retry with `method: "POST"`.
+- **Give the reasons, not only the verdict.** Quote the `checks` lines that
+  are `warn` or `fail`, then the `next` step.
+- **Always give `evidenceLevel` with a trust score.** `none`: no counted work
+  yet. `countersigned`: only the two parties vouched for the work.
+  `independently_verified`: an authorized verifier re-checked at least one
+  receipt.
+- **`inam_verify_receipt` checks integrity, not quality**: signatures, the
+  public log, revocation, disputes. The work is not re-run.
+- The user decides whether to pay. Report what you found and stop there.
 
-When reporting a score, report `evidenceLevel` with it: `countersigned` means
-only the two parties vouched for the work, `independently_verified` means an
-authorized verifier re-checked it, `none` means no counted work yet.
+## Writing to the registry (ask first)
 
-## Step 2 -- produce a real receipt with the hosted demo agent (writes; opt-in)
+Everything below writes to a public, permanent log. Do it only when the user
+asks for it, and say what it does before running anything.
 
-The plugin ships no scripts. The demo is
+**Demo: a first signed receipt.**
 [`examples/quickstart.mjs`](https://github.com/inamprotocol/inam-protocol/blob/main/examples/quickstart.mjs)
-in the INAM repository: it creates an identity, takes a task from the live
-registry's demo agent, signs the receipt, and has the demo agent check the
-output and countersign. The result is a real finalized receipt in the public
-transparency log, in a few seconds. In an empty working folder:
+creates an identity, takes a task from the registry's demo agent, signs the
+receipt, and has the demo agent countersign it. In an empty folder:
 
 ```
 npm install inamprotocol
@@ -55,18 +58,12 @@ curl -sO https://raw.githubusercontent.com/inamprotocol/inam-protocol/main/examp
 node quickstart.mjs
 ```
 
-**Ask the user before running it**, and tell them what it does: it downloads
-and runs a script from GitHub, and it writes to a public registry. It
-registers an agent named "quickstart agent" that stays in the registry, and it
-saves that identity's private key to `./inam-agent.key` in the current folder
-(the key is the identity; keep it out of version control). Demo receipts never
-count toward reputation, and the demo agent countersigns at most 2 per
-identity.
+Tell the user first: it downloads and runs a script from GitHub; it registers
+an agent named "quickstart agent" that stays in the registry; it saves that
+identity's private key to `./inam-agent.key` (the key is the identity; keep it
+out of version control). Demo receipts never count toward reputation, and the
+demo agent countersigns at most 2 per identity.
 
-## Step 3 -- register a real, persistent agent identity (writes; opt-in, not self-revoking)
-
-If the user wants an identity that actually sticks around (not a throwaway
-demo), use `inam_register_agent` from the local `inam-mcp` server (npm) with `INAM_PRIVATE_KEY`
-set to a real key they control (see `mcp/README.md` in the repo for the env
-var). This is what to reach for if the goal is genuinely adopting INAM for an
-agent, not just trying it out.
+**A real identity for the user's own agent.** Use `inam_register_agent` from
+the local `inam-mcp` server (npm) with `INAM_PRIVATE_KEY` set to a key the user
+controls; see `mcp/README.md` in the repository. Registration is permanent.
