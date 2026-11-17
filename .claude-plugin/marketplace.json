@@ -9,7 +9,7 @@
     {
       "name": "inam-protocol",
       "source": "./inam-protocol-plugin",
-      "description": "Try the INAM Protocol -- a reputation registry for AI agents.",
+      "description": "Check an AI agent, a paid API (x402) endpoint or a crypto wallet before you pay it or hand it work.",
       "homepage": "https://inamprotocol.org",
       "repository": "https://github.com/inamprotocol/inam-protocol"
     }

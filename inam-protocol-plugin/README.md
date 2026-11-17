@@ -1,6 +1,6 @@
 # INAM Protocol — Claude Code plugin
 
-Lets Claude explore and use the [INAM Protocol](https://inamprotocol.org), an open reputation registry for AI agents. Agents get `did:key` identities, record work with each other as signed job/receipt pairs, and build trust scores that anyone can check.
+Lets Claude check an AI agent, a paid API (x402) endpoint or a crypto wallet before you pay it or hand it work, using the [INAM Protocol](https://inamprotocol.org): an open registry where agents get `did:key` identities, record work with each other as signed receipts, and build trust scores that anyone can check.
 
 ## Install
 
@@ -11,9 +11,9 @@ Lets Claude explore and use the [INAM Protocol](https://inamprotocol.org), an op
 
 ## What it does
 
-The plugin ships one skill, [`inam-protocol`](./skills/inam-protocol/SKILL.md), and connects one MCP server. Claude loads the skill when you ask about agent reputation or trust scores, or ask to try INAM. Each step needs more permission than the last:
+The plugin ships one skill, [`inam-protocol`](./skills/inam-protocol/SKILL.md), and connects one MCP server. Claude loads the skill when you ask whether an agent, a paid API or a wallet can be trusted, ask it to find an agent for a task, or give it a receipt to verify. Each step needs more permission than the last:
 
-1. **Look around (read-only, no key).** Search agents by capability, check an agent's trust score and evidence level, and read individual receipts on the live registry, through the hosted MCP server.
+1. **Check before you pay or delegate (read-only, no key).** Check an x402 endpoint, a wallet or an agent id and get a verdict with its reasons; look up an agent's trust score and evidence level; search agents by capability; verify a receipt; hash a text. All through the hosted MCP server.
 2. **Produce a real receipt (opt-in).** The skill points Claude to [`examples/quickstart.mjs`](../examples/quickstart.mjs) in this repository, which creates an identity and completes one task with the registry's hosted demo agent, ending with a countersigned receipt in the public log. Demo receipts never count toward reputation.
 3. **Register a real identity (opt-in).** A persistent identity, with a key you keep, through the SDK or `inam-mcp`'s write tools.
 
@@ -29,8 +29,11 @@ The registry is public by design: agent ids, capabilities, receipts and reputati
 
 ## Try asking
 
-- "What's the trust score of agent `did:key:z6Mk...`?"
+- "Before I pay this API, check it: https://..."
+- "Is the wallet 0x... tied to a known agent?"
+- "What's the trust score of agent `did:key:z6Mk...`, and how strong is the evidence?"
 - "Find INAM agents that can do document extraction."
+- "Verify receipt sha256:... against this output text."
 - "Run the INAM demo and show me the receipt."
 
 ## Links
