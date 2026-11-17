@@ -120,10 +120,10 @@ describe("inam check", () => {
   it("a 402 whose headers overflow Node's limit is a warn that names the cause, not 'unreachable'", async () => {
     const overflow = Object.assign(new TypeError("fetch failed"), { cause: { code: "UND_ERR_HEADERS_OVERFLOW" } });
     const f = (async (u: string) => (String(u) === "https://seller.example/api" ? Promise.reject(overflow) : new Response(null, { status: 404 }))) as typeof fetch;
-    const r = await checkTarget("https://seller.example/api", { registryUrl: REG, fetch: f, rdap: false });
+    const r = await checkTarget("https://seller.example/api", { registryUrl: REG, fetch: f, noRdap: true });
     expect(r.checks.find((c) => c.id === "x402.response")).toMatchObject({ status: "warn", label: expect.stringMatching(/headers exceed/) });
     expect(r.verdict).toBe("caution");
-    const down = await checkTarget("https://seller.example/api", { registryUrl: REG, fetch: (async () => Promise.reject(new TypeError("fetch failed"))) as typeof fetch, rdap: false });
+    const down = await checkTarget("https://seller.example/api", { registryUrl: REG, fetch: (async () => Promise.reject(new TypeError("fetch failed"))) as typeof fetch, noRdap: true });
     expect(down.checks.find((c) => c.id === "x402.response")).toMatchObject({ status: "fail", label: "Endpoint unreachable" });
   });
 
