@@ -64,7 +64,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_check_reputation",
       title: "Check agent reputation",
       description:
-        "Looks up an agent's INAM reputation by did:key id. Returns trustScore, evidenceLevel, components (finalized-receipt count, success rate, " +
+        "Use before hiring, delegating to or paying an AI agent whose did:key id you have: looks up its INAM reputation. An id the registry does not know means no record, not a bad agent. Returns trustScore, evidenceLevel, components (finalized-receipt count, success rate, " +
         "attested and rejected attestation counts) and flags. evidenceLevel is 'none' (no finalized receipts), 'countersigned' (receipts signed by " +
         "both parties, no independent check) or 'independently_verified' (at least one receipt verified by an operator-authorized verifier, " +
         "components.attestedReceipts > 0). flags include attestation_rejected (a verifier rejected one of the agent's receipts), in_dispute, " +
@@ -76,7 +76,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_search_agents",
       title: "Search agents",
       description:
-        "Searches INAM-registered agents by declared capability and/or minimum trust score. Returns matching agent records (did:key id, declared capabilities, metadata); revoked agents and self-declared demo agents are excluded.",
+        "Use to find an AI agent for a task: searches INAM-registered agents by declared capability and/or minimum trust score. Capabilities are self-declared, so check the reputation of the one you pick. Returns matching agent records (did:key id, declared capabilities, metadata); revoked agents and self-declared demo agents are excluded.",
       shape: {
         capability: z.string().optional().describe("e.g. 'translation.tr-en', 'code-review'"),
         minReputation: z.number().optional().describe("minimum trust score; agents below it are excluded"),
@@ -87,7 +87,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_hash_content",
       title: "Hash content",
       description:
-        "Computes the 'sha256:<64 hex>' content hash of the given text, the format INAM uses for specHash and outputHash. Hashing is local; anyone holding the same text can recompute the same hash.",
+        "Use to fingerprint a text, or to compare a spec or output you hold with the hash in a receipt: computes the 'sha256:<64 hex>' content hash of the given text, the format INAM uses for specHash and outputHash. Hashing is local; anyone holding the same text can recompute the same hash.",
       shape: { content: z.string().describe("the exact spec or output text to hash") },
       handler: guarded(async ({ content }: { content: string }) => ({ hash: `sha256:${await sha256Hex(content)}` })),
     },
@@ -95,7 +95,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_get_receipt",
       title: "Get receipt",
       description:
-        "Fetches a single execution receipt by id together with its verification records. The receipt is the record of a job signed by the worker and, once finalized, countersigned by the requester; verification records are verdicts from operator-authorized verifiers.",
+        "Use to read what a receipt says (who did what for whom, when, with what outcome): fetches a single execution receipt by id together with its verification records. To test whether the receipt holds up, use inam_verify_receipt. The receipt is the record of a job signed by the worker and, once finalized, countersigned by the requester; verification records are verdicts from operator-authorized verifiers.",
       shape: { receiptId: z.string().describe("sha256:... receipt id") },
       handler: guarded(async ({ receiptId }: { receiptId: string }) => {
         const [receipt, verifications] = await Promise.all([
@@ -109,7 +109,7 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_verify_receipt",
       title: "Verify receipt",
       description:
-        "Runs the registry's integrity checks on one receipt and returns a verdict ('pass' or 'fail') with per-check results: finalized, agent_b_signature, " +
+        "Use when someone presents a receipt id as proof that an agent did a job: runs the registry's integrity checks on that receipt and returns a verdict ('pass' or 'fail') with per-check results: finalized, agent_b_signature, " +
         "agent_a_signature, receipt_id (content-addressed id), transparency_log (leaf present, inclusion proof, logged content matches), hash_format (specHash/outputHash are sha256: + 64 hex; " +
         "fails on pre-v0.32 test records with placeholder hashes), spec_hash and " +
         "output_hash (only when the spec or output text is supplied; otherwise 'skipped'), parties_not_revoked and no_active_dispute. Also returns the " +
@@ -126,9 +126,11 @@ export function readTools(reader: RegistryReader): ReadTool[] {
       name: "inam_check",
       title: "Pre-payment check",
       description:
-        "Checks an x402 endpoint URL, an EVM wallet or a did:key before paying it, from public signals: the URL's 402 payment requirements " +
+        "Use before paying an x402 endpoint, a paid MCP tool, a wallet or an agent: checks an x402 endpoint URL, an EVM wallet or a did:key from public signals: the URL's 402 payment requirements " +
         "(payTo, price, network), whether payTo owns an ERC-8004 identity and has feedback, whether payTo is proven by an INAM ID and that ID's " +
-        "reputation, a Web Bot Auth key directory, HTTPS and the domain's registration age. Works when INAM has no data on the target. Returns " +
+        "reputation, a Web Bot Auth key directory, HTTPS and the domain's registration age. Works when INAM has no data on the target. A URL that " +
+        "does not answer with an x402 payment request gets verdict fail ('Not an x402 paywall'): there is nothing to pay there in this format, " +
+        "which says nothing about whether the site is safe. Returns " +
         "verdict (pass / caution / fail, the worst line), checks[] with a status, label and detail per line, payment, next (one suggested step) " +
         "and cachedAt (results are cached for 10 minutes).",
       shape: {

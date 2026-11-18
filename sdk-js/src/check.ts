@@ -423,7 +423,11 @@ export async function checkUrl(url: string, opts: CheckOptions = {}): Promise<Ch
     body = await res.text().catch(() => "");
   } catch (e) {
     if (u.protocol !== "https:" && !local) checks.push({ id: "tls", status: "fail", label: "Not HTTPS: the 402 and its payTo can be rewritten in transit" });
-    checks.push({ id: "x402.response", status: "fail", label: "Endpoint unreachable", detail: (e as Error).message });
+    // Node's fetch refuses response headers above 16 KB, and a v2 PAYMENT-REQUIRED header with Bazaar metadata can exceed that
+    // (x402-foundation/x402#3803). The endpoint answered; this runtime could not read it. Not a fail: Workers and curl read it fine.
+    if ((e as { cause?: { code?: string } }).cause?.code === "UND_ERR_HEADERS_OVERFLOW")
+      checks.push({ id: "x402.response", status: "warn", label: "Could not read the 402: its response headers exceed this runtime's limit (Node: 16 KB)", detail: "The endpoint answered, most likely with an oversized PAYMENT-REQUIRED header. Rerun with NODE_OPTIONS=--max-http-header-size=65536, or use the hosted check at https://api.inamprotocol.org/v1/check?target=<url>." });
+    else checks.push({ id: "x402.response", status: "fail", label: "Endpoint unreachable", detail: (e as Error).message });
     const [dir, dom] = await side;
     return finish(url, "url", [...checks, dir, ...(dom ? [dom] : [])]);
   }

@@ -225,6 +225,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.24.1 — 2026-11-17
+- **`check` names an oversized `PAYMENT-REQUIRED` header.** Node's fetch refuses response headers above 16 KB, and an x402 v2 402 with Bazaar metadata can exceed that (x402-foundation/x402#3803). The CLI reported such an endpoint as `fail` "Endpoint unreachable". It now reports a `warn` that names the cause and two ways to read the 402: `NODE_OPTIONS=--max-http-header-size=65536`, or the hosted check. A real connection failure is still a `fail`. Reading the oversized header from Node is not in this release.
+
 ### 0.24.0 — 2026-11-09
 - **Breaking: `acceptWork(receipt, expected)` requires `expected.outputHash`.** Before, `expected` was optional, and without it the requester countersigned without comparing anything. Now it refuses to sign in that case. Each refusal says which kind it is in `err.code`: `NOT_COMPARED` (no expected hash given, or the draft has no `result.outputHash`) or `MISMATCH` (a value differs). This follows the "absence is not difference" rule in x402 PR #3776 §5.5: a counterparty that cannot make the comparison must not sign, and must report that it could not compare rather than that the values differ. Migration: pass the hash of the output you actually received, e.g. ``acceptWork(draft, { outputHash: `sha256:${sha256Hex(output)}` })``. The MCP tool `inam_countersign_receipt` already required it.
 
@@ -289,6 +292,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 ## MCP server (`mcp`)
 
 ### Unreleased
+
+### 0.6.1 — 2026-11-17
+- Tool descriptions say when to use each tool (stdio and hosted `/mcp`): each of the six read tools opens with "Use before/when/to …", and `inam_check` explains that a URL with no x402 paywall returns `fail` "Not an x402 paywall". No schema or behaviour change.
 
 ### 0.6.0 — 2026-10-10
 - New read tool `inam_verify_receipt` (stdio and hosted `/mcp`): calls `POST /v1/receipts/:id/verify` and returns the verdict, per-check results and the registry's signed attestation. Optional `spec`/`output` text is checked against the receipt's hashes.

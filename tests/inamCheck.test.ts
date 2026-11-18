@@ -117,6 +117,16 @@ describe("inam check", () => {
     expect(status(r, "webbotauth.directory")).toEqual(["pass"]);
   });
 
+  it("a 402 whose headers overflow Node's limit is a warn that names the cause, not 'unreachable'", async () => {
+    const overflow = Object.assign(new TypeError("fetch failed"), { cause: { code: "UND_ERR_HEADERS_OVERFLOW" } });
+    const f = (async (u: string) => (String(u) === "https://seller.example/api" ? Promise.reject(overflow) : new Response(null, { status: 404 }))) as typeof fetch;
+    const r = await checkTarget("https://seller.example/api", { registryUrl: REG, fetch: f, noRdap: true });
+    expect(r.checks.find((c) => c.id === "x402.response")).toMatchObject({ status: "warn", label: expect.stringMatching(/headers exceed/) });
+    expect(r.verdict).toBe("caution");
+    const down = await checkTarget("https://seller.example/api", { registryUrl: REG, fetch: (async () => Promise.reject(new TypeError("fetch failed"))) as typeof fetch, noRdap: true });
+    expect(down.checks.find((c) => c.id === "x402.response")).toMatchObject({ status: "fail", label: "Endpoint unreachable" });
+  });
+
   it("an unreachable registry is a warn, never a pass (wallet and URL targets)", async () => {
     stub({ erc8004Owned: 1, feedback: { clients: ["0x2222222222222222222222222222222222222222"], total: 5, receiptBacked: 2 }, registryDown: true });
     const r = await run(PAYTO);
