@@ -2725,6 +2725,7 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     const res = await mcp("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
     expect(res.status).toBe(200);
     expect(res.json.result.serverInfo.name).toBe("inam-mcp");
+    expect(res.json.result.instructions).toContain("inam_check");
   });
 
   // Claude clients open with a 2026-07-28 request; before @modelcontextprotocol/server v2 that was a 400

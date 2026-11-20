@@ -30,7 +30,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { InamClient, generateKeypair, keypairFromPrivateKey, fromHex, type Keypair } from "inamprotocol";
-import { readTools, ok, fail, READ_ONLY } from "./readTools.js";
+import { readTools, ok, fail, READ_ONLY, INSTRUCTIONS } from "./readTools.js";
 import { createRequire } from "node:module";
 
 const INAM_URL = process.env.INAM_URL ?? "https://api.inamprotocol.org";
@@ -52,7 +52,7 @@ if (rawKey) {
 
 const inam = new InamClient(INAM_URL, keypair);
 const { version } = createRequire(import.meta.url)("../package.json") as { version: string };
-const server = new McpServer({ name: "inam-mcp", version });
+const server = new McpServer({ name: "inam-mcp", version }, { instructions: INSTRUCTIONS });
 
 // --- read tools (always available; shared with the hosted endpoint) --------
 
