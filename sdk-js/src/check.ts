@@ -63,8 +63,15 @@ export const ERC8004 = {
 /** Keyless public RPCs. Other chains are covered by the indexer only, or by `rpc` / INAM_RPC_<chainId>. */
 export const DEFAULT_RPC: Record<number, string> = {
   1: "https://ethereum-rpc.publicnode.com",
-  8453: "https://mainnet.base.org",
+  8453: "https://base-rpc.publicnode.com",
   84532: "https://sepolia.base.org",
+};
+// One retry on a second public RPC. mainnet.base.org shares a 25 req/s limit across everyone on the same egress
+// (Cloudflare Workers, CI), so the hosted check got 429 there on most calls (2026-11-19).
+// ponytail: one fallback per default RPC; a caller-supplied RPC gets none.
+const RPC_FALLBACK: Record<string, string> = {
+  "https://base-rpc.publicnode.com": "https://mainnet.base.org",
+  "https://sepolia.base.org": "https://base-sepolia-rpc.publicnode.com",
 };
 const TESTNET_CHAINS = new Set([84532, 11155111, 80002, 43113, 421614, 11155420]);
 const CHAIN_NAMES: Record<number, string> = { 1: "Ethereum", 8453: "Base", 84532: "Base Sepolia", 137: "Polygon", 43114: "Avalanche", 11155111: "Sepolia" };
@@ -195,9 +202,17 @@ function strTail(s: string) {
 }
 
 async function ethCall(rpc: string, to: string, data: string, timeoutMs?: number, f?: Fetch): Promise<string> {
+  try {
+    return await ethCallOnce(rpc, to, data, timeoutMs, f);
+  } catch (e) {
+    if (!RPC_FALLBACK[rpc]) throw e;
+    return ethCallOnce(RPC_FALLBACK[rpc], to, data, timeoutMs, f);
+  }
+}
+async function ethCallOnce(rpc: string, to: string, data: string, timeoutMs?: number, f?: Fetch): Promise<string> {
   const res = await timedFetch(rpc, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "eth_call", params: [{ to, data: `0x${data}` }, "latest"] }) }, timeoutMs, f);
-  const j: any = await res.json();
-  if (j.error || typeof j.result !== "string") throw new Error(`eth_call: ${j.error?.message ?? res.status}`);
+  const j: any = await res.json().catch(() => ({})); // a rate-limited RPC may answer with an empty or non-JSON body
+  if (j.error || typeof j.result !== "string") throw new Error(`eth_call: ${j.error?.message ?? j.message ?? `HTTP ${res.status}`}`);
   return j.result.slice(2);
 }
 const readWord = (hex: string, i: number) => BigInt(`0x${hex.slice(i * 64, i * 64 + 64) || "0"}`);

@@ -23,6 +23,7 @@ interface World {
   registryDown?: boolean;
   agentDown?: boolean; // search works, per-agent lookups 503
   erc8004Down?: boolean;
+  rpcPrimary429?: boolean;
 }
 
 function stub(w: World) {
@@ -48,12 +49,13 @@ function stub(w: World) {
     if (url.startsWith(`${REG}/v1/agents/search`)) return json({ agents: w.linked ? [agent] : [], hasMore: false });
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}`) return json(agent);
     if (url === `${REG}/v1/agents/${encodeURIComponent(DID)}/reputation`) return json(reputation);
-    if (w.erc8004Down && ["https://api.8004scan.io", "https://mainnet.base.org"].includes(new URL(url).origin)) return new Response("unavailable", { status: 503 });
+    if (w.erc8004Down && ["https://api.8004scan.io", "https://mainnet.base.org", "https://base-rpc.publicnode.com"].includes(new URL(url).origin)) return new Response("unavailable", { status: 503 });
     if (url.startsWith("https://api.8004scan.io/api/v1/agents")) {
       const items = w.erc8004Owned ? [{ chain_id: 8453, token_id: 7, owner_address: PAYTO, name: "Seller", total_feedbacks: w.feedback?.total ?? 0, is_testnet: false }] : [];
       return json({ items });
     }
-    if (url === "https://mainnet.base.org") {
+    if (w.rpcPrimary429 && url === "https://base-rpc.publicnode.com") return new Response(JSON.stringify({ code: -32007, message: "25/second request limit reached" }), { status: 429 });
+    if (url === "https://mainnet.base.org" || url === "https://base-rpc.publicnode.com") {
       const data: string = JSON.parse(String(init?.body)).params[0].data;
       if (data.startsWith("0x70a08231")) return rpcResult(word(w.erc8004Owned ?? 0)); // balanceOf
       if (data.startsWith("0x42dd519c")) {
@@ -153,6 +155,12 @@ describe("inam check", () => {
     const r = await run(PAYTO);
     expect(r.checks.find((c) => c.id === "erc8004.identity")).toMatchObject({ status: "warn", label: expect.stringMatching(/could not check/) });
     expect(r.verdict).not.toBe("pass");
+  });
+
+  it("a rate-limited default RPC falls back to the second one", async () => {
+    stub({ erc8004Owned: 1, rpcPrimary429: true });
+    const r = await run(PAYTO);
+    expect(r.checks.find((c) => c.id === "erc8004.identity")).toMatchObject({ status: "pass", label: expect.stringMatching(/on-chain on Base: 1/) });
   });
 
   it("fails on a non-402 answer and on plain http", async () => {
