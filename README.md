@@ -158,7 +158,36 @@ Currently live at `https://api.inamprotocol.org` (custom domain, bound via `work
 
 ![Hosted MCP usage by client: Claude Desktop, Claude Code, Claude remote, claude.ai and other](https://api.inamprotocol.org/v1/usage/mcp.svg)
 
-Daily connects (a client listing the tools, once per session) on `https://api.inamprotocol.org/mcp`, stacked by client (Claude Desktop, Claude Code, Claude remote sessions, claude.ai, other), and tool calls, rendered live by the Worker. Most traffic comes from Claude clients. Days before 2026-11-10 (lighter bars) are estimated from Cloudflare request logs (one `notifications/initialized` per session; `worker/migration-backfill-mcp-usage.sql`), and tool calls were not recorded then. Counts are aggregated per UTC day and coarse client family (`claude-desktop`, `claude-remote`, `claude-code`, `claude-ai`, `other`); no IP, tool argument or raw User-Agent is stored (`worker/src/mcpUsage.ts`). A connect is a session, not a person. JSON: `GET /v1/usage/mcp?days=30`.
+Daily sessions on `https://api.inamprotocol.org/mcp`, stacked by client (Claude Desktop, Claude Code, Claude remote sessions, claude.ai, other), and tool calls, rendered live by the Worker. A session is not a person.
+
+**How the numbers are made.** The chart has three kinds of days, and each is drawn differently so they are never mixed up.
+
+**Why the days before 2026-11-10 are estimates, and what they are inferred from.** The Worker had no usage counter before 2026-11-10, so no system counted sessions on those days. The only record of the traffic is Cloudflare's, which sits in front of the Worker and logs every HTTP request, but it records requests and responses, not sessions. The estimate infers sessions from that log in four steps:
+
+1. **Source.** Cloudflare's GraphQL Analytics API, dataset `httpRequestsAdaptiveGroups`, for host `api.inamprotocol.org` and path `/mcp`, one query per UTC day.
+2. **The response that marks a session.** In the MCP Streamable HTTP transport, a client opens a session with `initialize` and then sends exactly one `notifications/initialized`. A notification gets no JSON-RPC reply, so the server answers it with HTTP `202 Accepted`. The `initialize` itself and every tool call get `200`. So the number of `202` responses on `/mcp` is, to a close approximation, the number of sessions opened.
+3. **Clients on the newer protocol.** In this period, clients that tried the 2026-07-28 protocol first were answered `400` and then fell back to `initialize`, so their sessions also produced one `202` each and are included.
+4. **Client family.** Each row is grouped by User-Agent, which is mapped to a family (`claude-desktop`, `claude-remote`, `claude-code`, `claude-ai`, `other`) with the same rules as the live counter (`clientFamily()` in `worker/src/mcpUsage.ts`). Only the per-family totals are kept.
+
+The result is an indirect measure, so these days are marked `estimated` in the data and drawn lighter, and the Limits below say how they can be off. From 2026-11-12 the counter and the Cloudflare log cover the same days, so the estimate can be checked against a direct count for clients that still use `initialize`.
+
+| Days | Drawn | What is counted | Source |
+|---|---|---|---|
+| 2026-10-11 to 2026-11-09 | lighter bars, "estimated" | sessions, estimated | Cloudflare HTTP analytics: 202 responses on `/mcp` per UTC day and client family. A 2025-era MCP client sends one `notifications/initialized` per session and gets 202. In this period clients that tried the 2026-07-28 protocol first got 400 and fell back to `initialize`, so they were counted too. |
+| 2026-11-10 and 2026-11-11 | dashed bars | `tools/list` calls, not sessions | The Worker's own counter, first version. A client can list the tools more than once per session, so these bars run higher than the sessions around them. They are kept in the data (`listCounted: true`) and left out of the totals and the client shares. |
+| from 2026-11-12 | solid bars | sessions, counted | The Worker's counter: the request that opens a session, `initialize` (2025-era clients) or `server/discover` (2026-07-28 clients, which send no `initialize`). |
+
+**How to check them.**
+
+- Counted days: `GET /v1/usage/mcp?days=90` returns every day with `estimated` and `listCounted` flags and a `definitions` object. The counting code is `worker/src/mcpUsage.ts`. It stores counts per UTC day and coarse client family (`claude-desktop`, `claude-remote`, `claude-code`, `claude-ai`, `other`) and never an IP, a tool argument or a raw User-Agent.
+- Estimated days: `worker/migration-backfill-mcp-usage.sql` holds every number. `scripts/mcp-usage-from-cloudflare.py` produces that file from Cloudflare (run with a token that can read the zone's analytics). A re-run on 2026-11-11 reproduced 2026-11-02 and 2026-11-03 exactly.
+
+**Limits.**
+
+- Cloudflare keeps these analytics for about 31 days, so the estimate starts at 2026-10-11 and the oldest days can no longer be re-derived. Cloudflare adaptive analytics can be sampled, so a re-run may differ slightly.
+- The estimate can run slightly high: any other notification a client sends also gets 202.
+- Tool calls were not recorded before 2026-11-10.
+- Client families come from the User-Agent, which a client can set to anything.
 
 The Worker also serves `GET /.well-known/http-message-signatures-directory`, the Web Bot Auth key directory for [Cloudflare signed agents](https://developers.cloudflare.com/bots/concepts/bot/signed-agents/): a JWKS with the key the INAM agent signs requests with (`inamFetch(client, { webBotAuth })`), signed per response. Set the key with `npx wrangler secret put WEB_BOT_AUTH_KEY` (hex Ed25519 private key); unset, the route answers 404.
 
@@ -249,7 +278,7 @@ GET  /agents/:id
 GET  /agents/:id/protocols
 GET  /agents/:id/reputation
 GET  /agents/:id/badge.svg        embeddable shields.io-style trust-score badge (unsigned, public)
-GET  /usage/mcp                   hosted MCP usage per day: connects, tool calls, by tool and client family (counts only)
+GET  /usage/mcp                   hosted MCP usage per day: sessions, tool calls, by tool and client family (counts only)
 GET  /usage/mcp.svg               the same as a bar chart by client family (?days=7..90, default 60)
 GET  /agents/:id/badge.json       same badge data as JSON, for a custom renderer
 GET  /agents/:id/receipts
