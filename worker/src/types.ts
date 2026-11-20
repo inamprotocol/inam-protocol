@@ -254,6 +254,9 @@ export interface Env {
    * source could reconstruct. A real deployment configures this itself
    * (`vars` or `wrangler secret put`). */
   OPERATOR_DID?: string;
+  /** Secret. 8004scan API key, sent as X-API-Key on the wallet check's indexer lookups only. Unset = keyless
+   * (1000 requests a day shared with everyone on the same Workers egress IP). */
+  ERC8004SCAN_API_KEY?: string;
   /** Payout wallet (public EVM address) for the paid x402 routes, /v1/x402/report
    * and /v1/x402/check. Unset = both routes off. */
   X402_PAY_TO?: string;
