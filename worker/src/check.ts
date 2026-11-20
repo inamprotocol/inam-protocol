@@ -49,7 +49,9 @@ export function checkHandler(app: Hono<AppEnv>) {
       if (url.startsWith(`${self.origin}/v1/agents`))
         return app.request(url.slice(self.origin.length), { ...init, headers: { ...headers, "cf-connecting-ip": ip } }, c.env, c.executionCtx);
       const signed = signer ? webBotAuthHeaders(url, signer, { signatureAgent: `https://${self.host}` }) : {};
-      const res = await fetch(url, { ...init, headers: { ...headers, ...signed } });
+      // 8004scan allows 1000 keyless requests a day per IP, and Workers share egress IPs; a key has its own quota.
+      const key: Record<string, string> = c.env.ERC8004SCAN_API_KEY && url.startsWith("https://api.8004scan.io/") ? { "x-api-key": c.env.ERC8004SCAN_API_KEY } : {};
+      const res = await fetch(url, { ...init, headers: { ...headers, ...signed, ...key } });
       // A 429 makes the engine sleep for Retry-After (CLI behaviour, minutes on shared egress IPs).
       // A hosted request can't wait that long, so surface it as a plain failure: that line becomes unknown.
       return res.status === 429 ? new Response(null, { status: 503, statusText: "rate limited upstream" }) : res;
