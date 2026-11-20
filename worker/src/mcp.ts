@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { McpServer, WebStandardStreamableHTTPServerTransport, createMcpHandler, isLegacyRequest } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { readTools, READ_ONLY, type RegistryReader } from "../../mcp/src/readTools.js";
+import { readTools, READ_ONLY, INSTRUCTIONS, type RegistryReader } from "../../mcp/src/readTools.js";
 import type { AppEnv } from "./types.js";
 import mcpPkg from "../../mcp/package.json";
 import { countMcpUsage } from "./mcpUsage.js";
@@ -49,7 +49,7 @@ export function mcpHandler(app: Hono<AppEnv>) {
     };
 
     const makeServer = () => {
-      const server = new McpServer({ name: "inam-mcp", version: mcpPkg.version });
+      const server = new McpServer({ name: "inam-mcp", version: mcpPkg.version }, { instructions: INSTRUCTIONS });
       for (const t of readTools(reader)) {
         server.registerTool(t.name, { title: t.title, description: t.description, inputSchema: z.object(t.shape as z.ZodRawShape), annotations: { ...READ_ONLY, ...t.annotations, title: t.title } }, t.handler);
       }
