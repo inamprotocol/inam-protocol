@@ -2728,6 +2728,16 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     expect(res.json.result.instructions).toContain("inam_check");
   });
 
+  it("answers GET and DELETE with 405 instead of opening a stream that never ends", async () => {
+    for (const method of ["GET", "DELETE"]) {
+      const ctx = createExecutionContext();
+      const res = await worker.fetch(new Request("http://worker.test/mcp", { method, headers: { accept: "text/event-stream" } }), env, ctx);
+      await waitOnExecutionContext(ctx);
+      expect(res.status).toBe(405);
+      expect(res.headers.get("allow")).toBe("POST, OPTIONS");
+    }
+  });
+
   // Claude clients open with a 2026-07-28 request; before @modelcontextprotocol/server v2 that was a 400
   // and they fell back to initialize. Now the modern era is served directly.
   it("serves a 2026-07-28 client (per-request envelope) without the initialize fallback", async () => {

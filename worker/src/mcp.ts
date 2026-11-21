@@ -57,8 +57,11 @@ export function mcpHandler(app: Hono<AppEnv>) {
     };
 
     const req = c.req.raw;
+    // Stateless server: there is no session to stream to or to delete. Without this, GET opened an SSE
+    // stream that never sent anything and stayed open until the client gave up.
+    if (req.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST, OPTIONS" } });
     // Aggregate counts only (no IP, no arguments): see mcpUsage.ts.
-    if (req.method === "POST") c.executionCtx.waitUntil(countMcpUsage(c.env, req.clone()));
+    c.executionCtx.waitUntil(countMcpUsage(c.env, req.clone()));
 
     // 2025-era clients: the same stateless JSON transport as before v2.
     if (await isLegacyRequest(req)) {
