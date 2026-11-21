@@ -3480,6 +3480,14 @@ describe("hosted pre-payment check (GET /v1/check)", () => {
     expect(seen.length).toBe(calls);
   });
 
+  it("sends ERC8004SCAN_API_KEY to the indexer and to no other host", async () => {
+    stubOutbound();
+    await check(`target=${encodeURIComponent(`https://seller.example/api?n=${crypto.randomUUID()}`)}&rdap=0`, { ...env, ERC8004SCAN_API_KEY: "test-key" });
+    const withKey = seen.filter((s) => s.headers["x-api-key"]);
+    expect(withKey.length).toBeGreaterThan(0);
+    expect(withKey.every((s) => s.url.startsWith("https://api.8004scan.io/") && s.headers["x-api-key"] === "test-key")).toBe(true);
+  });
+
   it("with no method given, retries a GET 404 as POST like the CLI (a POST-only seller is read, not failed)", async () => {
     vi.stubGlobal("fetch", async (input: string, init: RequestInit = {}) => {
       if (String(input).startsWith("https://postonly.example/api")) return (init.method ?? "GET") === "POST" ? new Response("{}", { status: 402, headers: { "payment-required": btoa(JSON.stringify(required)) } }) : new Response("not found", { status: 404 });
