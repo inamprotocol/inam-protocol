@@ -118,7 +118,7 @@ app.notFound((c) => c.json({ error: { code: "ROUTE_NOT_FOUND", message: `No rout
 
 // SPEC.md and pyproject.toml aren't JSON-importable; scripts/check-versions.mjs
 // fails CI if these two literals drift from them.
-const SPEC_VERSION = "0.44";
+const SPEC_VERSION = "0.45";
 const SDK_PYTHON_VERSION = "0.15.0";
 app.get("/v1/health", (c) =>
   c.json({

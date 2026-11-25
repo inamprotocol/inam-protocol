@@ -111,6 +111,8 @@ export {
   type SignatureOptions,
   verifyDirectoryResponse,
 } from "./webBotAuth.js";
+export { verifyCheckAttestation } from "./check.js";
+export type { AttestedCheckReport } from "./check.js";
 export { checkTarget, checkUrl, checkWallet, checkDid, formatReport, parsePaymentRequired, paymentOptions, inamLinkedWallets, walletErc8004, erc8004AgentsByOwner, erc8004Balance, erc8004Feedback, ERC8004, DEFAULT_RPC } from "./check.js";
 export { verifyPayeeBinding, payeeBindingDigest, payeeBindingItem, PAYEE_BINDING_DOMAIN } from "./payeeBinding.js";
 export type { PayeeBinding } from "./payeeBinding.js";

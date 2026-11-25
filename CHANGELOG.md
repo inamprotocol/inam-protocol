@@ -4,6 +4,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## Protocol specification (`SPEC.md`)
 
+### v0.45 (Draft) — 2026-11-25
+- **The paid check signs its answer (§6).** `GET /x402/check` returns the free check's verdict and lines plus `type: "inam.check.v1"` and an `attestation` (`signer`, `alg`, `signature`): an Ed25519 signature by the registry's hosted-agent key over the canonical body without `attestation`. A payer can keep the report as evidence of what it relied on. Payment changes no verdict and no score; the free `GET /check` is unchanged. A free-tier call with an `INAM-Key` is signed too. `sdk-js` exports `verifyCheckAttestation`. A registry without a hosted-agent key returns the body unsigned, as before. Comment period: issue #191.
+
 ### v0.44 (Draft) — 2026-10-17
 - **Verifier grants are logged (§13.1).** Every successful `POST /agents/:id/verifier-status` appends a `verifier_status_changed` leaf with `{ agentId, authorized, operator }`. Grants made earlier enter the log when the operator repeats them. Consumers that switch on `entryType` must accept the new value; proofs and the monitor are unaffected. (v0.43 is taken by PR #140.)
 
