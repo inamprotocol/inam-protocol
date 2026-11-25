@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: INAM Protocol Registry API
-  version: "0.44.0"
+  version: "0.45.0"
   description: >
     The open reputation, verification, and economic-history layer for the agent
     economy. See SPEC.md in this repository for the full protocol specification
@@ -1119,9 +1119,9 @@ paths:
   /x402/check:
     get:
       operationId: checkTargetPaid
-      summary: "Paid twin of /check over x402 v2: same parameters, same JSON body, 0.02 USDC on Base (optional; off unless the registry configures a payout wallet)"
+      summary: "Paid twin of /check over x402 v2: same parameters, same verdict and lines, signed by the registry; 0.02 USDC on Base (optional; off unless the registry configures a payout wallet)"
       description: >-
-        Buys exactly the answer GET /check gives for free. Payment never changes a verdict or a score
+        Buys the answer GET /check gives for free, signed: the body adds `type: inam.check.v1` and `attestation` (`signer`, `alg: Ed25519`, `signature` over the canonical body without `attestation`), so the payer can keep the report as evidence. Payment never changes a verdict or a score
         (GOVERNANCE.md, "Scores are not for sale"). A paying request that sends `INAM-Requester: <did:key>`
         gets an `INAM-Receipt` header for this call (SPEC.md §15), drafted by the registry's hosted agent with
         capability `demo.x402-check` (never counts toward reputation, §5.2), for the requester to countersign.
@@ -1134,7 +1134,7 @@ paths:
         - { name: INAM-Requester, in: header, required: false, schema: { type: string }, description: "Caller's registered did:key; asks for a SPEC §15 receipt" }
         - { name: INAM-Key, in: header, required: false, schema: { type: string }, description: "API key from POST /api-keys (SPEC.md section 16). Spends one free-tier call instead of paying; an exhausted key falls through to the 402 flow" }
       responses:
-        "200": { description: "Same body as GET /check; PAYMENT-RESPONSE header carries the settlement, INAM-Receipt the draft receipt id when requested" }
+        "200": { description: "Body of GET /check plus type and attestation (the registry Ed25519 signature); PAYMENT-RESPONSE header carries the settlement, INAM-Receipt the draft receipt id when requested" }
         "400": { $ref: "#/components/responses/Error" }
         "401": { $ref: "#/components/responses/Error" }
         "402": { description: "Payment required; PAYMENT-REQUIRED header carries the base64 PaymentRequired object (with a bazaar discovery extension)" }

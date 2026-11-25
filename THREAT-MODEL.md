@@ -1,6 +1,6 @@
 # Threat model
 
-This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.44 and as run at `api.inamprotocol.org`. For each attack it names the defence, where the spec requires that defence, and what the defence leaves open. A residual risk listed here is a known limit, not an undiscovered bug. Report anything that breaks a defence through [`SECURITY.md`](./SECURITY.md).
+This document covers INAM Protocol as specified in [`SPEC.md`](./SPEC.md) v0.45 and as run at `api.inamprotocol.org`. For each attack it names the defence, where the spec requires that defence, and what the defence leaves open. A residual risk listed here is a known limit, not an undiscovered bug. Report anything that breaks a defence through [`SECURITY.md`](./SECURITY.md).
 
 ## What INAM protects
 

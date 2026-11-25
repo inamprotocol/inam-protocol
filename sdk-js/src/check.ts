@@ -4,6 +4,8 @@ import { decideX402, INAM_X402_EXTENSION } from "./x402.js";
 import { DIRECTORY_PATH, verifyDirectoryResponse } from "./webBotAuth.js";
 import { payeeBindingItem } from "./payeeBinding.js";
 import type { AgentRecord, ReputationResult } from "./types.js";
+import { canonicalize } from "./crypto/canonical.js";
+import { fromBase64, verify } from "./crypto/keys.js";
 
 /** `inam check <url | 0x wallet | did:key>`: a pre-payment check built from public signals.
  *
@@ -556,4 +558,19 @@ export function formatReport(r: CheckReport): string {
     if (c.detail && c.status !== "pass") out.push(`           ${c.detail}`);
   }
   return out.join("\n");
+}
+
+/** A check report signed by a registry (the paid `GET /v1/x402/check`): `attestation` covers every other member. */
+export type AttestedCheckReport = CheckReport & { type: "inam.check.v1"; attestation: { signer: string; alg: "Ed25519"; signature: string } };
+
+/** True when `attestation.signature` is the signer's Ed25519 signature over the canonical form of the report without `attestation`.
+ * It proves the signer issued these exact bytes. Whether to trust that signer is the caller's decision: compare `attestation.signer` with a did you already know. */
+export function verifyCheckAttestation(report: unknown): boolean {
+  try {
+    const { attestation, ...body } = report as AttestedCheckReport;
+    if (attestation?.alg !== "Ed25519" || typeof attestation.signer !== "string" || typeof attestation.signature !== "string") return false;
+    return verify(fromBase64(attestation.signature), new TextEncoder().encode(canonicalize(body)), attestation.signer);
+  } catch {
+    return false;
+  }
 }

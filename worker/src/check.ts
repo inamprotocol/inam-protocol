@@ -72,14 +72,14 @@ export function checkHandler(app: Hono<AppEnv>) {
 }
 
 /**
- * Paid twin of the check: GET /v1/x402/check, same params, same JSON body, behind
- * x402 v2 (0.02 USDC on Base). It buys the same answer /v1/check gives for free;
+ * Paid twin of the check: GET /v1/x402/check, same params, behind x402 v2 (0.02 USDC on Base).
+ * It buys the answer /v1/check gives for free plus the registry's signature over it (attest);
  * payment never changes a verdict or a score (GOVERNANCE.md). Off until X402_PAY_TO is set.
  */
 const CHECK_PRICE = { units: CHECK_PRICE_UNITS, usdc: CHECK_PRICE_USDC }; // set in apiKeys.ts
 const CHECK_OFFER: X402Offer = {
   price: CHECK_PRICE.units,
-  description: "Pre-payment check of an x402 endpoint URL, EVM wallet or did:key: INAM ID bound to its payTo wallet, countersigned work history, ERC-8004 registration, domain age. Returns a pass/caution/fail verdict with per-line checks. Same answer as the free GET /v1/check.",
+  description: "Pre-payment check of an x402 endpoint URL, EVM wallet or did:key: INAM ID bound to its payTo wallet, countersigned work history, ERC-8004 registration, domain age. Returns a pass/caution/fail verdict with per-line checks. Same verdict and lines as the free GET /v1/check, signed by the registry (Ed25519) so the payer can keep the report as evidence.",
   tags: ["trust", "verification", "x402", "agents", "reputation"],
   bazaar: {
     info: {
@@ -179,8 +179,22 @@ async function draftReceipt(c: Context<AppEnv>, res: Response, settlement: Settl
   return out;
 }
 
+/**
+ * What the paid check adds to the free one: the registry's signature over the answer, so a payer
+ * can keep the exact report it relied on and show it later. Verdict and lines are the free ones.
+ * Signed bytes: canonicalize(body without `attestation`). Verify with verifyCheckAttestation (sdk-js).
+ */
+async function attest(c: Context<AppEnv>, res: Response): Promise<Response> {
+  if (res.status !== 200 || !c.env.DEMO_PRIVATE_KEY) return res;
+  const body = { type: "inam.check.v1", ...((await res.json()) as Record<string, unknown>) };
+  const kp = demoKeypair(c.env);
+  const signature = toBase64(sign(new TextEncoder().encode(canonicalize(body)), kp.privateKey));
+  return c.json({ ...body, attestation: { signer: kp.did, alg: "Ed25519", signature } }, 200);
+}
+
 export function x402CheckHandler(app: Hono<AppEnv>) {
-  const free = checkHandler(app);
+  const unsigned = checkHandler(app);
+  const free = async (c: Context<AppEnv>) => attest(c, await unsigned(c));
   return async (c: Context<AppEnv>) => {
     // SPEC.md §16: an API key (INAM-Key header) spends its free tier first; metering only, no billing.
     // An exhausted key falls through to the normal x402 payment below.

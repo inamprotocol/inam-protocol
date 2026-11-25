@@ -12,6 +12,7 @@ import { testOperatorKeypair } from "./testOperator.js";
 import { buildSigningStringV1, buildSigningStringV2 } from "../../sdk-js/src/core/signingString.js";
 import { buildSignableContent } from "../../sdk-js/src/core/receiptContent.js";
 import { canonicalize } from "../../sdk-js/src/crypto/canonical.js";
+import { verifyCheckAttestation } from "../../sdk-js/src/check.js";
 import DRAFT_WINDOW_MIGRATION from "../migration-draft-window-null.sql?raw";
 
 // Inlined rather than read from ../schema.sql at runtime: this test file
@@ -3360,7 +3361,13 @@ describe("paid x402 check (GET /v1/x402/check)", () => {
     expect(free.status).toBe(200);
     const paid = await get(`/v1/x402/check?target=${target}&rdap=0`, enabled, pay());
     expect(paid.status).toBe(200);
-    expect(await paid.json()).toEqual(await free.json());
+    // Same verdict and lines as the free answer, plus the registry's signature over them.
+    const { attestation, type, ...rest } = (await paid.json()) as Record<string, any>;
+    expect(rest).toEqual(await free.json());
+    expect(type).toBe("inam.check.v1");
+    expect(verifyCheckAttestation({ type, ...rest, attestation })).toBe(true);
+    expect(verifyCheckAttestation({ type, ...rest, target: "0x0", attestation })).toBe(false);
+    expect(verifyCheckAttestation(rest)).toBe(false);
     expect(decode(paid.headers.get("payment-response"))).toMatchObject({ success: true, transaction: "0x1234" });
     expect(paid.headers.get("cache-control")).toBe("no-store");
     expect(calls.filter((u) => u.includes("facilitator"))).toEqual(["https://facilitator.payai.network/verify", "https://facilitator.payai.network/settle"]);
