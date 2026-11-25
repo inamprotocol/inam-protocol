@@ -34,6 +34,16 @@ async function sha256Hex(text: string): Promise<string> {
 
 // Every read tool only reads the INAM registry (or hashes locally): MCP tool
 // annotations so clients (and app-directory reviews) can auto-approve them.
+// Sent to the client once per session (initialize / server/discover), so the
+// model knows when these tools apply without reading every description.
+export const INSTRUCTIONS = [
+  "INAM answers two questions with public evidence: who am I about to pay, and is this receipt what it claims to be.",
+  "Before paying an x402 endpoint, a paid MCP tool, a wallet address or an agent, call inam_check with the URL, 0x address or did:key. It works for targets INAM has never seen. A verdict of fail on an ordinary website only means the URL is not an x402 paywall; it says nothing about whether the site is safe.",
+  "Before hiring or delegating to an agent that has a did:key id, call inam_check_reputation. An unknown id means no record, not a bad agent. To find an agent by capability, call inam_search_agents, then check the one you pick.",
+  "When someone shows an INAM receipt id, call inam_get_receipt, and inam_verify_receipt to check its signatures, id and log entry. Use inam_hash_content to compare a text you hold with a specHash or outputHash.",
+  "All of these only read public data. Report what the checks say and do not present a pass as a guarantee.",
+].join(" ");
+
 export const READ_ONLY = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false } as const;
 
 // Each entry is registered as McpServer.tool(name, description, shape, handler).

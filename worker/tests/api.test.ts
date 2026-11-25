@@ -2725,6 +2725,17 @@ describe("hosted MCP endpoint (POST /mcp)", () => {
     const res = await mcp("initialize", { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } });
     expect(res.status).toBe(200);
     expect(res.json.result.serverInfo.name).toBe("inam-mcp");
+    expect(res.json.result.instructions).toContain("inam_check");
+  });
+
+  it("answers GET and DELETE with 405 instead of opening a stream that never ends", async () => {
+    for (const method of ["GET", "DELETE"]) {
+      const ctx = createExecutionContext();
+      const res = await worker.fetch(new Request("http://worker.test/mcp", { method, headers: { accept: "text/event-stream" } }), env, ctx);
+      await waitOnExecutionContext(ctx);
+      expect(res.status).toBe(405);
+      expect(res.headers.get("allow")).toBe("POST, OPTIONS");
+    }
   });
 
   // Claude clients open with a 2026-07-28 request; before @modelcontextprotocol/server v2 that was a 400
@@ -3491,6 +3502,14 @@ describe("hosted pre-payment check (GET /v1/check)", () => {
     const second = await check(`target=${encodeURIComponent(target)}&rdap=0`);
     expect(second.json.cachedAt).toBe(first.json.cachedAt);
     expect(seen.length).toBe(calls);
+  });
+
+  it("sends ERC8004SCAN_API_KEY to the indexer and to no other host", async () => {
+    stubOutbound();
+    await check(`target=${encodeURIComponent(`https://seller.example/api?n=${crypto.randomUUID()}`)}&rdap=0`, { ...env, ERC8004SCAN_API_KEY: "test-key" });
+    const withKey = seen.filter((s) => s.headers["x-api-key"]);
+    expect(withKey.length).toBeGreaterThan(0);
+    expect(withKey.every((s) => s.url.startsWith("https://api.8004scan.io/") && s.headers["x-api-key"] === "test-key")).toBe(true);
   });
 
   it("with no method given, retries a GET 404 as POST like the CLI (a POST-only seller is read, not failed)", async () => {

@@ -1,7 +1,7 @@
 import type { Context, Hono } from "hono";
 import { McpServer, WebStandardStreamableHTTPServerTransport, createMcpHandler, isLegacyRequest } from "@modelcontextprotocol/server";
 import { z } from "zod";
-import { readTools, READ_ONLY, type RegistryReader } from "../../mcp/src/readTools.js";
+import { readTools, READ_ONLY, INSTRUCTIONS, type RegistryReader } from "../../mcp/src/readTools.js";
 import type { AppEnv } from "./types.js";
 import mcpPkg from "../../mcp/package.json";
 import { countMcpUsage } from "./mcpUsage.js";
@@ -49,7 +49,7 @@ export function mcpHandler(app: Hono<AppEnv>) {
     };
 
     const makeServer = () => {
-      const server = new McpServer({ name: "inam-mcp", version: mcpPkg.version });
+      const server = new McpServer({ name: "inam-mcp", version: mcpPkg.version }, { instructions: INSTRUCTIONS });
       for (const t of readTools(reader)) {
         server.registerTool(t.name, { title: t.title, description: t.description, inputSchema: z.object(t.shape as z.ZodRawShape), annotations: { ...READ_ONLY, ...t.annotations, title: t.title } }, t.handler);
       }
@@ -57,8 +57,11 @@ export function mcpHandler(app: Hono<AppEnv>) {
     };
 
     const req = c.req.raw;
+    // Stateless server: there is no session to stream to or to delete. Without this, GET opened an SSE
+    // stream that never sent anything and stayed open until the client gave up.
+    if (req.method !== "POST") return new Response(null, { status: 405, headers: { allow: "POST, OPTIONS" } });
     // Aggregate counts only (no IP, no arguments): see mcpUsage.ts.
-    if (req.method === "POST") c.executionCtx.waitUntil(countMcpUsage(c.env, req.clone()));
+    c.executionCtx.waitUntil(countMcpUsage(c.env, req.clone()));
 
     // 2025-era clients: the same stateless JSON transport as before v2.
     if (await isLegacyRequest(req)) {
