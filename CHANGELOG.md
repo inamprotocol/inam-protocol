@@ -225,6 +225,9 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ## TypeScript/JavaScript SDK (`sdk-js`)
 
+### 0.25.0 — 2026-11-25
+- **`check <url> --server <name>` reads a signed payee binding.** A wallet can sign (EIP-712, domain `INAM Payee Binding` version `1`) the MCP registry server name it is paid for; the publisher puts the statement in the registry entry at `_meta["io.modelcontextprotocol.registry/publisher-provided"].payeeBinding`. With `--server`, the check reads the latest registry version of that name and adds one line, `payee.binding`: `pass` only when the signature recovers to the declared wallet, the binding names that server, and that wallet and chain are a `payTo` the 402 offers; `fail` when the binding names another wallet or another server; `warn` when the registry cannot be read or the signature is not verified; `info` when the entry declares none. The line names the registry version and `sequence` it read. A pass means the wallet signed the binding. It does not prove control of the server or the deployment. Contract wallets (ERC-1271) are not checked yet and report `warn`. The check cannot find the registry entry from a URL, so the caller names it. `verifyPayeeBinding`, `payeeBindingDigest` and `payeeBindingItem` are exported. The format is imokokok's, from ACP discussion #317, with Reggiebro's scope note; the test uses the synthetic vector posted there.
+
 ### 0.24.1 — 2026-11-17
 - **`check` names an oversized `PAYMENT-REQUIRED` header.** Node's fetch refuses response headers above 16 KB, and an x402 v2 402 with Bazaar metadata can exceed that (x402-foundation/x402#3803). The CLI reported such an endpoint as `fail` "Endpoint unreachable". It now reports a `warn` that names the cause and two ways to read the 402: `NODE_OPTIONS=--max-http-header-size=65536`, or the hosted check. A real connection failure is still a `fail`. Reading the oversized header from Node is not in this release.
 

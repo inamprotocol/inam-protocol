@@ -2,6 +2,7 @@ import { keccak_256 } from "@noble/hashes/sha3.js";
 import { decideTrust } from "./trust.js";
 import { decideX402, INAM_X402_EXTENSION } from "./x402.js";
 import { DIRECTORY_PATH, verifyDirectoryResponse } from "./webBotAuth.js";
+import { payeeBindingItem } from "./payeeBinding.js";
 import type { AgentRecord, ReputationResult } from "./types.js";
 
 /** `inam check <url | 0x wallet | did:key>`: a pre-payment check built from public signals.
@@ -45,6 +46,10 @@ export interface CheckOptions {
   /** chainId -> JSON-RPC URL; merged over the public defaults. */
   rpc?: Record<number, string>;
   method?: string;
+  /** MCP registry server name (e.g. io.github.owner/server). When set, a URL check reads that entry's signed payee binding and compares it with payTo. */
+  server?: string;
+  /** MCP registry base URL (default: the official registry). */
+  mcpRegistryUrl?: string;
   timeoutMs?: number;
   /** wallet (lowercase) -> INAM ID, if the caller already listed linked agents (the bulk scan does). */
   linkedWallets?: Map<string, string>;
@@ -494,6 +499,7 @@ export async function checkUrl(url: string, opts: CheckOptions = {}): Promise<Ch
       if (!checks.some((c) => c.id === "inam.reputation")) checks.push(reputationItem(...ar));
     }
   }
+  if (opts.server && accepts.length) checks.push(await payeeBindingItem(opts.server, accepts, opts));
   const [dir, dom] = await side;
   checks.push(dir, ...(dom ? [dom] : []));
   return finish(url, "url", checks, payment);
