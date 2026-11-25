@@ -15,6 +15,7 @@ import * as jobService from "./jobService.js";
 import * as verificationService from "./verificationService.js";
 import { computeReputation } from "./reputationService.js";
 import * as transparencyService from "./transparencyService.js";
+import { openApiHandler, wellKnownX402Handler } from "./discovery.js";
 import { badgeDataForReputation, badgeDataToJson, notFoundBadgeData, renderBadgeSvg } from "./badgeService.js";
 import {
   registerAgentSchema,
@@ -506,6 +507,8 @@ app.all("/mcp", mcpHandler(app));
 
 app.use("/a2a", cors({ origin: "*" }));
 app.post("/a2a", a2aHandler(app));
+app.get("/openapi.json", cors({ origin: "*" }), openApiHandler(SPEC_VERSION));
+app.get("/.well-known/x402", cors({ origin: "*" }), wellKnownX402Handler);
 app.use("/.well-known/agent-card.json", cors({ origin: "*" }));
 app.get("/.well-known/agent-card.json", (c) => c.json(agentCard));
 

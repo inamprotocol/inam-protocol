@@ -3341,8 +3341,19 @@ describe("paid x402 check (GET /v1/x402/check)", () => {
     expect(required.accepts[0]).toMatchObject({ scheme: "exact", network: "eip155:8453", amount: "20000", payTo: PAY_TO, asset: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913" });
     expect(required.extensions.bazaar.info.input).toMatchObject({ type: "http", method: "GET", queryParams: { target: expect.any(String) } });
     expect(required.extensions.bazaar.schema.properties.input.properties.queryParams.required).toEqual(["target"]);
-    // Missing target: the usage error, never a charge.
-    expect((await get("/v1/x402/check", enabled)).status).toBe(400);
+    // A bare probe reads the price from the 402; a payment with no target gets the usage error and is never charged.
+    expect((await get("/v1/x402/check", enabled)).status).toBe(402);
+    expect((await get("/v1/x402/check", enabled, pay())).status).toBe(400);
+    expect(calls.filter((u) => u.includes("facilitator"))).toEqual([]);
+
+    // Discovery documents point at the paid routes only where something is sold.
+    const doc = (await (await get("/openapi.json", enabled)).json()) as any;
+    expect(doc.paths["/v1/x402/check"].get["x-payment-info"]).toEqual({ price: { mode: "fixed", currency: "USD", amount: "0.02" }, protocols: [{ x402: {} }] });
+    expect(doc.paths["/v1/x402/check"].get.responses["402"]).toBeDefined();
+    expect(doc.paths["/v1/check"].get["x-payment-info"]).toBeUndefined();
+    expect(Object.keys(((await (await get("/openapi.json", env)).json()) as any).paths)).toEqual(["/v1/check"]);
+    expect(await (await get("/.well-known/x402", enabled)).json()).toEqual({ version: 1, resources: ["http://worker.test/v1/x402/check"] });
+    expect((await get("/.well-known/x402", env)).status).toBe(404);
   });
 
   it("rejects a bad payment without serving or settling", async () => {
