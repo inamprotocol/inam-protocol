@@ -112,4 +112,6 @@ export {
   verifyDirectoryResponse,
 } from "./webBotAuth.js";
 export { checkTarget, checkUrl, checkWallet, checkDid, formatReport, parsePaymentRequired, paymentOptions, inamLinkedWallets, walletErc8004, erc8004AgentsByOwner, erc8004Balance, erc8004Feedback, ERC8004, DEFAULT_RPC } from "./check.js";
+export { verifyPayeeBinding, payeeBindingDigest, payeeBindingItem, PAYEE_BINDING_DOMAIN } from "./payeeBinding.js";
+export type { PayeeBinding } from "./payeeBinding.js";
 export type { CheckReport, CheckItem, CheckStatus, CheckOptions, PaymentOption, WalletErc8004, Erc8004Agent } from "./check.js";

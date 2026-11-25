@@ -8,7 +8,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 const USAGE = `Usage: inam link-wallet [--registry URL]   (sellers: prove you control your x402 payTo wallet, see SELLER.md)
-       inam check <target> [--json] [--strict] [--method POST] [--registry URL] [--no-rdap]
+       inam check <target> [--json] [--strict] [--method POST] [--server NAME] [--registry URL] [--no-rdap]
 
   <target>   an x402 resource URL, an EVM wallet (0x...), or an INAM did:key
 
@@ -76,8 +76,9 @@ const strict = bool("--strict");
 const noRdap = bool("--no-rdap");
 const method = flag("--method") ?? flag("-X");
 const registryUrl = flag("--registry");
+const server = flag("--server");
 try {
-  const report = await checkTarget(args[1], { method, registryUrl, noRdap });
+  const report = await checkTarget(args[1], { method, registryUrl, noRdap, server });
   console.log(json ? JSON.stringify(report, null, 2) : formatReport(report));
   process.exit(report.verdict === "fail" || (strict && report.verdict === "caution") ? 1 : 0);
 } catch (e) {

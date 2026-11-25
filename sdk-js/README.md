@@ -19,6 +19,7 @@ npx inamprotocol check https://x402.coinstats.app/markets      # an x402 resourc
 npx inamprotocol check 0x89e9e1ab11dd1b138b1dce6d6a4a0926aafd5029   # a payTo wallet
 npx inamprotocol check did:key:z6MkpSvw1Yuc3ReWhCmt5RwY5LVZqMRY9p8NvpA2TSQCPPyK   # an INAM agent
 npx inamprotocol check https://seller.example/api --method POST --json
+npx inamprotocol check https://seller.example/mcp --server io.github.seller/server   # also compare payTo with the wallet that signed for that MCP registry entry
 ```
 
 ```
