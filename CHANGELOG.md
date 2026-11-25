@@ -296,6 +296,10 @@ Each package in this repo (Node reference server, Cloudflare Worker, Python SDK)
 
 ### Unreleased
 
+### 0.6.2 — 2026-11-25
+- `server.json` gains `title` ("INAM Protocol") and `icons` (512 px PNG and SVG), so registries and clients that show them have something to show. No change to the tools.
+- Depends on `inamprotocol` ^0.25.0.
+
 ### 0.6.1 — 2026-11-17
 - Tool descriptions say when to use each tool (stdio and hosted `/mcp`): each of the six read tools opens with "Use before/when/to …", and `inam_check` explains that a URL with no x402 paywall returns `fail` "Not an x402 paywall". No schema or behaviour change.
 
