@@ -200,7 +200,9 @@ export function x402CheckHandler(app: Hono<AppEnv>) {
       if (exhausted) return c.json({ error: { code: "FREE_TIER_EXHAUSTED", message: "This API key's free tier is used up and this registry has no payment route configured." } }, 402);
       return c.json({ error: { code: "X402_DISABLED", message: "The paid check is not enabled on this registry (no payout wallet configured). GET /v1/check is free and returns the same answer." } }, 503);
     }
-    if (!c.req.query("target")?.trim()) return free(c); // 400 with usage, never a charge
+    // A payment or an API key with no target gets the usage 400 and is never charged. With neither, the 402 comes first:
+    // indexers probe the bare route and read the price from the challenge (x402scan docs/DISCOVERY.md).
+    if (!c.req.query("target")?.trim() && (c.req.header("payment-signature") || apiKey)) return free(c);
     return x402Paid(c, CHECK_OFFER, async () => free(c), (res, s) => draftReceipt(c, res, s));
   };
 }
